@@ -69,3 +69,31 @@ export const userStats = {
     techs: 5,
     admins: 2
 };
+
+export const reportsList = [
+    { id: 'REP-001', title: 'Rendimiento Mensual Octubre', type: 'PDF', date: 'Oct 31, 2023', size: '2.4 MB', category: 'Soporte' },
+    { id: 'REP-002', title: 'Inventario de Activos Q3', type: 'Excel', date: 'Sep 30, 2023', size: '1.8 MB', category: 'Inventario' },
+    { id: 'REP-003', title: 'Análisis de Costos TI', type: 'PDF', date: 'Oct 15, 2023', size: '3.1 MB', category: 'Finanzas' },
+    { id: 'REP-004', title: 'Tiempos de Resolución de Tickets', type: 'PDF', date: 'Nov 01, 2023', size: '1.2 MB', category: 'Métricas' },
+];
+
+export const reportStats = {
+    efficiency: '94%',
+    avgResolution: '4.2 hrs',
+    compliance: '98.5%',
+    costSavings: '$12k'
+};
+
+export const activitiesData = [
+    { id: 'ACT-001', title: 'Mantenimiento Preventivo Servidores', type: 'System', date: 'Hoy, 09:00', status: 'In Progress', priority: 'High' },
+    { id: 'ACT-002', title: 'Actualización de Licencias Office', type: 'Software', date: 'Hoy, 14:00', status: 'Scheduled', priority: 'Medium' },
+    { id: 'ACT-003', title: 'Auditoría de Seguridad Perimetral', type: 'Security', date: 'Ayer, 10:30', status: 'Completed', priority: 'Critical' },
+    { id: 'ACT-004', title: 'Configuración de VLAN para Ventas', type: 'Network', date: 'Hace 2 días', status: 'Completed', priority: 'Medium' },
+];
+
+export const activityStats = {
+    total: 48,
+    completed: 32,
+    pending: 12,
+    delayed: 4
+};

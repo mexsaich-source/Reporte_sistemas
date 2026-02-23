@@ -7,7 +7,7 @@ const Login = ({ onLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
-    const illustrationPath = "file:///C:/Users/MEXSA/.gemini/antigravity/brain/56e665eb-6603-41ae-b53c-0d258efa5e6e/it_support_illustration_v2_1771610583409.png";
+    const illustrationPath = "../public/image.png";
 
     const handleSubmit = (e, role = 'user') => {
         e.preventDefault();
