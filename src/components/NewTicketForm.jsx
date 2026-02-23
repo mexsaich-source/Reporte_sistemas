@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, X, AlertCircle, Laptop, Settings, Smartphone, Monitor } from 'lucide-react';
+import { Send, X, AlertCircle, Laptop, Settings, Smartphone, Monitor, ImagePlus } from 'lucide-react';
 
 const NewTicketForm = ({ onCancel }) => {
     const [deviceType, setDeviceType] = useState('Laptop');
@@ -43,8 +43,8 @@ const NewTicketForm = ({ onCancel }) => {
                                     type="button"
                                     onClick={() => setDeviceType(type.id)}
                                     className={`flex flex-col items-center gap-3 p-5 rounded-3xl border-2 transition-all duration-300 ${deviceType === type.id
-                                            ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-lg shadow-blue-500/5'
-                                            : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 hover:bg-slate-50'
+                                        ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-lg shadow-blue-500/5'
+                                        : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 hover:bg-slate-50'
                                         }`}
                                 >
                                     <type.icon size={28} strokeWidth={deviceType === type.id ? 2.5 : 2} />
@@ -59,9 +59,23 @@ const NewTicketForm = ({ onCancel }) => {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Descripción de la Falla</label>
                             <textarea
                                 placeholder="Explique brevemente el problema (ej: Pantalla no enciende, lentitud, falla de software...)"
-                                rows="4"
+                                rows="3"
                                 className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-5 py-4 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all placeholder:text-slate-400 font-medium text-sm resize-none"
                             ></textarea>
+                        </div>
+
+                        <div className="group space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Evidencia Visual (Opcional)</label>
+                            <label className="w-full border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/30 rounded-3xl p-6 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group-hover:bg-slate-50">
+                                <input type="file" className="hidden" accept="image/*" />
+                                <div className="bg-white p-2.5 rounded-full shadow-sm text-blue-500 mb-1">
+                                    <ImagePlus size={20} />
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-sm font-bold text-slate-700">Arrastra una imagen o haz clic</p>
+                                    <p className="text-xs text-slate-400 font-medium mt-1">PNG, JPG hasta 5MB</p>
+                                </div>
+                            </label>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

@@ -1,25 +1,9 @@
 import React from 'react';
-import { ChevronRight, Clock, CheckCircle2, AlertCircle, Hash } from 'lucide-react';
+import { ChevronRight, Hash } from 'lucide-react';
 import { recentTickets } from '../data/mockData';
+import { TicketStatusBadge } from './TicketsModule';
 
 const UserTicketList = () => {
-    const getStatusStyle = (status) => {
-        switch (status) {
-            case 'Open': return 'text-rose-600 bg-rose-50 border-rose-100/50 shadow-sm shadow-rose-500/5';
-            case 'Pending': return 'text-amber-600 bg-amber-50 border-amber-100/50 shadow-sm shadow-amber-500/5';
-            case 'Resolved': return 'text-emerald-600 bg-emerald-50 border-emerald-100/50 shadow-sm shadow-emerald-500/5';
-            default: return 'text-slate-500 bg-slate-50 border-slate-100';
-        }
-    };
-
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case 'Open': return <AlertCircle size={14} className="animate-pulse" />;
-            case 'Pending': return <Clock size={14} />;
-            case 'Resolved': return <CheckCircle2 size={14} />;
-            default: return null;
-        }
-    };
 
     // Simulate only user's tickets (first 3 for demo)
     const userTickets = recentTickets.slice(0, 3);
@@ -59,9 +43,8 @@ const UserTicketList = () => {
                             </div>
                         </div>
 
-                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest ${getStatusStyle(ticket.status)} transition-all group-hover:scale-105`}>
-                            {getStatusIcon(ticket.status)}
-                            {ticket.status}
+                        <div className="flex items-center gap-2 group-hover:scale-105 transition-all">
+                            <TicketStatusBadge status={ticket.status} withIcon size="lg" />
                         </div>
                     </div>
                     <div className="ml-6 p-2 bg-slate-50 rounded-xl text-slate-300 group-hover:text-blue-600 group-hover:bg-blue-50 transition-all group-hover:rotate-90">

@@ -38,3 +38,34 @@ export const recentTickets = [
     { id: 'TKT-1039', reportedBy: 'Jose Ruiz (TI)', issue: 'Switch port configuration', tech: 'Carlos M.', status: 'Resolved', date: 'Oct 22, 2023' },
     { id: 'TKT-1038', reportedBy: 'Sofia Luna (Ventas)', issue: 'Request new monitor', tech: 'Elena R.', status: 'Resolved', date: 'Oct 22, 2023' },
 ];
+
+export const inventoryData = [
+    { id: 'DEV-8920', type: 'Laptop', model: 'Dell Latitude 7420', user: 'Ana Silva', department: 'RH', status: 'Active', warranty: '2025-11-20', condition: 'Good' },
+    { id: 'DEV-8921', type: 'Monitor', model: 'Dell UltraSharp 27', user: 'Sofia Luna', department: 'Ventas', status: 'In Repair', warranty: '2024-05-10', condition: 'Failing' },
+    { id: 'DEV-8922', type: 'Desktop', model: 'OptiPlex 7090', user: 'Maria Paz', department: 'Finanzas', status: 'Active', warranty: '2026-01-15', condition: 'Excellent' },
+    { id: 'DEV-8923', type: 'Smartphone', model: 'iPhone 13 Pro', user: 'Luis Gomez', department: 'Ventas', status: 'Active', warranty: '2024-09-01', condition: 'Good' },
+    { id: 'DEV-8924', type: 'Laptop', model: 'MacBook Pro 14"', user: 'Jose Ruiz', department: 'TI', status: 'Active', warranty: '2025-12-10', condition: 'Excellent' },
+    { id: 'DEV-8925', type: 'Tablet', model: 'iPad Air', user: 'Unassigned', department: 'Almacen', status: 'Available', warranty: '2024-08-20', condition: 'New' },
+];
+
+export const inventoryStats = {
+    total: 245,
+    active: 210,
+    inRepair: 15,
+    available: 20
+};
+
+export const usersData = [
+    { id: 'USR-001', name: 'Carlos Mendoza', email: 'cmendoza@mexsasistemas.com', role: 'Administrador', department: 'TI', status: 'Active', lastLogin: 'Hace 5 mins' },
+    { id: 'USR-002', name: 'Elena Robles', email: 'erobles@mexsasistemas.com', role: 'Técnico', department: 'TI', status: 'Active', lastLogin: 'Hace 2 horas' },
+    { id: 'USR-003', name: 'Ana Silva', email: 'asilva@mexsasistemas.com', role: 'Usuario', department: 'RH', status: 'Active', lastLogin: 'Hace 1 día' },
+    { id: 'USR-004', name: 'Luis Gomez', email: 'lgomez@mexsasistemas.com', role: 'Usuario', department: 'Ventas', status: 'Inactive', lastLogin: 'Hace 1 mes' },
+    { id: 'USR-005', name: 'Maria Paz', email: 'mpaz@mexsasistemas.com', role: 'Usuario', department: 'Finanzas', status: 'Active', lastLogin: 'Hace 10 mins' },
+];
+
+export const userStats = {
+    total: 125,
+    active: 118,
+    techs: 5,
+    admins: 2
+};

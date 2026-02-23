@@ -13,7 +13,9 @@ import {
     ChevronRight,
     User
 } from 'lucide-react';
+import Header from './Header';
 import StatCard from './StatCard';
+import { recentTickets } from '../data/mockData';
 import UserTicketList from './UserTicketList';
 import NewTicketForm from './NewTicketForm';
 import UserAgenda from './UserAgenda';
@@ -27,6 +29,11 @@ const UserPortal = ({ onLogout }) => {
         { name: 'Agenda', icon: Calendar, id: 'Agenda' },
     ];
 
+    const openCount = recentTickets.filter(t => t.status === 'Open').length;
+    const pendingCount = recentTickets.filter(t => t.status === 'Pending').length;
+    const resolvedCount = recentTickets.filter(t => t.status === 'Resolved').length;
+    const formatCount = (count) => count < 10 ? `0${count}` : `${count}`;
+
     const renderView = () => {
         switch (currentView) {
             case 'NewTicket':
@@ -39,13 +46,13 @@ const UserPortal = ({ onLogout }) => {
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                             <div className="group transition-transform hover:-translate-y-1">
-                                <StatCard label="Abiertos" value="03" trend="" icon={AlertCircle} color="text-red-500" bg="bg-red-500/10" />
+                                <StatCard label="Abiertos" value={formatCount(openCount)} trend="" icon={AlertCircle} color="text-red-500" bg="bg-red-500/10" />
                             </div>
                             <div className="group transition-transform hover:-translate-y-1">
-                                <StatCard label="En Proceso" value="01" trend="" icon={Clock} color="text-amber-500" bg="bg-amber-500/10" />
+                                <StatCard label="En Proceso" value={formatCount(pendingCount)} trend="" icon={Clock} color="text-amber-500" bg="bg-amber-500/10" />
                             </div>
                             <div className="group transition-transform hover:-translate-y-1">
-                                <StatCard label="Resueltos" value="12" trend="" icon={CheckCircle} color="text-emerald-500" bg="bg-emerald-500/10" />
+                                <StatCard label="Resueltos" value={formatCount(resolvedCount)} trend="" icon={CheckCircle} color="text-emerald-500" bg="bg-emerald-500/10" />
                             </div>
                         </div>
 
@@ -125,40 +132,7 @@ const UserPortal = ({ onLogout }) => {
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0">
-                <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 flex items-center justify-between sticky top-0 z-10 transition-all">
-                    <div className="flex items-center gap-3 text-slate-400 bg-slate-50 px-4 py-2.5 rounded-2xl w-[400px] border border-slate-100 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/5 transition-all group">
-                        <Search size={18} className="group-focus-within:text-blue-500 transition-colors" />
-                        <input
-                            type="text"
-                            placeholder="Buscar en tus reportes..."
-                            className="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-400 font-medium"
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-5">
-                        <button className="relative p-2.5 text-slate-400 hover:text-slate-900 transition-all hover:bg-slate-50 rounded-xl">
-                            <Bell size={22} />
-                            <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-bounce-slow"></span>
-                        </button>
-
-                        <div className="h-8 w-px bg-slate-100 mx-2"></div>
-
-                        <div className="flex items-center gap-4 group cursor-pointer">
-                            <div className="flex flex-col text-right">
-                                <span className="text-sm font-black text-slate-900 leading-tight">Usuario Demo</span>
-                                <span className="text-[10px] text-blue-600 font-black uppercase tracking-widest leading-tight">Operativo</span>
-                            </div>
-                            <div className="relative">
-                                <img
-                                    src="https://ui-avatars.com/api/?name=User+Demo&background=3b82f6&color=fff&size=128&bold=true"
-                                    className="w-11 h-11 rounded-2xl border-2 border-slate-50 shadow-md group-hover:scale-105 transition-transform"
-                                    alt="Profile"
-                                />
-                                <div className="absolute bottom-[-2px] right-[-2px] w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white"></div>
-                            </div>
-                        </div>
-                    </div>
-                </header>
+                <Header userRole="user" userName="Usuario Demo" onLogout={onLogout} />
 
                 <main className="p-10 max-w-7xl mx-auto w-full">
                     <div className="flex items-center justify-between mb-10">
