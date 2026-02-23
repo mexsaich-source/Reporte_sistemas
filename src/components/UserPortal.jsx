@@ -56,13 +56,13 @@ const UserPortal = ({ onLogout }) => {
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-3xl border border-slate-200/60 shadow-xl shadow-slate-200/40 overflow-hidden">
-                            <div className="p-6 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center">
+                        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden transition-colors">
+                            <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/30 flex justify-between items-center">
                                 <div className="flex items-center gap-3">
                                     <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-                                    <h3 className="font-bold text-slate-900 text-base">Historial de Reportes</h3>
+                                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Historial de Reportes</h3>
                                 </div>
-                                <button className="text-xs text-blue-600 font-bold hover:text-blue-700 p-2 hover:bg-blue-50 rounded-xl transition-all">Ver Historial Completo</button>
+                                <button className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:text-blue-700 dark:hover:text-blue-300 p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all">Ver Historial Completo</button>
                             </div>
                             <div className="p-4">
                                 <UserTicketList />
@@ -74,7 +74,7 @@ const UserPortal = ({ onLogout }) => {
     };
 
     return (
-        <div className="flex min-h-screen bg-[#fcfdfe] text-slate-800 font-sans">
+        <div className="flex min-h-screen bg-[#fcfdfe] dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
             {/* User Sidebar - Premium Dark Design */}
             <aside className="w-64 bg-slate-950 flex flex-col min-h-screen sticky top-0 z-20 overflow-hidden">
                 {/* Decorative Background for Sidebar */}
@@ -137,14 +137,14 @@ const UserPortal = ({ onLogout }) => {
                 <main className="p-10 max-w-7xl mx-auto w-full">
                     <div className="flex items-center justify-between mb-10">
                         <div className="space-y-1">
-                            <h1 className="text-3xl font-black text-slate-950 tracking-tight">
+                            <h1 className="text-3xl font-black text-slate-950 dark:text-white tracking-tight">
                                 {currentView === 'MyTickets' ? 'Mis Actividades' :
                                     currentView === 'NewTicket' ? 'Nuevo Reporte' : 'Agenda Personal'}
                             </h1>
-                            <div className="flex items-center gap-2 text-slate-500 font-medium text-sm">
+                            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium text-sm">
                                 <span>IT Service Desk</span>
                                 <ChevronRight size={12} />
-                                <span className="text-blue-600">
+                                <span className="text-blue-600 dark:text-blue-400">
                                     {currentView === 'MyTickets' ? 'Panel de Control' :
                                         currentView === 'NewTicket' ? 'Solicitud Manual' : 'Planificación'}
                                 </span>
@@ -153,7 +153,7 @@ const UserPortal = ({ onLogout }) => {
 
                         <button
                             onClick={() => setCurrentView('NewTicket')}
-                            className="bg-slate-950 text-white px-6 py-3.5 rounded-2xl font-bold flex items-center gap-3 shadow-xl shadow-slate-950/20 hover:bg-blue-600 hover:shadow-blue-600/20 transition-all hover:-translate-y-0.5 active:scale-95"
+                            className="bg-slate-950 dark:bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold flex items-center gap-3 shadow-xl shadow-slate-950/20 dark:shadow-blue-900/20 hover:bg-blue-600 dark:hover:bg-blue-500 hover:shadow-blue-600/20 transition-all hover:-translate-y-0.5 active:scale-95"
                         >
                             <FilePlus size={20} />
                             Reportar Falla

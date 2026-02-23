@@ -12,20 +12,20 @@ const NewTicketForm = ({ onCancel }) => {
     ];
 
     return (
-        <div className="bg-white rounded-[2.5rem] border border-slate-200/60 shadow-2xl shadow-slate-200/50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="p-8 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center">
+        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-800 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 transition-colors">
+            <div className="p-8 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/30 flex justify-between items-center">
                 <div className="flex items-center gap-4">
                     <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-lg shadow-blue-500/20">
                         <AlertCircle size={24} strokeWidth={2.5} />
                     </div>
                     <div>
-                        <h3 className="font-black text-slate-950 text-xl tracking-tight">Reportar Falla Técnica</h3>
-                        <p className="text-xs text-slate-500 font-medium">Completa los detalles para asignar un soporte.</p>
+                        <h3 className="font-black text-slate-950 dark:text-white text-xl tracking-tight">Reportar Falla Técnica</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Completa los detalles para asignar un soporte.</p>
                     </div>
                 </div>
                 <button
                     onClick={onCancel}
-                    className="p-3 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all"
+                    className="p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"
                 >
                     <X size={24} />
                 </button>
@@ -35,7 +35,7 @@ const NewTicketForm = ({ onCancel }) => {
                 <form className="space-y-8 max-w-2xl mx-auto">
                     {/* Device Selection Grid */}
                     <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">1. Tipo de Dispositivo</label>
+                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">1. Tipo de Dispositivo</label>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                             {deviceTypes.map((type) => (
                                 <button
@@ -43,8 +43,8 @@ const NewTicketForm = ({ onCancel }) => {
                                     type="button"
                                     onClick={() => setDeviceType(type.id)}
                                     className={`flex flex-col items-center gap-3 p-5 rounded-3xl border-2 transition-all duration-300 ${deviceType === type.id
-                                        ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-lg shadow-blue-500/5'
-                                        : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 hover:bg-slate-50'
+                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-lg shadow-blue-500/5'
+                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                                         }`}
                                 >
                                     <type.icon size={28} strokeWidth={deviceType === type.id ? 2.5 : 2} />
@@ -57,33 +57,33 @@ const NewTicketForm = ({ onCancel }) => {
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="group space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Título del Problema</label>
+                                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Título del Problema</label>
                                 <input
                                     type="text"
                                     placeholder="Ej: Laptop no conecta a WiFi"
-                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all font-medium text-sm"
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 dark:focus:border-blue-500 transition-all font-medium text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600"
                                 />
                             </div>
                             <div className="group space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">ID de Activo / Asset Tag</label>
+                                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">ID de Activo / Asset Tag</label>
                                 <input
                                     type="text"
                                     placeholder="Ej: MEX-LAP-042"
-                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all font-medium text-sm"
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 dark:focus:border-blue-500 transition-all font-medium text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600"
                                 />
                             </div>
                         </div>
 
                         <div className="group space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nivel de Urgencia</label>
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Nivel de Urgencia</label>
                             <div className="flex gap-2">
                                 {['Baja', 'Media', 'Alta', 'Crítica'].map((level) => (
                                     <button
                                         key={level}
                                         type="button"
                                         className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all ${level === 'Media'
-                                                ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
-                                                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'
+                                            ? 'bg-blue-600 dark:bg-blue-500 text-white border-blue-600 dark:border-blue-500 shadow-md shadow-blue-500/20'
+                                            : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600'
                                             }`}
                                     >
                                         {level}
@@ -93,45 +93,45 @@ const NewTicketForm = ({ onCancel }) => {
                         </div>
 
                         <div className="group space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Descripción Detallada</label>
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Descripción Detallada</label>
                             <textarea
                                 placeholder="Explique paso a paso el problema..."
                                 rows="3"
-                                className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-5 py-4 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all placeholder:text-slate-400 font-medium text-sm resize-none"
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-4 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 dark:focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium text-sm resize-none"
                             ></textarea>
                         </div>
 
                         <div className="group space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Evidencia Visual (Opcional)</label>
-                            <label className="w-full border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/30 rounded-3xl p-6 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group-hover:bg-slate-50">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Evidencia Visual (Opcional)</label>
+                            <label className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 rounded-3xl p-6 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer">
                                 <input type="file" className="hidden" accept="image/*" />
-                                <div className="bg-white p-2.5 rounded-full shadow-sm text-blue-500 mb-1">
+                                <div className="bg-white dark:bg-slate-800 p-2.5 rounded-full shadow-sm text-blue-500 mb-1">
                                     <ImagePlus size={20} />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-bold text-slate-700">Subir Captura de Pantalla</p>
-                                    <p className="text-xs text-slate-400 font-medium mt-1">PNG, JPG hasta 5MB</p>
+                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Subir Captura de Pantalla</p>
+                                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-1">PNG, JPG hasta 5MB</p>
                                 </div>
                             </label>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div className="space-y-2 text-slate-400 bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 flex items-center gap-3">
-                                <div className="bg-white p-2 rounded-xl shadow-sm">
-                                    <AlertCircle size={18} className="text-emerald-600" />
+                            <div className="space-y-2 text-slate-400 bg-emerald-50/30 dark:bg-emerald-500/5 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 flex items-center gap-3">
+                                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm">
+                                    <AlertCircle size={18} className="text-emerald-600 dark:text-emerald-400" />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-tight">Ubicación Actual</span>
-                                    <span className="text-xs font-bold text-slate-700 leading-tight">Detección Automática por Red</span>
+                                    <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest leading-tight">Ubicación Actual</span>
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-tight">Detección Automática por Red</span>
                                 </div>
                             </div>
-                            <div className="space-y-2 text-slate-400 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                                <div className="bg-white p-2 rounded-xl shadow-sm">
-                                    <AlertCircle size={18} className="text-blue-600" />
+                            <div className="space-y-2 text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex items-center gap-3">
+                                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm">
+                                    <AlertCircle size={18} className="text-blue-600 dark:text-blue-400" />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-tight">Tiempo de Respuesta</span>
-                                    <span className="text-xs font-bold text-slate-700 leading-tight">SLA Estándar (4h laborables)</span>
+                                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-tight">Tiempo de Respuesta</span>
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-tight">SLA Estándar (4h laborables)</span>
                                 </div>
                             </div>
                         </div>
@@ -141,14 +141,14 @@ const NewTicketForm = ({ onCancel }) => {
                         <button
                             type="button"
                             onClick={onCancel}
-                            className="flex-1 px-8 py-4 rounded-2xl border-2 border-slate-200 text-slate-600 font-black uppercase text-xs tracking-[0.2em] hover:bg-slate-50 hover:border-slate-300 transition-all"
+                            className="flex-1 px-8 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-black uppercase text-xs tracking-[0.2em] hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all font-bold"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             onClick={(e) => { e.preventDefault(); onCancel(); }}
-                            className="flex-[2] bg-slate-950 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-slate-900/20 hover:bg-blue-600 hover:shadow-blue-600/20 transition-all hover:-translate-y-1 active:scale-95"
+                            className="flex-[2] bg-slate-950 dark:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-slate-900/20 dark:shadow-blue-900/20 hover:bg-blue-600 dark:hover:bg-blue-500 hover:shadow-blue-600/20 transition-all hover:-translate-y-1 active:scale-95"
                         >
                             <Send size={18} />
                             Crear Reporte IT
