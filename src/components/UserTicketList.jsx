@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChevronRight, Hash } from 'lucide-react';
 import { recentTickets } from '../data/mockData';
 import { TicketStatusBadge } from './TicketsModule';
+import TicketDetailSlider from './TicketDetailSlider';
 
 const UserTicketList = () => {
+    const [selectedTicket, setSelectedTicket] = useState(null);
 
     // Simulate only user's tickets (first 3 for demo)
     const userTickets = recentTickets.slice(0, 3);
@@ -13,6 +15,7 @@ const UserTicketList = () => {
             {userTickets.map((ticket) => (
                 <div
                     key={ticket.id}
+                    onClick={() => setSelectedTicket(ticket)}
                     className="group relative bg-white hover:bg-slate-50 border border-slate-100 p-4 rounded-2xl flex items-center justify-between transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/40 cursor-pointer overflow-hidden"
                 >
                     {/* Accent Line on Hover */}
@@ -52,6 +55,12 @@ const UserTicketList = () => {
                     </div>
                 </div>
             ))}
+
+            <TicketDetailSlider
+                ticket={selectedTicket}
+                isOpen={!!selectedTicket}
+                onClose={() => setSelectedTicket(null)}
+            />
         </div>
     );
 };

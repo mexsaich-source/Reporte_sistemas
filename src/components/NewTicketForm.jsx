@@ -35,7 +35,7 @@ const NewTicketForm = ({ onCancel }) => {
                 <form className="space-y-8 max-w-2xl mx-auto">
                     {/* Device Selection Grid */}
                     <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Tipo de Dispositivo</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">1. Tipo de Dispositivo</label>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                             {deviceTypes.map((type) => (
                                 <button
@@ -55,10 +55,47 @@ const NewTicketForm = ({ onCancel }) => {
                     </div>
 
                     <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="group space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Título del Problema</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Laptop no conecta a WiFi"
+                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all font-medium text-sm"
+                                />
+                            </div>
+                            <div className="group space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">ID de Activo / Asset Tag</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: MEX-LAP-042"
+                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all font-medium text-sm"
+                                />
+                            </div>
+                        </div>
+
                         <div className="group space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Descripción de la Falla</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nivel de Urgencia</label>
+                            <div className="flex gap-2">
+                                {['Baja', 'Media', 'Alta', 'Crítica'].map((level) => (
+                                    <button
+                                        key={level}
+                                        type="button"
+                                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all ${level === 'Media'
+                                                ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
+                                                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'
+                                            }`}
+                                    >
+                                        {level}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="group space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Descripción Detallada</label>
                             <textarea
-                                placeholder="Explique brevemente el problema (ej: Pantalla no enciende, lentitud, falla de software...)"
+                                placeholder="Explique paso a paso el problema..."
                                 rows="3"
                                 className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-5 py-4 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 transition-all placeholder:text-slate-400 font-medium text-sm resize-none"
                             ></textarea>
@@ -72,7 +109,7 @@ const NewTicketForm = ({ onCancel }) => {
                                     <ImagePlus size={20} />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-bold text-slate-700">Arrastra una imagen o haz clic</p>
+                                    <p className="text-sm font-bold text-slate-700">Subir Captura de Pantalla</p>
                                     <p className="text-xs text-slate-400 font-medium mt-1">PNG, JPG hasta 5MB</p>
                                 </div>
                             </label>
@@ -84,8 +121,8 @@ const NewTicketForm = ({ onCancel }) => {
                                     <AlertCircle size={18} className="text-emerald-600" />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-tight">Ubicación</span>
-                                    <span className="text-xs font-bold text-slate-700 leading-tight">Planta 3 - Oficinas Generales</span>
+                                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-tight">Ubicación Actual</span>
+                                    <span className="text-xs font-bold text-slate-700 leading-tight">Detección Automática por Red</span>
                                 </div>
                             </div>
                             <div className="space-y-2 text-slate-400 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
@@ -93,8 +130,8 @@ const NewTicketForm = ({ onCancel }) => {
                                     <AlertCircle size={18} className="text-blue-600" />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-tight">Prioridad Estimada</span>
-                                    <span className="text-xs font-bold text-slate-700 leading-tight">Media - Respuesta en 2h</span>
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-tight">Tiempo de Respuesta</span>
+                                    <span className="text-xs font-bold text-slate-700 leading-tight">SLA Estándar (4h laborables)</span>
                                 </div>
                             </div>
                         </div>
@@ -114,7 +151,7 @@ const NewTicketForm = ({ onCancel }) => {
                             className="flex-[2] bg-slate-950 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-slate-900/20 hover:bg-blue-600 hover:shadow-blue-600/20 transition-all hover:-translate-y-1 active:scale-95"
                         >
                             <Send size={18} />
-                            Enviar Reporte
+                            Crear Reporte IT
                         </button>
                     </div>
                 </form>
