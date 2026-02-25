@@ -7,7 +7,7 @@ const Login = ({ onLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
-    const illustrationPath = "../public/image.png";
+    const illustrationPath = "/image.png";
 
     const handleSubmit = (e, role = 'user') => {
         e.preventDefault();
