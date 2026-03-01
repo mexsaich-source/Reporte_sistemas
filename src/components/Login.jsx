@@ -54,7 +54,6 @@ const Login = () => {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-0 sm:p-4 lg:p-8 font-sans">
             <div className="bg-white w-full max-w-6xl flex flex-col lg:flex-row rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden min-h-[600px] lg:h-[800px]">
 
-                {/* Left Column: Illustration & Info */}
                 <div className="lg:w-1/2 bg-[#efebff] p-8 lg:p-16 flex flex-col items-center justify-center text-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
 
@@ -83,11 +82,9 @@ const Login = () => {
                     </div>
                 </div>
 
-                {/* Right Column: Form */}
                 <div className="lg:w-1/2 bg-white p-8 lg:p-20 flex flex-col justify-center relative overflow-hidden">
                     <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-8 duration-700">
 
-                        {/* Header Form */}
                         <div className="mb-10 text-center lg:text-left">
                             <h3 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
                                 {isRegister ? 'Crea una cuenta' : '¡Hola de nuevo!'}
@@ -175,14 +172,12 @@ const Login = () => {
                             </button>
                         </form>
 
-                        {/* Social Login Divider */}
                         <div className="my-10 flex items-center gap-4 text-slate-300 font-bold text-[10px] uppercase tracking-[0.2em]">
                             <div className="h-px bg-slate-100 flex-1"></div>
                             <span>o continuar con</span>
                             <div className="h-px bg-slate-100 flex-1"></div>
                         </div>
 
-                        {/* Social Buttons */}
                         <div className="grid grid-cols-3 gap-4">
                             <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
                                 <Chrome size={20} className="text-slate-800" />
@@ -195,7 +190,6 @@ const Login = () => {
                             </button>
                         </div>
 
-                        {/* Footer Form */}
                         <div className="mt-12 text-center">
                             <p className="text-[10px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
                                 Al continuar, aceptas nuestros <button className="text-indigo-600 font-bold">Términos de servicio</button> y la <button className="text-indigo-600 font-bold">Política de privacidad</button>.

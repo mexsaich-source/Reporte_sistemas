@@ -43,8 +43,8 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
                             key={item.id}
                             onClick={() => onSelectItem(item.id)}
                             className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${isActive
-                                    ? 'bg-blue-600/10 text-blue-400 font-bold'
-                                    : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200 font-medium'
+                                ? 'bg-blue-600/10 text-blue-400 font-bold'
+                                : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200 font-medium'
                                 }`}
                         >
                             <div className={`p-1.5 rounded-xl transition-colors ${isActive ? 'bg-blue-600/20' : 'bg-transparent group-hover:bg-slate-800'}`}>
