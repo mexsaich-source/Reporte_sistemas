@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, ListFilter, X, Laptop, Monitor, Smartphone, CheckCircle2, AlertCircle, Wrench, Search } from 'lucide-react';
-import { inventoryData, inventoryStats } from '../data/mockData';
+const inventoryData = [];
+const inventoryStats = { total: 0, active: 0, inRepair: 0, available: 0 };
 import StatCard from './StatCard';
 
 // --- SUBCOMPONENTE: Badge de Estado del Dispositivo ---

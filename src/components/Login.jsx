@@ -1,17 +1,53 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Laptop, Chrome, Apple, Facebook, ChevronLeft } from 'lucide-react';
+import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-const Login = ({ onLogin }) => {
+const Login = () => {
+    const { login, register, forceDemoLogin } = useAuth();
+
     const [isRegister, setIsRegister] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+
+    // Form State
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('');
 
-    const illustrationPath = "../public/image.png";
+    // Status State
+    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e, role = 'user') => {
+    const illustrationPath = "/image.png";
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onLogin(role);
+        setError(null);
+        setLoading(true);
+
+        try {
+            if (isRegister) {
+                const { error: signUpError } = await register(email, password, fullName);
+                if (signUpError) throw signUpError;
+                // Auto-login might happen via session listener, or user needs to confirm email depending on Supabase settings.
+                // Assuming auto-login or alert for email confirmation.
+                if (!signUpError) {
+                    setError('Revisa tu correo para confirmar tu cuenta (si aplica), o intenta iniciar sesión.');
+                    setIsRegister(false);
+                }
+            } else {
+                const { error: signInError } = await login(email, password);
+                if (signInError) {
+                    if (signInError.message.includes('Invalid login credentials')) {
+                        throw new Error('Correo o contraseña incorrectos.');
+                    }
+                    throw signInError;
+                }
+            }
+        } catch (err) {
+            setError(err.message || 'Ocurrió un error inesperado.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -20,7 +56,6 @@ const Login = ({ onLogin }) => {
 
                 {/* Left Column: Illustration & Info */}
                 <div className="lg:w-1/2 bg-[#efebff] p-8 lg:p-16 flex flex-col items-center justify-center text-center relative overflow-hidden">
-                    {/* Subtle Background Shapes */}
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
 
                     <div className="relative z-10 w-full max-w-md animate-in fade-in slide-in-from-left-8 duration-1000">
@@ -39,7 +74,6 @@ const Login = ({ onLogin }) => {
                             Gestiona tus recursos y reportes con la inteligencia de Mexsa. Rápido, intuitivo y siempre conectado.
                         </p>
 
-                        {/* Pagination dots simulation */}
                         <div className="flex gap-2 justify-center mt-10">
                             <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
                             <div className="w-2 h-2 rounded-full bg-indigo-200"></div>
@@ -61,7 +95,7 @@ const Login = ({ onLogin }) => {
                             <p className="text-slate-500 font-medium">
                                 {isRegister ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'} {' '}
                                 <button
-                                    onClick={() => setIsRegister(!isRegister)}
+                                    onClick={() => { setIsRegister(!isRegister); setError(null); }}
                                     className="text-indigo-600 font-bold hover:underline transition-all"
                                 >
                                     {isRegister ? 'Inicia sesión' : 'Regístrate aquí'}
@@ -69,14 +103,36 @@ const Login = ({ onLogin }) => {
                             </p>
                         </div>
 
+                        {error && (
+                            <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold border border-red-100 flex items-center gap-2">
+                                <span>⚠️ {error}</span>
+                            </div>
+                        )}
+
                         {/* Form Inputs */}
                         <form className="space-y-6" onSubmit={handleSubmit}>
+                            {isRegister && (
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Completo</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Juan Pérez"
+                                        required
+                                        value={fullName}
+                                        onChange={(e) => setFullName(e.target.value)}
+                                        className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
+                                    />
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
                                 <input
                                     type="email"
                                     placeholder="ejemplo@mexsa.com"
                                     required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
                                 />
                             </div>
@@ -95,6 +151,8 @@ const Login = ({ onLogin }) => {
                                         type={showPassword ? 'text' : 'password'}
                                         placeholder="••••••••"
                                         required
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
                                         className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
                                     />
                                     <button
@@ -109,8 +167,10 @@ const Login = ({ onLogin }) => {
 
                             <button
                                 type="submit"
-                                className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-black hover:shadow-black/20 transition-all active:scale-[0.98] duration-300"
+                                disabled={loading}
+                                className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-black hover:shadow-black/20 transition-all active:scale-[0.98] duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                             >
+                                {loading && <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>}
                                 {isRegister ? 'Crear mi cuenta' : 'Continuar'}
                             </button>
                         </form>
@@ -142,10 +202,10 @@ const Login = ({ onLogin }) => {
                             </p>
                         </div>
 
-                        {/* Demo Help */}
-                        <div className="mt-8 flex justify-center gap-4">
-                            <button onClick={() => onLogin('admin')} className="text-[9px] font-bold text-slate-300 hover:text-indigo-400 transition-colors uppercase tracking-widest border border-slate-100 px-3 py-1 rounded-full">Dev: Admin</button>
-                            <button onClick={() => onLogin('user')} className="text-[9px] font-bold text-slate-300 hover:text-indigo-400 transition-colors uppercase tracking-widest border border-slate-100 px-3 py-1 rounded-full">Dev: User</button>
+                        {/* Demo Help (Mock Login fallback) */}
+                        <div className="mt-8 flex justify-center gap-4 group/demo">
+                            <button onClick={() => forceDemoLogin('admin')} className="text-[9px] font-bold text-slate-300 hover:text-indigo-400 transition-colors uppercase tracking-widest border border-slate-100 px-3 py-1 rounded-full opacity-0 group-hover/demo:opacity-100">Dev: Admin</button>
+                            <button onClick={() => forceDemoLogin('user')} className="text-[9px] font-bold text-slate-300 hover:text-indigo-400 transition-colors uppercase tracking-widest border border-slate-100 px-3 py-1 rounded-full opacity-0 group-hover/demo:opacity-100">Dev: User</button>
                         </div>
                     </div>
                 </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail } from 'lucide-react';
-import { usersData, userStats } from '../data/mockData';
+const usersData = [];
+const userStats = { total: 0, active: 0, techs: 0, admins: 0 };
 import StatCard from './StatCard';
 
 // --- SUBCOMPONENTE: Status Badge ---

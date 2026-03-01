@@ -1,6 +1,7 @@
 import React from 'react';
 import { Activity, CheckCircle2, Clock, AlertTriangle, Hammer, Globe, Shield, Code, ChevronRight } from 'lucide-react';
-import { activitiesData, activityStats } from '../data/mockData';
+const activitiesData = [];
+const activityStats = { total: 0, completed: 0, pending: 0, delayed: 0 };
 import StatCard from './StatCard';
 
 const PriorityBadge = ({ priority }) => {
@@ -75,7 +76,7 @@ const ActivitiesView = () => {
                                     <td className="p-4">
                                         <div className="flex items-center gap-2">
                                             <div className={`w-2 h-2 rounded-full ${activity.status === 'Completed' ? 'bg-emerald-500' :
-                                                    activity.status === 'In Progress' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
+                                                activity.status === 'In Progress' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
                                                 }`}></div>
                                             <span className="text-slate-600 dark:text-slate-400 font-medium">{activity.status}</span>
                                         </div>

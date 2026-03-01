@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, Download, Eye, TrendingUp, Clock, ShieldCheck, Zap, Filter, Search } from 'lucide-react';
-import { reportsList, reportStats } from '../data/mockData';
+const reportsList = [];
+const reportStats = { efficiency: '0%', avgResolution: '0 hrs', compliance: '0%', costSavings: '$0' };
 import StatCard from './StatCard';
 
 const ReportsView = () => {
@@ -67,8 +68,8 @@ const ReportsView = () => {
                                     </td>
                                     <td className="p-4 text-center">
                                         <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${report.type === 'PDF'
-                                                ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20'
-                                                : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20'
+                                            ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20'
+                                            : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20'
                                             }`}>
                                             {report.type}
                                         </span>
