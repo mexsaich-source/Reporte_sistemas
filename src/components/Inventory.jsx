@@ -350,13 +350,17 @@ const InventoryView = () => {
     };
 
     const handleSaveNewDevice = async (formData) => {
+        setIsLoading(true);
         const newItem = {
             ...formData,
             user: formData.user || 'Unassigned'
         };
         const added = await inventoryService.add(newItem);
         if (added) {
-            loadInventory(); // Reload from storage
+            await loadInventory(); // Reload from Supabase
+        } else {
+            setIsLoading(false);
+            alert("Hubo un error al guardar el equipo. Revisa la consola.");
         }
     };
 
