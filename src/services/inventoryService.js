@@ -113,7 +113,12 @@ export const inventoryService = {
                 .single();
 
             if (error) {
-                console.error("Supabase Error adding asset:", error);
+                console.error("--- Supabase Error adding asset ---");
+                console.error("Código:", error.code);
+                console.error("Mensaje:", error.message);
+                console.error("Detalles:", error.details);
+                console.error("Hint:", error.hint);
+                console.error("Payload enviado:", JSON.stringify(newAsset, null, 2));
                 return null;
             }
 
