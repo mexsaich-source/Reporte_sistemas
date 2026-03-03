@@ -1,32 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ListFilter, X, Clock, MessageSquare, Paperclip, Send, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { ticketService } from '../services/ticketService';
 
 // --- SUBCOMPONENTE: Badge de Estado Transversal ---
 export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => {
     const config = {
-        Open: {
+        open: {
             style: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-100/50 dark:border-rose-500/20 shadow-sm shadow-rose-500/5',
             icon: AlertCircle,
             label: 'Abierto'
         },
-        Pending: {
+        pending: {
             style: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-100/50 dark:border-amber-500/20 shadow-sm shadow-amber-500/5',
             icon: Clock,
             label: 'Pendiente'
         },
-        Resolved: {
+        resolved: {
             style: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100/50 dark:border-emerald-500/20 shadow-sm shadow-emerald-500/5',
             icon: CheckCircle2,
             label: 'Resuelto'
         }
     };
 
-    const current = config[status] || {
-        style: 'text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700',
-        icon: AlertCircle,
-        label: status
-    };
+    // Handle both case variations just in case
+    const normalizedStatus = status ? status.toLowerCase() : 'open';
+    const current = config[normalizedStatus] || config['open'];
 
     const Icon = current.icon;
     const isSm = size === 'sm';
@@ -34,7 +32,7 @@ export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => 
 
     return (
         <span className={`inline-flex items-center gap-2 rounded-xl border ${padding} ${current.style} transition-all`}>
-            {withIcon && <Icon size={isSm ? 14 : 14} className={status === 'Open' ? 'animate-pulse' : ''} />}
+            {withIcon && <Icon size={isSm ? 14 : 14} className={normalizedStatus === 'open' ? 'animate-pulse' : ''} />}
             {current.label}
         </span>
     );
@@ -51,29 +49,22 @@ const TicketsModule = () => {
     const fetchTickets = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('tickets')
-                .select(`
-                    *,
-                    profiles:user_id (full_name, email)
-                `)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
+            const data = await ticketService.getAll();
 
             const formatted = data.map(t => ({
-                id: t.id.substring(0, 8).toUpperCase(),
+                id: t.id.toString(),
+                shortId: t.id.toString().padStart(4, '0'),
                 fullId: t.id,
                 reportedBy: t.profiles?.full_name || t.profiles?.email || 'Desconocido',
                 issue: t.title,
-                tech: t.assigned_to ? 'Técnico Asignado' : 'Unassigned',
+                tech: t.tech_profile?.full_name || 'Unassigned',
                 status: t.status,
                 date: new Date(t.created_at).toLocaleDateString()
             }));
 
             setTickets(formatted);
         } catch (err) {
-            console.error("Error fetching admin tickets:", err);
+            console.error("Error loading tickets:", err);
         } finally {
             setLoading(false);
         }
@@ -134,10 +125,10 @@ const TicketsModule = () => {
                             </tr>
                         ) : (
                             tickets.map((ticket) => (
-                                <tr key={ticket.fullId || ticket.id} onClick={() => setSelectedTicket(ticket)} className="group transition-all duration-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 cursor-pointer">
+                                <tr key={ticket.id} onClick={() => setSelectedTicket(ticket)} className="group transition-all duration-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 cursor-pointer">
                                     <td className="p-4 pl-6">
                                         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 group-hover:bg-white dark:group-hover:bg-slate-700 border border-transparent group-hover:border-slate-200 dark:group-hover:border-slate-600 transition-colors">
-                                            <span className="font-bold text-slate-900 dark:text-slate-100">{ticket.id}</span>
+                                            <span className="font-bold text-slate-900 dark:text-slate-100">#{ticket.shortId}</span>
                                         </div>
                                     </td>
                                     <td className="p-4 font-medium text-slate-600 dark:text-slate-400">{ticket.reportedBy}</td>
@@ -151,7 +142,8 @@ const TicketsModule = () => {
                                                     {ticket.tech.charAt(0)}
                                                 </div>
                                             ) : (
-                                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700 text-slate-300">
+                                                    ?
                                                 </div>
                                             )}
                                             <span className={`font-semibold ${ticket.tech === 'Unassigned' ? 'text-slate-400 italic dark:text-slate-600' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -180,3 +172,4 @@ const TicketsModule = () => {
 };
 
 export default TicketsModule;
+
