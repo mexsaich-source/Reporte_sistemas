@@ -9,16 +9,27 @@ import {
     Laptop,
     Settings
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Sidebar = ({ activeItem, onSelectItem }) => {
-    const menuItems = [
-        { name: 'Dashboard', icon: LayoutDashboard, id: 'Dashboard' },
-        { name: 'Tickets', icon: Ticket, id: 'Tickets' },
-        { name: 'Inventario', icon: MonitorSmartphone, id: 'Inventory' },
-        { name: 'Actividades', icon: Activity, id: 'Activities' },
-        { name: 'Reportes', icon: FileText, id: 'Reports' },
-        { name: 'Usuarios', icon: Users, id: 'Users' },
+    // 1. Obtenemos el perfil del contexto
+    const { profile } = useAuth();
+
+    // 2. Verificamos si es administrador o técnico
+    const isStaff = profile?.role === 'admin' || profile?.role === 'tech';
+
+    // 3. Definimos todos los botones y quién puede verlos (requireStaff)
+    const allMenuItems = [
+        { name: 'Dashboard', icon: LayoutDashboard, id: 'Dashboard', requireStaff: true },
+        { name: 'Tickets', icon: Ticket, id: 'Tickets', requireStaff: false }, // Lo ven todos
+        { name: 'Inventario', icon: MonitorSmartphone, id: 'Inventory', requireStaff: true },
+        { name: 'Actividades', icon: Activity, id: 'Activities', requireStaff: true },
+        { name: 'Reportes', icon: FileText, id: 'Reports', requireStaff: true },
+        { name: 'Usuarios', icon: Users, id: 'Users', requireStaff: true },
     ];
+
+    // 4. Filtramos: Si no es staff, solo mostramos los que tienen requireStaff en false
+    const menuItems = allMenuItems.filter(item => isStaff || !item.requireStaff);
 
     return (
         <div className="w-72 bg-slate-950 text-slate-300 flex flex-col min-h-screen sticky top-0 border-r border-slate-800 shadow-2xl z-20 transition-all duration-300">
@@ -29,7 +40,9 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
                 </div>
                 <div className="flex flex-col">
                     <span className="font-black text-xl text-white tracking-tight leading-none">Mexsa IT</span>
-                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">Admin Portal</span>
+                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">
+                        {isStaff ? 'Admin Portal' : 'User Portal'}
+                    </span>
                 </div>
             </div>
 
@@ -67,15 +80,19 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
                     <div className="flex items-center gap-3">
                         <div className="relative">
                             <img
-                                src="https://ui-avatars.com/api/?name=Admin+Root&background=3b82f6&color=fff&bold=true"
-                                alt="Admin"
+                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.full_name || 'Usuario')}&background=3b82f6&color=fff&bold=true`}
+                                alt={profile?.full_name || 'Usuario'}
                                 className="w-10 h-10 rounded-2xl border-2 border-slate-700 object-cover shadow-sm"
                             />
                             <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></div>
                         </div>
                         <div className="flex flex-col text-left">
-                            <span className="text-sm font-bold text-white leading-tight mb-0.5 group-hover:text-blue-400 transition-colors">Admin Root</span>
-                            <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">SysAdmin</span>
+                            <span className="text-sm font-bold text-white leading-tight mb-0.5 group-hover:text-blue-400 transition-colors">
+                                {profile?.full_name || 'Cargando...'}
+                            </span>
+                            <span className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">
+                                {profile?.role || 'User'}
+                            </span>
                         </div>
                     </div>
                     <Settings size={18} className="text-slate-500 group-hover:text-white transition-colors" />

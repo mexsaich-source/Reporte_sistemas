@@ -15,7 +15,7 @@ const AuthProvider = ({ children }) => {
     useEffect(() => {
         let isMounted = true;
 
-        // Safety timeout: If Supabase takes more than 3 seconds to respond, force loading to false
+        // Safety timeout
         const safetyTimer = setTimeout(() => {
             if (isMounted) setLoading(false);
         }, 3000);
@@ -86,26 +86,39 @@ const AuthProvider = ({ children }) => {
     };
 
     const register = async (email, password, fullName) => {
-        return supabase.auth.signUp({
+        // 1. Creamos al usuario en el sistema de Auth de Supabase
+        const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
             password,
-            options: {
-                data: {
-                    full_name: fullName,
-                    role: 'user',
-                    department: 'General'
-                }
-            }
         });
+
+        if (authError) return { data: null, error: authError };
+
+        // 2. Obligamos a guardar el rol en tu tabla pública "profiles"
+        if (authData?.user) {
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .insert([
+                    {
+                        id: authData.user.id,
+                        full_name: fullName,
+                        role: 'user',
+                        department: 'General'
+                    }
+                ]);
+
+            if (profileError) {
+                console.error("Error insertando en profiles:", profileError);
+            }
+        }
+
+        return { data: authData, error: authError };
     };
 
     const logout = async () => {
-        // 1. Limpiamos los estados de inmediato para ocultar el panel (cierre "visual" instantáneo)
         setUser(null);
         setProfile(null);
-
         try {
-            // 2. Avisamos a Supabase que cierre la sesión detrás de cámaras
             await supabase.auth.signOut();
         } catch (err) {
             console.error("Error al salir:", err);

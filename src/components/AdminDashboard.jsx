@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+// NUEVO: Importamos el contexto de autenticación
+import { useAuth } from '../context/AuthContext';
+
 import Header from './Header';
 import Sidebar from './Sidebar';
 import StatCard from './StatCard';
@@ -118,6 +121,9 @@ const ChartSection = () => (
 );
 
 const AdminDashboard = ({ onLogout }) => {
+    // NUEVO: Extraemos el perfil del contexto para usar su rol real
+    const { profile } = useAuth();
+
     const [currentView, setCurrentView] = useState('Dashboard');
     const [activeTab, setActiveTab] = useState('Overview');
 
@@ -154,7 +160,8 @@ const AdminDashboard = ({ onLogout }) => {
             <Sidebar activeItem={currentView} onSelectItem={setCurrentView} />
 
             <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-                <Header userRole="admin" onLogout={onLogout} />
+                {/* NUEVO: Le pasamos el rol real al Header en lugar de dejarlo fijo como "admin" */}
+                <Header userRole={profile?.role || 'user'} onLogout={onLogout} />
 
                 <main className="p-8 lg:p-10 max-w-7xl mx-auto w-full">
                     <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
