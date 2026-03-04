@@ -3,7 +3,7 @@ import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
-    const { login, register, forceDemoLogin } = useAuth();
+    const { login, register } = useAuth();
 
     const [isRegister, setIsRegister] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -196,11 +196,7 @@ const Login = () => {
                             </p>
                         </div>
 
-                        {/* Demo Help (Mock Login fallback) */}
-                        <div className="mt-8 flex justify-center gap-4 group/demo">
-                            <button onClick={() => forceDemoLogin('admin')} className="text-[9px] font-bold text-slate-300 hover:text-indigo-400 transition-colors uppercase tracking-widest border border-slate-100 px-3 py-1 rounded-full opacity-0 group-hover/demo:opacity-100">Dev: Admin</button>
-                            <button onClick={() => forceDemoLogin('user')} className="text-[9px] font-bold text-slate-300 hover:text-indigo-400 transition-colors uppercase tracking-widest border border-slate-100 px-3 py-1 rounded-full opacity-0 group-hover/demo:opacity-100">Dev: User</button>
-                        </div>
+                        {/* Remove demo section entirely */}
                     </div>
                 </div>
             </div>

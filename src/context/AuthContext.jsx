@@ -91,30 +91,27 @@ const AuthProvider = ({ children }) => {
             password,
             options: {
                 data: {
-                    full_name: fullName
+                    full_name: fullName,
+                    role: 'user',
+                    department: 'General'
                 }
             }
         });
     };
 
     const logout = async () => {
+        // 1. Limpiamos los estados de inmediato para ocultar el panel (cierre "visual" instantáneo)
+        setUser(null);
+        setProfile(null);
+
         try {
-            if (user?.id === 'demo-user') return;
+            // 2. Avisamos a Supabase que cierre la sesión detrás de cámaras
             await supabase.auth.signOut();
         } catch (err) {
             console.error("Error al salir:", err);
-        } finally {
-            setUser(null);
-            setProfile(null);
-            setLoading(false);
+            localStorage.clear();
+            sessionStorage.clear();
         }
-    };
-
-    // Helper options for demo purposes without DB connection
-    const forceDemoLogin = (role) => {
-        setUser({ id: 'demo-user', email: 'demo@mexsa.com' });
-        setProfile({ id: 'demo-user', role: role, full_name: `Dev ${role}` });
-        setLoading(false);
     };
 
     return (
@@ -124,8 +121,7 @@ const AuthProvider = ({ children }) => {
             loading,
             login,
             register,
-            logout,
-            forceDemoLogin
+            logout
         }}>
             {children}
         </AuthContext.Provider>
