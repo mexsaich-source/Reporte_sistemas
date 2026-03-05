@@ -1,9 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
-    const { login, register } = useAuth();
+    const { login, register, user, profile, loading } = useAuth();
+    const navigate = useNavigate();
+
+    // Redirigir automáticamente si ya está logeado y el perfil cargado
+    useEffect(() => {
+        if (!loading && user && profile) {
+            if (profile.role === 'admin' || profile.role === 'tech') {
+                navigate('/admin', { replace: true });
+            } else {
+                navigate('/portal', { replace: true });
+            }
+        }
+    }, [user, profile, loading, navigate]);
 
     const [isRegister, setIsRegister] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -15,14 +28,14 @@ const Login = () => {
 
     // Status State
     const [error, setError] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const illustrationPath = "/image.png";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
-        setLoading(true);
+        setIsSubmitting(true);
 
         try {
             if (isRegister) {
@@ -46,7 +59,7 @@ const Login = () => {
         } catch (err) {
             setError(err.message || 'Ocurrió un error inesperado.');
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -164,10 +177,10 @@ const Login = () => {
 
                             <button
                                 type="submit"
-                                disabled={loading}
+                                disabled={isSubmitting}
                                 className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-black hover:shadow-black/20 transition-all active:scale-[0.98] duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                             >
-                                {loading && <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>}
+                                {isSubmitting && <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>}
                                 {isRegister ? 'Crear mi cuenta' : 'Continuar'}
                             </button>
                         </form>

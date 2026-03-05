@@ -13,6 +13,9 @@ import UserPortal from './components/UserPortal';
 const ProtectedAdminRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
 
+  // DEBUG LOG
+  console.log("DEBUG [AdminRoute]:", { user: user?.email, role: profile?.role, loading });
+
   // 1. Mientras Supabase responde, mostramos un loader
   if (loading) {
     return (
@@ -27,8 +30,22 @@ const ProtectedAdminRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
+  // NUEVO: Si hay usuario pero no se pudo cargar el perfil
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-2">Error de Perfil</h2>
+          <p className="text-slate-600 mb-4">No se encontró tu información en la tabla 'profiles'. Contacta al administrador para sincronizar tu cuenta.</p>
+          <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-6 py-2 rounded-xl">Reintentar</button>
+        </div>
+      </div>
+    );
+  }
+
   // 3. Si el rol NO es admin y NO es tech, lo mandamos al portal de usuarios normales
-  if (profile?.role !== 'admin' && profile?.role !== 'tech') {
+  const role = profile?.role?.toLowerCase();
+  if (role !== 'admin' && role !== 'tech') {
     return <Navigate to="/portal" replace />;
   }
 
@@ -39,6 +56,9 @@ const ProtectedAdminRoute = ({ children }) => {
 // --- CADENERO 2: PROTECCIÓN PARA USUARIOS NORMALES ---
 const ProtectedUserRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
+
+  // DEBUG LOG
+  console.log("DEBUG [UserRoute]:", { user: user?.email, role: profile?.role, loading });
 
   if (loading) {
     return (
@@ -53,7 +73,8 @@ const ProtectedUserRoute = ({ children }) => {
   }
 
   // Si un admin intenta entrar a la vista de usuario por la URL, lo regresamos a su Dashboard
-  if (profile?.role === 'admin' || profile?.role === 'tech') {
+  const role = profile?.role?.toLowerCase();
+  if (role === 'admin' || role === 'tech') {
     return <Navigate to="/admin" replace />;
   }
 
