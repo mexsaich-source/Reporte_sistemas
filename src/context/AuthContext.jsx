@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export const AuthContext = createContext({});
+const AuthContext = createContext({});
 
 export const useAuth = () => {
     return useContext(AuthContext);
@@ -11,6 +11,10 @@ const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // --- CONFIGURACIÓN DE SEGURIDAD ---
+    const INACTIVITY_LIMIT = 60 * 60 * 1000; // 60 minutos en milisegundos
+    let inactivityTimer = null;
 
     useEffect(() => {
         let isMounted = true;
@@ -23,7 +27,15 @@ const AuthProvider = ({ children }) => {
         // Fetch current session
         const getSession = async () => {
             try {
-                const { data: { session }, error } = await supabase.auth.getSession();
+                // Obtenemos la sesión con un catch para evitar el error de "Lock broken"
+                const { data: { session }, error } = await supabase.auth.getSession().catch(err => {
+                    if (err.message.includes('Lock broken')) {
+                        console.warn("DEBUG: Conflicto de bloqueo detectado, reintentando...");
+                        return { data: { session: null }, error: null };
+                    }
+                    throw err;
+                });
+
                 if (error) throw error;
 
                 if (session?.user && isMounted) {
@@ -36,7 +48,7 @@ const AuthProvider = ({ children }) => {
                 console.error("Error al obtener sesión:", err);
                 if (isMounted) setLoading(false);
             } finally {
-                clearTimeout(safetyTimer);
+                if (isMounted) clearTimeout(safetyTimer);
             }
         };
 
@@ -60,8 +72,75 @@ const AuthProvider = ({ children }) => {
             isMounted = false;
             clearTimeout(safetyTimer);
             subscription.unsubscribe();
+            stopInactivityTimer();
         };
     }, []);
+
+    // --- LÓGICA DE INACTIVIDAD (60 MINUTOS) ---
+    const resetInactivityTimer = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        if (user) {
+            inactivityTimer = setTimeout(() => {
+                console.warn("Sesión cerrada por inactividad");
+                logout();
+            }, INACTIVITY_LIMIT);
+        }
+    };
+
+    const stopInactivityTimer = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+    };
+
+    useEffect(() => {
+        if (user) {
+            // Eventos que reinician el contador
+            const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+
+            const handleActivity = () => resetInactivityTimer();
+
+            events.forEach(event => {
+                document.addEventListener(event, handleActivity);
+            });
+
+            resetInactivityTimer();
+
+            return () => {
+                events.forEach(event => {
+                    document.removeEventListener(event, handleActivity);
+                });
+                stopInactivityTimer();
+            };
+        }
+    }, [user]);
+
+    // --- LÓGICA DE CIERRE FORZOSO (REALTIME) ---
+    useEffect(() => {
+        if (!user) return;
+
+        // Escuchamos cambios en tiempo real en la tabla profiles para este usuario
+        const profileSubscription = supabase
+            .channel(`profile_changes_${user.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'profiles',
+                    filter: `id=eq.${user.id}`
+                },
+                (payload) => {
+                    if (payload.new && payload.new.force_logout === true) {
+                        console.error("Cierre forzoso detectado desde el servidor");
+                        logout();
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(profileSubscription);
+        };
+    }, [user]);
 
     const fetchProfile = async (userId) => {
         try {
@@ -72,7 +151,7 @@ const AuthProvider = ({ children }) => {
                 .single();
 
             if (error) {
-                console.error("Error fetching profile:", error);
+                setProfile(null);
             } else {
                 setProfile(data);
             }
@@ -86,44 +165,37 @@ const AuthProvider = ({ children }) => {
     };
 
     const register = async (email, password, fullName) => {
-        // 1. Creamos al usuario en el sistema de Auth de Supabase
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // Enviamos la metadata para que el TRIGGER de SQL cree el perfil automáticamente
+        return supabase.auth.signUp({
             email,
             password,
-        });
-
-        if (authError) return { data: null, error: authError };
-
-        // 2. Obligamos a guardar el rol en tu tabla pública "profiles"
-        if (authData?.user) {
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .insert([
-                    {
-                        id: authData.user.id,
-                        full_name: fullName,
-                        role: 'user',
-                        department: 'General'
-                    }
-                ]);
-
-            if (profileError) {
-                console.error("Error insertando en profiles:", profileError);
+            options: {
+                data: {
+                    full_name: fullName,
+                    role: 'user',
+                    department: 'General'
+                }
             }
-        }
-
-        return { data: authData, error: authError };
+        });
     };
 
     const logout = async () => {
+        // Limpieza visual inmediata para independencia total
         setUser(null);
         setProfile(null);
+        stopInactivityTimer();
+
         try {
             await supabase.auth.signOut();
         } catch (err) {
             console.error("Error al salir:", err);
+        } finally {
+            // BORRADO AGRESIVO: Esto garantiza que no queden rastros de la sesión anterior
             localStorage.clear();
             sessionStorage.clear();
+
+            // Forzamos recarga a la raíz para asegurar que el sistema inicie limpio
+            window.location.href = '/login';
         }
     };
 

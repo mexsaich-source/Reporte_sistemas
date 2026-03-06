@@ -388,8 +388,8 @@ const UserTicketList = ({ tickets }) => {
 };
 
 // --- COMPONENTE PRINCIPAL: Portal de Usuario ---
-const UserPortal = ({ onLogout }) => {
-    const { user, profile } = useAuth();
+const UserPortal = () => {
+    const { user, profile, logout } = useAuth();
     const [currentView, setCurrentView] = useState('MyTickets');
     const [myTickets, setMyTickets] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
@@ -541,7 +541,7 @@ const UserPortal = ({ onLogout }) => {
                             </div>
                         </div>
                         <button
-                            onClick={onLogout}
+                            onClick={logout}
                             className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all duration-300 text-xs font-black uppercase tracking-widest"
                         >
                             <LogOut size={16} />
@@ -553,7 +553,7 @@ const UserPortal = ({ onLogout }) => {
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0">
-                <Header userRole="user" userName={profile?.full_name || user?.email || "Usuario Local"} onLogout={onLogout} />
+                <Header userName={profile?.full_name || user?.email || "Usuario"} userType={profile?.role || "Operativo"} />
 
                 <main className="p-10 max-w-7xl mx-auto w-full">
                     <div className="flex items-center justify-between mb-10">

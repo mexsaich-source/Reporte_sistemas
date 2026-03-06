@@ -1,9 +1,11 @@
 import React from 'react';
 import { Search, Bell, LogOut, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
-const Header = ({ userRole, onLogout, userName = "Usuario", userType = "Operativo" }) => {
+const Header = ({ userName = "Usuario", userType = "Operativo" }) => {
     const { isDark, toggleTheme } = useTheme();
+    const { logout } = useAuth();
 
     return (
         <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/60 px-8 flex items-center justify-between sticky top-0 z-10 shadow-sm transition-all duration-300">
@@ -35,30 +37,14 @@ const Header = ({ userRole, onLogout, userName = "Usuario", userType = "Operativ
 
                 <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block"></div>
 
-                {userRole === 'admin' || userRole === 'tech' ? (
-                    <button
-                        onClick={onLogout}
-                        className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 px-4 py-2 rounded-xl transition-all text-sm font-bold tracking-wide"
-                    >
-                        <LogOut size={18} />
-                        <span className="hidden sm:inline">Salir</span>
-                    </button>
-                ) : (
-                    <div className="flex items-center gap-4 group cursor-pointer">
-                        <div className="flex flex-col text-right hidden md:flex">
-                            <span className="text-sm font-black text-slate-900 dark:text-white leading-tight">{userName}</span>
-                            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest leading-tight">{userType}</span>
-                        </div>
-                        <div className="relative">
-                            <img
-                                src={`https://ui-avatars.com/api/?name=${userName.replace(' ', '+')}&background=3b82f6&color=fff&size=128&bold=true`}
-                                className="w-11 h-11 rounded-2xl border-2 border-slate-50 dark:border-slate-800 shadow-md group-hover:scale-105 transition-transform"
-                                alt="Profile"
-                            />
-                            <div className="absolute bottom-[-2px] right-[-2px] w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900"></div>
-                        </div>
-                    </div>
-                )}
+                <button
+                    onClick={logout}
+                    className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 px-4 py-2 rounded-xl transition-all text-sm font-bold tracking-wide"
+                >
+                    <LogOut size={18} />
+                    <span className="hidden sm:inline">Salir</span>
+                </button>
+
             </div>
         </header>
     );

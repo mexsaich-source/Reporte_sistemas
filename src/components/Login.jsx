@@ -4,16 +4,23 @@ import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
-    const { login, register, user, profile, loading } = useAuth();
+    const { login, register, user, profile, loading, logout } = useAuth();
     const navigate = useNavigate();
 
     // Redirigir automáticamente si ya está logeado y el perfil cargado
     useEffect(() => {
-        if (!loading && user && profile) {
-            if (profile.role === 'admin' || profile.role === 'tech') {
-                navigate('/admin', { replace: true });
+        if (!loading && user) {
+            if (profile) {
+                if (profile.role === 'admin' || profile.role === 'tech') {
+                    navigate('/admin', { replace: true });
+                } else {
+                    navigate('/portal', { replace: true });
+                }
             } else {
-                navigate('/portal', { replace: true });
+                // Si hay usuario pero no hay perfil (ej. falló el trigger en Supabase)
+                setError('Error crítico: Tu usuario existe pero tu perfil de seguridad no fue creado correctamente en la base de datos. Contacta al administrador.');
+                // Detener cualquier animación de carga residual
+                setIsSubmitting(false);
             }
         }
     }, [user, profile, loading, navigate]);
@@ -114,100 +121,113 @@ const Login = () => {
                         </div>
 
                         {error && (
-                            <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold border border-red-100 flex items-center gap-2">
+                            <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold border border-red-100 flex flex-col items-center gap-3 text-center">
                                 <span>⚠️ {error}</span>
+                                {(error.toLowerCase().includes('crítico') || error.toLowerCase().includes('perfil')) && (
+                                    <button
+                                        type="button"
+                                        onClick={logout}
+                                        className="mt-2 bg-red-600 text-white px-6 py-2 rounded-xl shadow-lg hover:bg-black transition-all active:scale-95 font-black uppercase text-xs tracking-widest"
+                                    >
+                                        Limpiar Sesión y Reintentar
+                                    </button>
+                                )}
                             </div>
                         )}
 
                         {/* Form Inputs */}
-                        <form className="space-y-6" onSubmit={handleSubmit}>
-                            {isRegister && (
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Completo</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Juan Pérez"
-                                        required
-                                        value={fullName}
-                                        onChange={(e) => setFullName(e.target.value)}
-                                        className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
-                                    />
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
-                                <input
-                                    type="email"
-                                    placeholder="ejemplo@mexsa.com"
-                                    required
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center ml-1">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Contraseña</label>
-                                    {!isRegister && (
-                                        <button type="button" className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 uppercase tracking-widest">
-                                            ¿Olvidaste tu contraseña?
-                                        </button>
+                        {(!user || profile) && (
+                            <>
+                                <form className="space-y-6" onSubmit={handleSubmit}>
+                                    {isRegister && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Completo</label>
+                                            <input
+                                                type="text"
+                                                placeholder="Juan Pérez"
+                                                required
+                                                value={fullName}
+                                                onChange={(e) => setFullName(e.target.value)}
+                                                className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
+                                            />
+                                        </div>
                                     )}
-                                </div>
-                                <div className="relative group">
-                                    <input
-                                        type={showPassword ? 'text' : 'password'}
-                                        placeholder="••••••••"
-                                        required
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
-                                    />
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
+                                        <input
+                                            type="email"
+                                            placeholder="ejemplo@mexsa.com"
+                                            required
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center ml-1">
+                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Contraseña</label>
+                                            {!isRegister && (
+                                                <button type="button" className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 uppercase tracking-widest">
+                                                    ¿Olvidaste tu contraseña?
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="relative group">
+                                            <input
+                                                type={showPassword ? 'text' : 'password'}
+                                                placeholder="••••••••"
+                                                required
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+                                            >
+                                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors"
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-black hover:shadow-black/20 transition-all active:scale-[0.98] duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                                     >
-                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                        {isSubmitting && <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>}
+                                        {isRegister ? 'Crear mi cuenta' : 'Continuar'}
+                                    </button>
+                                </form>
+
+                                <div className="my-10 flex items-center gap-4 text-slate-300 font-bold text-[10px] uppercase tracking-[0.2em]">
+                                    <div className="h-px bg-slate-100 flex-1"></div>
+                                    <span>o continuar con</span>
+                                    <div className="h-px bg-slate-100 flex-1"></div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-4">
+                                    <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
+                                        <Chrome size={20} className="text-slate-800" />
+                                    </button>
+                                    <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
+                                        <Apple size={20} className="text-slate-800" />
+                                    </button>
+                                    <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
+                                        <Facebook size={20} className="text-[#1877F2]" />
                                     </button>
                                 </div>
-                            </div>
 
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-black hover:shadow-black/20 transition-all active:scale-[0.98] duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-                            >
-                                {isSubmitting && <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>}
-                                {isRegister ? 'Crear mi cuenta' : 'Continuar'}
-                            </button>
-                        </form>
-
-                        <div className="my-10 flex items-center gap-4 text-slate-300 font-bold text-[10px] uppercase tracking-[0.2em]">
-                            <div className="h-px bg-slate-100 flex-1"></div>
-                            <span>o continuar con</span>
-                            <div className="h-px bg-slate-100 flex-1"></div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-4">
-                            <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
-                                <Chrome size={20} className="text-slate-800" />
-                            </button>
-                            <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
-                                <Apple size={20} className="text-slate-800" />
-                            </button>
-                            <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
-                                <Facebook size={20} className="text-[#1877F2]" />
-                            </button>
-                        </div>
-
-                        <div className="mt-12 text-center">
-                            <p className="text-[10px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
-                                Al continuar, aceptas nuestros <button className="text-indigo-600 font-bold">Términos de servicio</button> y la <button className="text-indigo-600 font-bold">Política de privacidad</button>.
-                            </p>
-                        </div>
+                                <div className="mt-12 text-center">
+                                    <p className="text-[10px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
+                                        Al continuar, aceptas nuestros <button className="text-indigo-600 font-bold">Términos de servicio</button> y la <button className="text-indigo-600 font-bold">Política de privacidad</button>.
+                                    </p>
+                                </div>
+                            </>
+                        )}
 
                         {/* Remove demo section entirely */}
                     </div>

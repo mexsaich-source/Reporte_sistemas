@@ -120,7 +120,7 @@ const ChartSection = () => (
     </div>
 );
 
-const AdminDashboard = ({ onLogout }) => {
+const AdminDashboard = () => {
     // NUEVO: Extraemos el perfil del contexto para usar su rol real
     const { profile } = useAuth();
 
@@ -161,7 +161,7 @@ const AdminDashboard = ({ onLogout }) => {
 
             <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
                 {/* NUEVO: Le pasamos el rol real al Header en lugar de dejarlo fijo como "admin" */}
-                <Header userRole={profile?.role || 'user'} onLogout={onLogout} />
+                <Header userName={profile?.full_name || "Admin"} userType={profile?.role || "Personal IT"} />
 
                 <main className="p-8 lg:p-10 max-w-7xl mx-auto w-full">
                     <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">

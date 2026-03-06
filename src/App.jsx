@@ -9,9 +9,33 @@ import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
 import UserPortal from './components/UserPortal';
 
+// --- NUEVO: REDIRECCIÓN INTELIGENTE ---
+const RootRedirect = () => {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const role = profile?.role?.toLowerCase();
+  if (role === 'admin' || role === 'tech') {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return <Navigate to="/portal" replace />;
+};
+
 // --- CADENERO 1: PROTECCIÓN PARA ADMIN / TECH ---
 const ProtectedAdminRoute = ({ children }) => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, logout } = useAuth();
 
   // DEBUG LOG
   console.log("DEBUG [AdminRoute]:", { user: user?.email, role: profile?.role, loading });
@@ -37,7 +61,10 @@ const ProtectedAdminRoute = ({ children }) => {
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center">
           <h2 className="text-xl font-bold text-red-600 mb-2">Error de Perfil</h2>
           <p className="text-slate-600 mb-4">No se encontró tu información en la tabla 'profiles'. Contacta al administrador para sincronizar tu cuenta.</p>
-          <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-6 py-2 rounded-xl">Reintentar</button>
+          <div className="flex justify-center gap-3">
+            <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-6 py-2 rounded-xl">Reintentar</button>
+            <button onClick={logout} className="bg-red-50 text-red-600 px-6 py-2 rounded-xl font-bold hover:bg-red-100">Cerrar Sesión</button>
+          </div>
         </div>
       </div>
     );
@@ -55,7 +82,7 @@ const ProtectedAdminRoute = ({ children }) => {
 
 // --- CADENERO 2: PROTECCIÓN PARA USUARIOS NORMALES ---
 const ProtectedUserRoute = ({ children }) => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, logout } = useAuth();
 
   // DEBUG LOG
   console.log("DEBUG [UserRoute]:", { user: user?.email, role: profile?.role, loading });
@@ -70,6 +97,22 @@ const ProtectedUserRoute = ({ children }) => {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // NUEVO: Si hay usuario pero no se pudo cargar el perfil
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-2">Error de Perfil</h2>
+          <p className="text-slate-600 mb-4">No se encontró tu información en la tabla 'profiles'. Contacta al administrador para sincronizar tu cuenta.</p>
+          <div className="flex justify-center gap-3">
+            <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-6 py-2 rounded-xl">Reintentar</button>
+            <button onClick={logout} className="bg-red-50 text-red-600 px-6 py-2 rounded-xl font-bold hover:bg-red-100">Cerrar Sesión</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Si un admin intenta entrar a la vista de usuario por la URL, lo regresamos a su Dashboard
@@ -110,8 +153,8 @@ function App() {
         />
 
         {/* Redirecciones por defecto */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
