@@ -4,26 +4,36 @@ import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
-    const { login, register, user, profile, loading, logout } = useAuth();
+    const { login, register, user, profile, loading, logout, authError, setAuthError } = useAuth();
     const navigate = useNavigate();
 
     // Redirigir automáticamente si ya está logeado y el perfil cargado
     useEffect(() => {
         if (!loading && user) {
+            if (authError === 'BLOCKED') {
+                setError('Acceso Denegado: Tu sesión ha sido cerrada por un administrador. Si crees que es un error, contacta a IT.');
+                setIsSubmitting(false);
+                return;
+            }
+
+            if (authError === 'NO_PROFILE') {
+                setError('Error de Perfil: Tu usuario existe pero no se encontró tu perfil de seguridad. Registra tu cuenta de nuevo o contacta a un administrador.');
+                setIsSubmitting(false);
+                return;
+            }
+
             if (profile) {
-                if (profile.role === 'admin' || profile.role === 'tech') {
+                const role = profile.role?.toLowerCase();
+                if (role === 'admin' || role === 'tech') {
                     navigate('/admin', { replace: true });
                 } else {
                     navigate('/portal', { replace: true });
                 }
-            } else {
-                // Si hay usuario pero no hay perfil (ej. falló el trigger en Supabase)
-                setError('Error crítico: Tu usuario existe pero tu perfil de seguridad no fue creado correctamente en la base de datos. Contacta al administrador.');
-                // Detener cualquier animación de carga residual
-                setIsSubmitting(false);
+            } else if (!authError) {
+                // Estado de carga o espera
             }
         }
-    }, [user, profile, loading, navigate]);
+    }, [user, profile, loading, authError, navigate]);
 
     const [isRegister, setIsRegister] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -112,7 +122,7 @@ const Login = () => {
                             <p className="text-slate-500 font-medium">
                                 {isRegister ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'} {' '}
                                 <button
-                                    onClick={() => { setIsRegister(!isRegister); setError(null); }}
+                                    onClick={() => { setIsRegister(!isRegister); setError(null); setAuthError(null); }}
                                     className="text-indigo-600 font-bold hover:underline transition-all"
                                 >
                                     {isRegister ? 'Inicia sesión' : 'Regístrate aquí'}

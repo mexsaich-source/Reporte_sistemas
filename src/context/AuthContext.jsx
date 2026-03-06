@@ -11,6 +11,7 @@ const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [authError, setAuthError] = useState(null);
 
     // --- CONFIGURACIÓN DE SEGURIDAD ---
     const INACTIVITY_LIMIT = 60 * 60 * 1000; // 60 minutos en milisegundos
@@ -143,6 +144,7 @@ const AuthProvider = ({ children }) => {
     }, [user]);
 
     const fetchProfile = async (userId) => {
+        setAuthError(null);
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -151,10 +153,21 @@ const AuthProvider = ({ children }) => {
                 .single();
 
             if (error) {
+                console.error("DEBUG: Perfil no encontrado para el usuario:", userId, error);
                 setProfile(null);
+                setAuthError('NO_PROFILE');
+            } else if (data.force_logout === true) {
+                console.warn("DEBUG: Sesión bloqueada administrativamente para el usuario:", userId);
+                setProfile(data);
+                setAuthError('BLOCKED');
+                await logout(); // Expulsar inmediatamente si está bloqueado
             } else {
                 setProfile(data);
+                setAuthError(null);
             }
+        } catch (err) {
+            console.error("Error inesperado al cargar perfil:", err);
+            setAuthError('SYSTEM_ERROR');
         } finally {
             setLoading(false);
         }
@@ -206,7 +219,9 @@ const AuthProvider = ({ children }) => {
             loading,
             login,
             register,
-            logout
+            logout,
+            authError,
+            setAuthError
         }}>
             {children}
         </AuthContext.Provider>
