@@ -42,6 +42,7 @@ const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
+    const [role, setRole] = useState('user');
 
     // Status State
     const [error, setError] = useState(null);
@@ -56,7 +57,7 @@ const Login = () => {
 
         try {
             if (isRegister) {
-                const { error: signUpError } = await register(email, password, fullName);
+                const { error: signUpError } = await register(email, password, fullName, role);
                 if (signUpError) throw signUpError;
                 // Auto-login might happen via session listener, or user needs to confirm email depending on Supabase settings.
                 // Assuming auto-login or alert for email confirmation.
@@ -160,6 +161,21 @@ const Login = () => {
                                                 onChange={(e) => setFullName(e.target.value)}
                                                 className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
                                             />
+                                        </div>
+                                    )}
+
+                                    {isRegister && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Rol de Usuario</label>
+                                            <select
+                                                value={role}
+                                                onChange={(e) => setRole(e.target.value)}
+                                                className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-bold text-slate-700 appearance-none cursor-pointer"
+                                            >
+                                                <option value="user">Usuario (Operativo)</option>
+                                                <option value="tech">Técnico (Soporte)</option>
+                                                <option value="admin">Administrador (IT)</option>
+                                            </select>
                                         </div>
                                     )}
 

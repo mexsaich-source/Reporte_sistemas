@@ -177,7 +177,7 @@ const AuthProvider = ({ children }) => {
         return supabase.auth.signInWithPassword({ email, password });
     };
 
-    const register = async (email, password, fullName) => {
+    const register = async (email, password, fullName, role = 'user') => {
         // Enviamos la metadata para que el TRIGGER de SQL cree el perfil automáticamente
         return supabase.auth.signUp({
             email,
@@ -185,7 +185,7 @@ const AuthProvider = ({ children }) => {
             options: {
                 data: {
                     full_name: fullName,
-                    role: 'user',
+                    role: role,
                     department: 'General'
                 }
             }
