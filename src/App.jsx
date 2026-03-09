@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 // IMPORTANTE: Solo importamos useAuth, porque AuthProvider ya está en main.jsx
 import { useAuth } from './context/AuthContext';
@@ -127,37 +127,36 @@ const ProtectedUserRoute = ({ children }) => {
 // --- APLICACIÓN PRINCIPAL ---
 function App() {
   return (
-    <Router>
-      <Routes>
-        {/* Ruta pública */}
-        <Route path="/login" element={<Login />} />
+    <Routes>
+      {/* Ruta pública */}
+      <Route path="/login" element={<Login />} />
 
-        {/* Ruta protegida de Usuario Normal */}
-        <Route
-          path="/portal"
-          element={
-            <ProtectedUserRoute>
-              <UserPortal />
-            </ProtectedUserRoute>
-          }
-        />
+      {/* Ruta protegida de Usuario Normal */}
+      <Route
+        path="/portal"
+        element={
+          <ProtectedUserRoute>
+            <UserPortal />
+          </ProtectedUserRoute>
+        }
+      />
 
-        {/* Ruta protegida de Administrador / Técnico */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedAdminRoute>
-              <AdminDashboard />
-            </ProtectedAdminRoute>
-          }
-        />
+      {/* Ruta protegida de Administrador / Técnico */}
+      <Route
+        path="/admin"
+        element={
+          <ProtectedAdminRoute>
+            <AdminDashboard />
+          </ProtectedAdminRoute>
+        }
+      />
 
-        {/* Redirecciones por defecto */}
-        <Route path="/" element={<RootRedirect />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+      {/* Redirecciones por defecto */}
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
 export default App;
+
