@@ -128,14 +128,21 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                 throw new Error("No puedes crear tickets reales en modo Demo. Usa una cuenta real.");
             }
 
+            const urgencyMap = {
+                'Baja': 'low',
+                'Media': 'medium',
+                'Alta': 'high',
+                'Crítica': 'critical'
+            };
+
             const newTicket = {
-                user_id: user.id,
+                reported_by: user.id,
                 title: title.trim(),
                 description: description.trim(),
                 device_type: deviceType,
                 asset_tag: assetTag.trim() || null,
-                urgency: urgency,
-                status: 'Open' // Por defecto cuando se crea
+                urgency: urgencyMap[urgency] || 'medium',
+                status: 'open'
             };
 
             const { error: insertError } = await supabase
@@ -403,7 +410,7 @@ const UserPortal = () => {
             const { data, error } = await supabase
                 .from('tickets')
                 .select('*')
-                .eq('user_id', user.id)
+                .eq('reported_by', user.id)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -411,15 +418,15 @@ const UserPortal = () => {
             // Compute stats
             let open = 0, pending = 0, resolved = 0;
             const formattedTickets = data.map(t => {
-                if (t.status === 'Open') open++;
-                if (t.status === 'Pending' || t.status === 'In Progress') pending++;
-                if (t.status === 'Resolved' || t.status === 'Closed') resolved++;
+                if (t.status === 'open' || t.status === 'Open') open++;
+                if (t.status === 'pending' || t.status === 'Pending' || t.status === 'In Progress') pending++;
+                if (t.status === 'resolved' || t.status === 'Resolved' || t.status === 'Closed') resolved++;
 
                 return {
                     id: t.id,
-                    displayId: t.id.substring(0, 8).toUpperCase(),
+                    displayId: String(t.id).substring(0, 8).toUpperCase(),
                     issue: t.title,
-                    tech: t.assigned_to ? 'Técnico Asignado' : 'Sin Asignar',
+                    tech: t.assigned_tech ? 'Técnico Asignado' : 'Sin Asignar',
                     status: t.status,
                     date: new Date(t.created_at).toLocaleDateString()
                 };
