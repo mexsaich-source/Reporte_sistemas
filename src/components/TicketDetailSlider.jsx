@@ -1,8 +1,12 @@
 import React from 'react';
 import { X, Clock, MessageSquare, Paperclip, Send } from 'lucide-react';
 import { TicketStatusBadge } from './TicketsModule';
+import { useAuth } from '../context/AuthContext';
 
-const TicketDetailSlider = ({ ticket, isOpen, onClose }) => {
+const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateTicket }) => {
+    const { profile } = useAuth();
+    const isTechOrAdmin = profile?.role === 'admin' || profile?.role === 'tech';
+
     if (!isOpen) return null;
 
     return (
@@ -32,15 +36,49 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose }) => {
                         </div>
                     </div>
 
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-3 shadow-inner">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-4 shadow-inner">
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Reportado por</span>
                             <span className="text-slate-900 dark:text-slate-200 font-semibold">{ticket?.reportedBy}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Técnico Asignado</span>
-                            <span className="text-indigo-600 dark:text-indigo-400 font-bold">{ticket?.tech}</span>
-                        </div>
+                        
+                        {isTechOrAdmin && (
+                            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Asignar Técnico</span>
+                                <select 
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200"
+                                    value={techUsers.find(u => u.full_name === ticket?.tech)?.id || ''}
+                                    onChange={(e) => onUpdateTicket(ticket.fullId, { assigned_tech: e.target.value })}
+                                >
+                                    <option value="">Sin Asignar</option>
+                                    {techUsers.map(u => (
+                                        <option key={u.id} value={u.id}>{u.full_name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {isTechOrAdmin && (
+                            <div className="flex flex-col gap-2 mt-4">
+                                <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Cambiar Estado</span>
+                                <select 
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200"
+                                    value={ticket?.status || 'open'}
+                                    onChange={(e) => onUpdateTicket(ticket.fullId, { status: e.target.value })}
+                                >
+                                    <option value="open">Abierto</option>
+                                    <option value="pending">Pendiente</option>
+                                    <option value="resolved">Resuelto</option>
+                                </select>
+                            </div>
+                        )}
+
+                        {!isTechOrAdmin && (
+                            <div className="flex justify-between items-center mt-2">
+                                <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Técnico Asignado</span>
+                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">{ticket?.tech}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-4 pt-4">

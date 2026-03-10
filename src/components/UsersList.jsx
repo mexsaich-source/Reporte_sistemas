@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail } from 'lucide-react';
+import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail, Trash2 } from 'lucide-react';
 import { userService } from '../services/userService';
+import { useAuth } from '../context/AuthContext';
 import StatCard from './StatCard';
 
 // --- SUBCOMPONENTE: Status Badge ---
@@ -37,7 +38,10 @@ const UserRoleBadge = ({ role }) => {
 };
 
 // --- SUBCOMPONENTE: Slider de Detalles del Usuario ---
-const UserDetailSlider = ({ user, isOpen, onClose }) => {
+const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser }) => {
+    const { profile } = useAuth();
+    const isAdmin = profile?.role === 'admin';
+
     if (!isOpen) return null;
 
     return (
@@ -99,6 +103,39 @@ const UserDetailSlider = ({ user, isOpen, onClose }) => {
                             </div>
                         </div>
                     </div>
+
+                    {isAdmin && profile.id !== user?.id && (
+                        <div className="space-y-4 pt-6 mt-6 border-t border-slate-200 dark:border-slate-700">
+                            <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-4">Acciones de Administrador</h4>
+
+                            <div className="flex flex-col gap-2">
+                                <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Modificar Rol</label>
+                                <select 
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 transition-all"
+                                    value={user?.role || 'user'}
+                                    onChange={(e) => onUpdateRole(user.id, e.target.value)}
+                                >
+                                    <option value="user">Usuario (Lectura)</option>
+                                    <option value="tech">Técnico (Soporte)</option>
+                                    <option value="admin">Administrador</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-4">
+                                <button
+                                    onClick={() => {
+                                        if(window.confirm(`¿Estás seguro que deseas inhabilitar al usuario ${user?.full_name}?`)) {
+                                            onDeleteUser(user?.email);
+                                        }
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-red-600 bg-red-50 hover:bg-red-600 hover:text-white transition-all shadow-sm group"
+                                >
+                                    <Trash2 size={16} className="transition-transform group-hover:scale-110" />
+                                    Revocar Acceso / Eliminar Perfil
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </>
@@ -280,6 +317,29 @@ const UsersView = () => {
         return result;
     };
 
+    const handleUpdateRole = async (userId, newRole) => {
+        const success = await userService.updateRole(userId, newRole);
+        if (success) {
+            await fetchUsers();
+            // Actualizar localmente el slider si sigue abierto
+            if(selectedUser && selectedUser.id === userId) {
+                setSelectedUser(prev => ({ ...prev, role: newRole }));
+            }
+        } else {
+            alert('Error al actualizar el rol.');
+        }
+    };
+
+    const handleDeleteUser = async (email) => {
+        const result = await userService.unregisterMemberFromDepartment(email);
+        if (result.success) {
+            await fetchUsers();
+            setSelectedUser(null);
+        } else {
+            alert("Error al inhabilitar usuario: " + result.error);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 transition-colors duration-300">
             {/* Stats Overview */}
@@ -380,6 +440,8 @@ const UsersView = () => {
                 user={selectedUser}
                 isOpen={!!selectedUser}
                 onClose={() => setSelectedUser(null)}
+                onUpdateRole={handleUpdateRole}
+                onDeleteUser={handleDeleteUser}
             />
 
             <AddUserSlider

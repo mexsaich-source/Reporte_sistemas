@@ -19,36 +19,47 @@ const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         let isMounted = true;
+        console.log("DEBUG: AuthProvider mounted");
 
         // Safety timeout
         const safetyTimer = setTimeout(() => {
-            if (isMounted) setLoading(false);
-        }, 3000);
+            if (isMounted) {
+                console.warn("DEBUG: Safety timer triggered, setting loading to false");
+                setLoading(false);
+            }
+        }, 5000);
 
         // Fetch current session
         const getSession = async () => {
             try {
+                console.log("DEBUG: Calling getSession()");
                 // Obtenemos la sesión con un catch para evitar el error de "Lock broken"
                 const { data: { session }, error } = await supabase.auth.getSession().catch(err => {
-                    if (err.message.includes('Lock broken')) {
+                    console.error("DEBUG: getSession() catch block:", err);
+                    if (err.message?.includes('Lock broken')) {
                         console.warn("DEBUG: Conflicto de bloqueo detectado, reintentando...");
                         return { data: { session: null }, error: null };
                     }
                     throw err;
                 });
 
+                console.log("DEBUG: getSession() result:", { sessionExists: !!session, error });
+
                 if (error) throw error;
 
                 if (session?.user && isMounted) {
+                    console.log("DEBUG: getSession() found user, calling fetchProfile");
                     setUser(session.user);
                     await fetchProfile(session.user.id);
                 } else if (isMounted) {
+                    console.log("DEBUG: getSession() found no user, setting loading false");
                     setLoading(false);
                 }
             } catch (err) {
-                console.error("Error al obtener sesión:", err);
+                console.error("Error al obtener sesión en getSession:", err);
                 if (isMounted) setLoading(false);
             } finally {
+                console.log("DEBUG: getSession() finally block");
                 if (isMounted) clearTimeout(safetyTimer);
             }
         };
@@ -57,11 +68,19 @@ const AuthProvider = ({ children }) => {
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
+            async (event, session) => {
+                console.log("DEBUG: onAuthStateChange triggered with event:", event);
+                // Evitamos activar "loading" estricto si el evento es meramente un refresco de token fallido que regresa INITIAL_SESSION
                 if (session?.user && isMounted) {
+                    console.log("DEBUG: onAuthStateChange user found, calling fetchProfile");
+                    // OJO: Solo bloqueamos la UI si es explícitamente un logueo voluntario (SIGNED_IN)
+                    if (event === 'SIGNED_IN') {
+                        setLoading(true);
+                    }
                     setUser(session.user);
                     await fetchProfile(session.user.id);
                 } else if (isMounted) {
+                    console.log("DEBUG: onAuthStateChange no user found, clearing auth states");
                     setUser(null);
                     setProfile(null);
                     setLoading(false);
@@ -70,6 +89,7 @@ const AuthProvider = ({ children }) => {
         );
 
         return () => {
+            console.log("DEBUG: AuthProvider unmounted");
             isMounted = false;
             clearTimeout(safetyTimer);
             subscription.unsubscribe();
@@ -146,11 +166,23 @@ const AuthProvider = ({ children }) => {
     const fetchProfile = async (userId) => {
         setAuthError(null);
         try {
-            const { data, error } = await supabase
+            console.log("DEBUG: Iniciando consulta a tabla profiles para el usuario:", userId);
+            
+            // Timeout promise to avoid infinite hang on supabase fetch
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)
+            );
+
+            // Actual fetch promise
+            const fetchPromise = supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .single();
+
+            const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+            console.log("DEBUG: Resultado de profiles:", { dataExists: !!data, error });
 
             if (error) {
                 console.error("DEBUG: Perfil no encontrado para el usuario:", userId, error);
@@ -166,9 +198,11 @@ const AuthProvider = ({ children }) => {
                 setAuthError(null);
             }
         } catch (err) {
-            console.error("Error inesperado al cargar perfil:", err);
+            console.error("Error inesperado al cargar perfil (posible timeout):", err);
+            setProfile(null);
             setAuthError('SYSTEM_ERROR');
         } finally {
+            console.log("DEBUG: Saliendo de fetchProfile, cambiando loading a false");
             setLoading(false);
         }
     };

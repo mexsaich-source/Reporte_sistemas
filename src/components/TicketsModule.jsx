@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ListFilter, X, Clock, MessageSquare, Paperclip, Send, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ticketService } from '../services/ticketService';
+import { userService } from '../services/userService';
+import { useAuth } from '../context/AuthContext';
 
 // --- SUBCOMPONENTE: Badge de Estado Transversal ---
 export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => {
@@ -40,24 +42,91 @@ export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => 
 
 import TicketDetailSlider from './TicketDetailSlider';
 
+// --- SUBCOMPONENTE: Formulario para Nuevo Ticket ---
+const AddTicketSlider = ({ isOpen, onClose, onSave }) => {
+    const [title, setTitle] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        const result = await onSave({ title, status: 'open', description: title });
+        setLoading(false);
+        if (result) {
+            setTitle('');
+            onClose();
+        }
+    };
+
+    return (
+        <React.Fragment>
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 transition-opacity animate-in fade-in" onClick={onClose}></div>
+            <div className="fixed top-0 right-0 h-full w-full sm:w-[500px] bg-white dark:bg-slate-950 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-500">
+                <div className="p-8 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900">
+                    <div>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Nuevo Ticket</h2>
+                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-widest">Reportar Falla o Requerimiento</p>
+                    </div>
+                    <button onClick={onClose} className="p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all">
+                        <X size={20} />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-6">
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Descripción Falla / Asunto</label>
+                        <textarea
+                            required
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-4 rounded-2xl text-sm font-semibold text-slate-800 dark:text-slate-200 min-h-[160px] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-400"
+                            placeholder="Ej. La impresora central no tiene tinta negra y al prender la PC la pantalla se queda en negro..."
+                        />
+                    </div>
+                    <div className="pt-4 flex gap-4">
+                        <button type="button" onClick={onClose} className="flex-1 py-4 px-6 rounded-2xl text-sm font-black uppercase tracking-widest text-slate-500 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:bg-slate-100 transition-all">
+                            Cancelar
+                        </button>
+                        <button type="submit" disabled={loading} className="flex-1 py-4 px-6 rounded-2xl text-sm font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-black shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center">
+                            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Registrar Ticket"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </React.Fragment>
+    );
+};
+
 // --- COMPONENTE EXPORTADO PRINCIPAL: Tabla de Tickets ---
 const TicketsModule = () => {
+    const { profile } = useAuth();
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [tickets, setTickets] = useState([]);
+    const [techUsers, setTechUsers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isAddOpen, setIsAddOpen] = useState(false);
 
     const fetchTickets = async () => {
         setLoading(true);
         try {
             const data = await ticketService.getAll();
 
-            const formatted = data.map(t => ({
+            let filteredData = data;
+            if (profile?.role === 'tech') {
+                filteredData = data.filter(t => t.assigned_tech === profile.id);
+            } else if (profile?.role === 'user') {
+                filteredData = data.filter(t => t.reported_by === profile?.id);
+            }
+
+            const formatted = filteredData.map(t => ({
                 id: t.id.toString(),
                 shortId: t.id.toString().padStart(4, '0'),
                 fullId: t.id,
                 reportedBy: t.profiles?.full_name || t.profiles?.email || 'Desconocido',
                 issue: t.title,
                 tech: t.tech_profile?.full_name || 'Unassigned',
+                assigned_tech: t.assigned_tech,
                 status: t.status,
                 date: new Date(t.created_at).toLocaleDateString()
             }));
@@ -70,8 +139,53 @@ const TicketsModule = () => {
         }
     };
 
+    const fetchTechUsers = async () => {
+        try {
+            const users = await userService.getAll();
+            setTechUsers(users.filter(u => u.role === 'tech' || u.role === 'admin'));
+        } catch (error) {
+            console.error("Error fetching tech users:", error);
+        }
+    };
+
+    const handleUpdateTicket = async (ticketId, updates) => {
+        const data = await ticketService.update(ticketId, updates);
+        if (data) {
+            // Recargar la lista para reflejar los cambios globalmente
+            await fetchTickets();
+            // Si el slider está abierto, actualizamos su info visual temporalmente
+            if (selectedTicket && selectedTicket.fullId === ticketId) {
+                // Pequeño parche visual para que no se cierre el modal, pero se refresque localmente
+                setSelectedTicket(prev => ({ 
+                    ...prev, 
+                    tech: updates.assigned_tech 
+                        ? techUsers.find(u => u.id === updates.assigned_tech)?.full_name 
+                        : prev.tech,
+                    status: updates.status || prev.status
+                }));
+            }
+        } else {
+            alert('Hubo un error al actualizar el ticket.');
+        }
+    };
+
+    const handleAddTicket = async (ticketData) => {
+        const payload = {
+            ...ticketData,
+            reported_by: profile?.id
+        };
+        const res = await ticketService.create(payload);
+        if (res) {
+            fetchTickets();
+        } else {
+            alert('Error al crear ticket');
+        }
+        return res;
+    };
+
     useEffect(() => {
         fetchTickets();
+        fetchTechUsers();
     }, []);
 
     return (
@@ -87,7 +201,10 @@ const TicketsModule = () => {
                         <ListFilter size={16} />
                         Refrescar
                     </button>
-                    <button className="flex items-center gap-2 bg-blue-600 hover:bg-black dark:hover:bg-blue-500 text-white px-6 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 shadow-lg shadow-blue-500/20 hover:shadow-black/20 hover:-translate-y-0.5">
+                    <button 
+                        onClick={() => setIsAddOpen(true)}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-black dark:hover:bg-blue-500 text-white px-6 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 shadow-lg shadow-blue-500/20 hover:shadow-black/20 hover:-translate-y-0.5"
+                    >
                         <Plus size={18} strokeWidth={2.5} />
                         Nuevo Ticket
                     </button>
@@ -166,6 +283,14 @@ const TicketsModule = () => {
                 ticket={selectedTicket}
                 isOpen={!!selectedTicket}
                 onClose={() => setSelectedTicket(null)}
+                techUsers={techUsers}
+                onUpdateTicket={handleUpdateTicket}
+            />
+
+            <AddTicketSlider
+                isOpen={isAddOpen}
+                onClose={() => setIsAddOpen(false)}
+                onSave={handleAddTicket}
             />
         </div>
     );

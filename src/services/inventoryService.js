@@ -15,8 +15,7 @@ export const inventoryService = {
                     warranty_date, 
                     condition, 
                     specs, 
-                    assigned_to,
-                    profiles:assigned_to (full_name, department)
+                    assigned_to
                 `)
                 .order('created_at', { ascending: false });
 

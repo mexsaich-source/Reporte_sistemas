@@ -41,5 +41,22 @@ export const ticketService = {
             console.error("Error creating ticket:", error);
             return null;
         }
+    },
+
+    async update(id, updates) {
+        try {
+            const { data, error } = await supabase
+                .from('tickets')
+                .update(updates)
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("Error updating ticket:", error);
+            return null;
+        }
     }
 };

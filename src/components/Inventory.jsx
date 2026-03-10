@@ -127,6 +127,7 @@ const DeviceDetailSlider = ({ device, isOpen, onClose }) => {
 // --- SUBCOMPONENTE: Formulario para Añadir Nuevo Equipo ---
 const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
     const [formData, setFormData] = useState({
+        id: '',
         type: 'Laptop',
         model: '',
         user: '',
@@ -144,6 +145,7 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
         onClose();
         // Reset form
         setFormData({
+            id: '',
             type: 'Laptop',
             model: '',
             user: '',
@@ -188,6 +190,18 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ID Activo Fijo</label>
+                                <input
+                                    type="text"
+                                    name="id"
+                                    required
+                                    value={formData.id}
+                                    onChange={handleChange}
+                                    placeholder="Ej. MEX-001"
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none placeholder:text-slate-400"
+                                />
+                            </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Dispositivo</label>
                                 <select
