@@ -25,6 +25,7 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
         { name: 'Tickets', icon: Ticket, id: 'Tickets', requireStaff: false }, // Lo ven todos
         { name: 'Inventario', icon: MonitorSmartphone, id: 'Inventory', requireStaff: true },
         { name: 'Actividades', icon: Activity, id: 'Activities', requireStaff: true },
+        { name: 'Solicitudes', icon: Laptop, id: 'Requests', requireStaff: true },
         { name: 'Reportes', icon: FileText, id: 'Reports', requireStaff: true },
         { name: 'Usuarios', icon: Users, id: 'Users', requireStaff: true },
         { name: 'Carga Masiva', icon: FileSpreadsheet, id: 'Import', requireStaff: true, adminOnly: true },

@@ -72,11 +72,12 @@ const ProtectedAdminRoute = ({ children }) => {
 
   // 3. Si el rol NO es admin y NO es tech, lo mandamos al portal de usuarios normales
   const role = profile?.role?.toLowerCase();
+  
   if (role !== 'admin' && role !== 'tech') {
+    console.warn("DEBUG [AdminRoute]: Access Denied. Role is:", role);
     return <Navigate to="/portal" replace />;
   }
 
-  // 4. Si pasó todas las pruebas, lo dejamos pasar al Dashboard
   return children;
 };
 

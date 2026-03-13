@@ -10,6 +10,7 @@ import { TicketStatusBadge } from './TicketsModule';
 import TicketDetailSlider from './TicketDetailSlider';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import EquipmentRequestForm from './EquipmentRequestForm';
 
 // --- SUBCOMPONENTE: Agenda de Usuario ---
 const UserAgenda = () => {
@@ -458,13 +459,78 @@ const UserPortal = () => {
     const renderView = () => {
         switch (currentView) {
             case 'NewTicket':
-                return <NewTicketForm onCancel={() => setCurrentView('MyTickets')} onSuccess={() => setCurrentView('MyTickets')} />;
+                return <NewTicketForm onCancel={() => setCurrentView('Dashboard')} onSuccess={() => setCurrentView('Tickets')} />;
+            case 'NewRequest':
+                return <EquipmentRequestForm onCancel={() => setCurrentView('Dashboard')} onSuccess={() => setCurrentView('Dashboard')} />;
             case 'Agenda':
                 return <UserAgenda />;
-            case 'MyTickets':
+            case 'Tickets':
+                return (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden transition-colors">
+                            <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/30 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Historial de Reportes</h3>
+                                </div>
+                                <button onClick={fetchMyTickets} className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:text-blue-700 dark:hover:text-blue-300 p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all">Refrescar</button>
+                            </div>
+                            <div className="p-4">
+                                {loadingData ? (
+                                    <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
+                                        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                        Cargando desde la nube...
+                                    </div>
+                                ) : (
+                                    <UserTicketList tickets={myTickets} />
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            case 'Dashboard':
             default:
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        {/* Prominent Action Card */}
+                        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-blue-500/30 flex flex-col md:flex-row items-center justify-between gap-8 relative overflow-hidden group">
+                            {/* Decorative graphics */}
+                            <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
+                            <div className="absolute bottom-[-10%] left-[-5%] w-32 h-32 bg-blue-400/20 rounded-full blur-2xl group-hover:bg-blue-400/30 transition-all duration-700"></div>
+
+                            <div className="relative z-10 space-y-3 text-center md:text-left">
+                                <h2 className="text-3xl font-black tracking-tight">¿Tienes un problema técnico?</h2>
+                                <p className="text-blue-100 font-medium max-w-md">Estamos listos para ayudarte. Crea un reporte detallado y nuestro equipo de TI lo resolverá a la brevedad.</p>
+                                <div className="flex flex-wrap justify-center md:justify-start gap-4 pt-2">
+                                    <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border border-white/10">
+                                        <Clock size={12} />
+                                        SLA: 4 Horas
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border border-white/10">
+                                        <CheckCircle size={12} />
+                                        Soporte 24/7
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="relative z-10 flex flex-col sm:flex-row gap-4">
+                                <button
+                                    onClick={() => setCurrentView('NewTicket')}
+                                    className="bg-white text-blue-600 px-8 py-4 rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-slate-900 hover:text-white transition-all hover:-translate-y-2 active:scale-95 flex items-center gap-3 group/btn"
+                                >
+                                    <FilePlus size={18} className="group-hover/btn:rotate-12 transition-transform" />
+                                    Reportar Falla
+                                </button>
+                                <button
+                                    onClick={() => setCurrentView('NewRequest')}
+                                    className="bg-blue-500/20 backdrop-blur-md text-white border border-white/20 px-8 py-4 rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-white hover:text-blue-600 transition-all hover:-translate-y-2 active:scale-95 flex items-center gap-3 group/btn"
+                                >
+                                    <Laptop size={18} className="group-hover/btn:scale-110 transition-transform" />
+                                    Solicitar Equipo
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                             <div className="group transition-transform hover:-translate-y-1">
                                 <StatCard label="Abiertos" value={formatCount(stats.open)} trend="" icon={AlertCircle} color="text-red-500" bg="bg-red-500/10" />
@@ -566,15 +632,17 @@ const UserPortal = () => {
                     <div className="flex items-center justify-between mb-10">
                         <div className="space-y-1">
                             <h1 className="text-3xl font-black text-slate-950 dark:text-white tracking-tight">
-                                {currentView === 'MyTickets' ? 'Mis Actividades' :
-                                    currentView === 'NewTicket' ? 'Nuevo Reporte' : 'Agenda Personal'}
+                                {currentView === 'Dashboard' ? 'Dashboard' :
+                                    currentView === 'Tickets' ? 'Mis Actividades' :
+                                        currentView === 'NewTicket' ? 'Nuevo Reporte' :
+                                            currentView === 'NewRequest' ? 'Solicitar Equipo' : 'Agenda Personal'}
                             </h1>
                             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium text-sm">
                                 <span>IT Service Desk</span>
                                 <ChevronRight size={12} />
                                 <span className="text-blue-600 dark:text-blue-400">
-                                    {currentView === 'MyTickets' ? 'Panel de Control' :
-                                        currentView === 'NewTicket' ? 'Solicitud Manual' : 'Planificación'}
+                                    {currentView === 'NewTicket' ? 'Solicitud Manual' : 
+                                     currentView === 'NewRequest' ? 'Pedido de Equipo' : 'Planificación'}
                                 </span>
                             </div>
                         </div>
