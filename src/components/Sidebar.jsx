@@ -7,7 +7,8 @@ import {
     FileText,
     Users,
     Laptop,
-    Settings
+    Settings,
+    FileSpreadsheet
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,10 +27,16 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
         { name: 'Actividades', icon: Activity, id: 'Activities', requireStaff: true },
         { name: 'Reportes', icon: FileText, id: 'Reports', requireStaff: true },
         { name: 'Usuarios', icon: Users, id: 'Users', requireStaff: true },
+        { name: 'Carga Masiva', icon: FileSpreadsheet, id: 'Import', requireStaff: true, adminOnly: true },
     ];
 
     // 4. Filtramos: Si no es staff, solo mostramos los que tienen requireStaff en false
-    const menuItems = allMenuItems.filter(item => isStaff || !item.requireStaff);
+    // Adicionalmente, si es adminOnly, verificamos que el rol sea exactamente 'admin'
+    const menuItems = allMenuItems.filter(item => {
+        if (!isStaff && item.requireStaff) return false;
+        if (item.adminOnly && profile?.role !== 'admin') return false;
+        return true;
+    });
 
     return (
         <div className="w-72 bg-slate-950 text-slate-300 flex flex-col min-h-screen sticky top-0 border-r border-slate-800 shadow-2xl z-20 transition-all duration-300">

@@ -114,7 +114,11 @@ const TicketsModule = () => {
 
             let filteredData = data;
             if (profile?.role === 'tech') {
-                filteredData = data.filter(t => t.assigned_tech === profile.id);
+                // Support sees: 1. Unassigned open tickets (to pick up) OR 2. Their assigned tickets
+                filteredData = data.filter(t => 
+                    (t.status === 'open' && !t.assigned_tech) || 
+                    t.assigned_tech === profile.id
+                );
             } else if (profile?.role === 'user') {
                 filteredData = data.filter(t => t.reported_by === profile?.id);
             }
@@ -201,14 +205,20 @@ const TicketsModule = () => {
                         <ListFilter size={16} />
                         Refrescar
                     </button>
-                    <button 
-                        onClick={() => setIsAddOpen(true)}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-black dark:hover:bg-blue-500 text-white px-6 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 shadow-lg shadow-blue-500/20 hover:shadow-black/20 hover:-translate-y-0.5"
-                    >
-                        <Plus size={18} strokeWidth={2.5} />
-                        Nuevo Ticket
-                    </button>
-                </div>
+                        <button
+                            onClick={() => setIsAddOpen(true)}
+                            className="group relative overflow-hidden bg-slate-950 dark:bg-blue-600 text-white px-8 py-4 rounded-3xl font-black uppercase text-xs tracking-[0.2em] flex items-center gap-4 shadow-2xl shadow-slate-950/20 dark:shadow-blue-900/30 hover:bg-blue-600 dark:hover:bg-blue-500 transition-all hover:-translate-y-1 active:scale-95 border border-white/10"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+                            <div className="bg-white/10 p-2 rounded-xl group-hover:rotate-12 transition-transform">
+                                <FilePlus size={22} strokeWidth={2.5} />
+                            </div>
+                            <div className="flex flex-col items-start">
+                                <span>Reportar Falla</span>
+                                <span className="text-[8px] opacity-60 font-medium">IT Service Desk</span>
+                            </div>
+                        </button>
+                    </div>
             </div>
 
             {/* Table */}

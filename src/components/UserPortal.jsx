@@ -581,10 +581,16 @@ const UserPortal = () => {
 
                         <button
                             onClick={() => setCurrentView('NewTicket')}
-                            className="bg-slate-950 dark:bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold flex items-center gap-3 shadow-xl shadow-slate-950/20 dark:shadow-blue-900/20 hover:bg-blue-600 dark:hover:bg-blue-500 hover:shadow-blue-600/20 transition-all hover:-translate-y-0.5 active:scale-95"
+                            className="group relative overflow-hidden bg-slate-950 dark:bg-blue-600 text-white px-8 py-4 rounded-3xl font-black uppercase text-xs tracking-[0.2em] flex items-center gap-4 shadow-2xl shadow-slate-950/20 dark:shadow-blue-900/30 hover:bg-blue-600 dark:hover:bg-blue-500 transition-all hover:-translate-y-1 active:scale-95 border border-white/10"
                         >
-                            <FilePlus size={20} />
-                            Reportar Falla
+                            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+                            <div className="bg-white/10 p-2 rounded-xl group-hover:rotate-12 transition-transform">
+                                <FilePlus size={22} strokeWidth={2.5} />
+                            </div>
+                            <div className="flex flex-col items-start">
+                                <span>Reportar Falla</span>
+                                <span className="text-[8px] opacity-60 font-medium">IT Service Desk</span>
+                            </div>
                         </button>
                     </div>
 

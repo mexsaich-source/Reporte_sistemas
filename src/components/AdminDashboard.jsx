@@ -10,6 +10,7 @@ import InventoryView from './Inventory';
 import ActivitiesView from './Activities';
 import ReportsView from './Reports';
 import UsersView from './UsersList';
+import ImportModule from './ImportModule';
 import { AlertCircle, Clock, CheckCircle, MonitorSmartphone } from 'lucide-react';
 
 const statsData = [
@@ -139,6 +140,8 @@ const AdminDashboard = () => {
                 return <ReportsView />;
             case 'Users':
                 return <UsersView />;
+            case 'Import':
+                return <ImportModule />;
             case 'Dashboard':
             default:
                 return (

@@ -125,7 +125,7 @@ const DeviceDetailSlider = ({ device, isOpen, onClose }) => {
 };
 
 // --- SUBCOMPONENTE: Formulario para Añadir Nuevo Equipo ---
-const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
+const AddDeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
     const [formData, setFormData] = useState({
         id: '',
         type: 'Laptop',
@@ -136,6 +136,32 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
         warranty: '2027-01-01',
         condition: 'Nuevo'
     });
+
+    useEffect(() => {
+        if (editingDevice) {
+            setFormData({
+                id: editingDevice.id,
+                type: editingDevice.type || 'Laptop',
+                model: editingDevice.model || '',
+                user: editingDevice.user === 'Unassigned' ? '' : editingDevice.user,
+                department: editingDevice.department || 'Sistemas',
+                status: editingDevice.status || 'Available',
+                warranty: editingDevice.warranty !== 'Sin registrar' ? editingDevice.warranty : '',
+                condition: editingDevice.condition || 'Nuevo'
+            });
+        } else {
+            setFormData({
+                id: '',
+                type: 'Laptop',
+                model: '',
+                user: '',
+                department: 'Sistemas',
+                status: 'Available',
+                warranty: '2027-01-01',
+                condition: 'Nuevo'
+            });
+        }
+    }, [editingDevice, isOpen]);
 
     if (!isOpen) return null;
 
@@ -171,8 +197,12 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
             <div className={`fixed top-0 right-0 h-full w-full sm:w-[550px] bg-white dark:bg-slate-950 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-500`}>
                 <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-950">
                     <div>
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Nuevo Equipo</h2>
-                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Registro de activo fijo</p>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            {editingDevice ? 'Editar Equipo' : 'Nuevo Equipo'}
+                        </h2>
+                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
+                            {editingDevice ? `Modificando ${editingDevice.id}` : 'Registro de activo fijo'}
+                        </p>
                     </div>
                     <button onClick={onClose} className="p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all">
                         <X size={24} />
@@ -190,16 +220,17 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
+                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ID Activo Fijo</label>
                                 <input
                                     type="text"
                                     name="id"
                                     required
+                                    disabled={!!editingDevice}
                                     value={formData.id}
                                     onChange={handleChange}
                                     placeholder="Ej. MEX-001"
-                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none placeholder:text-slate-400"
+                                    className={`w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none placeholder:text-slate-400 ${editingDevice ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -331,11 +362,11 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
                         >
                             Cancelar
                         </button>
-                        <button
+                         <button
                             type="submit"
-                            className="flex-1 py-4 px-6 rounded-2xl text-sm font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-black dark:hover:bg-blue-500 shadow-xl shadow-blue-500/20 hover:shadow-black/20 hover:-translate-y-0.5 transition-all"
+                            className="flex-[2] py-4 px-6 rounded-2xl text-sm font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-black dark:hover:bg-blue-500 shadow-xl shadow-blue-500/20 hover:shadow-black/20 hover:-translate-y-0.5 transition-all"
                         >
-                            Guardar Equipo
+                            {editingDevice ? 'Actualizar Cambios' : 'Guardar Equipo'}
                         </button>
                     </div>
                 </form>
@@ -348,6 +379,7 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave }) => {
 const InventoryView = () => {
     const [selectedDevice, setSelectedDevice] = useState(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [editingDevice, setEditingDevice] = useState(null);
     const [inventoryList, setInventoryList] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -363,19 +395,58 @@ const InventoryView = () => {
         setIsLoading(false);
     };
 
-    const handleSaveNewDevice = async (formData) => {
+     const handleSaveNewDevice = async (formData) => {
         setIsLoading(true);
         const newItem = {
             ...formData,
             user: formData.user || 'Unassigned'
         };
-        const added = await inventoryService.add(newItem);
-        if (added) {
-            await loadInventory(); // Reload from Supabase
+        
+        let success = false;
+        if (editingDevice) {
+            success = await inventoryService.update(editingDevice.id, {
+                type: newItem.type,
+                model: newItem.model,
+                status: newItem.status.toLowerCase().replace(' ', '_'),
+                warranty_date: newItem.warranty || null,
+                condition: newItem.condition === 'Nuevo' ? 'excellent' : newItem.condition === 'Excelente' ? 'excellent' : newItem.condition === 'Bueno' ? 'good' : 'failing',
+                specs: {
+                    assigned_user_name: newItem.user,
+                    department: newItem.department
+                }
+            });
+        } else {
+            const added = await inventoryService.add(newItem);
+            success = !!added;
+        }
+
+        if (success) {
+            await loadInventory();
+            setEditingDevice(null);
         } else {
             setIsLoading(false);
-            alert("Hubo un error al guardar el equipo. Revisa la consola.");
+            alert("Hubo un error al procesar el equipo.");
         }
+    };
+
+    const handleDeleteDevice = async (id, e) => {
+        e.stopPropagation();
+        if (window.confirm(`¿Estás seguro de eliminar el equipo ${id}? Esta acción no se puede deshacer.`)) {
+            setIsLoading(true);
+            const success = await inventoryService.remove(id);
+            if (success) {
+                await loadInventory();
+            } else {
+                setIsLoading(false);
+                alert("Error al eliminar el equipo.");
+            }
+        }
+    };
+
+    const handleEditClick = (device, e) => {
+        e.stopPropagation();
+        setEditingDevice(device);
+        setIsAddModalOpen(true);
     };
 
     const filteredInventory = inventoryList.filter(device =>
@@ -415,7 +486,7 @@ const InventoryView = () => {
                                 />
                             </div>
                             <button
-                                onClick={() => setIsAddModalOpen(true)}
+                                onClick={() => { setEditingDevice(null); setIsAddModalOpen(true); }}
                                 className="flex items-center gap-2 bg-blue-600 hover:bg-black dark:hover:bg-blue-500 text-white px-6 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 shadow-lg shadow-blue-500/20 hover:shadow-black/20 hover:-translate-y-0.5 whitespace-nowrap"
                             >
                                 <Plus size={18} strokeWidth={2.5} />
@@ -440,7 +511,8 @@ const InventoryView = () => {
                                     <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Tipo / Modelo</th>
                                     <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Asignación</th>
                                     <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Estado</th>
-                                    <th className="p-4 pr-6 pb-6 border-b border-slate-100/50 dark:border-slate-800/50 text-right">Garantía</th>
+                                    <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Garantía</th>
+                                    <th className="p-4 pr-6 pb-6 border-b border-slate-100/50 dark:border-slate-800/50 text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="text-sm">
@@ -473,8 +545,26 @@ const InventoryView = () => {
                                         <td className="p-4">
                                             <DeviceStatusBadge status={device.status} />
                                         </td>
-                                        <td className="p-4 pr-6 text-right font-medium text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+                                         <td className="p-4 font-medium text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
                                             {device.warranty}
+                                        </td>
+                                        <td className="p-4 pr-6 text-right">
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={(e) => handleEditClick(device, e)}
+                                                    className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all"
+                                                    title="Editar"
+                                                >
+                                                    <Settings size={16} />
+                                                </button>
+                                                <button 
+                                                    onClick={(e) => handleDeleteDevice(device.id, e)}
+                                                    className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all"
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -491,10 +581,11 @@ const InventoryView = () => {
                 onClose={() => setSelectedDevice(null)}
             />
 
-            <AddDeviceSlider
+             <AddDeviceSlider
                 isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
+                onClose={() => { setIsAddModalOpen(false); setEditingDevice(null); }}
                 onSave={handleSaveNewDevice}
+                editingDevice={editingDevice}
             />
         </div>
     );
