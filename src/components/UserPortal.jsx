@@ -586,60 +586,54 @@ const UserPortal = () => {
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
                 lg:translate-x-0
             `}>
-            {/* User Sidebar - Premium Dark Design */}
-            <aside className="w-64 bg-slate-950 flex flex-col h-screen overflow-hidden sticky top-0 z-20">
-                {/* Decorative Background for Sidebar */}
-                <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
-                    <div className="absolute top-[-20%] left-[-20%] w-full h-[60%] bg-blue-600/30 rounded-full blur-[80px]"></div>
-                </div>
-
-                <div className="relative p-7 flex items-center gap-3 border-b border-white/5">
-                    <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20">
-                        <TicketIcon size={22} strokeWidth={2.5} />
+                {/* User Sidebar - Premium Dark Design */}
+                <aside className="w-64 bg-slate-950 flex flex-col h-screen overflow-hidden sticky top-0 z-20">
+                    {/* Decorative Background for Sidebar */}
+                    <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
+                        <div className="absolute top-[-20%] left-[-20%] w-full h-[60%] bg-blue-600/30 rounded-full blur-[80px]"></div>
                     </div>
-                    <span className="font-black text-xl text-white tracking-tight">Mexsa<span className="text-blue-500">.</span></span>
-                </div>
 
-                <nav className="relative flex-1 py-8 px-4 space-y-2">
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 px-3">Principal</div>
-                    {menuItems.map((item) => (
-                        <button
-                            key={item.id}
-                            onClick={() => { setCurrentView(item.id); setIsSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${currentView === item.id
-                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 font-bold'
-                                : 'text-slate-400 hover:bg-white/5 hover:text-white font-medium'
-                                }`}
-                        >
-                            <item.icon size={20} className={`${currentView === item.id ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'} transition-colors`} />
-                            <span className="text-sm">{item.name}</span>
-                            {currentView === item.id && <ChevronRight size={14} className="ml-auto opacity-50" />}
-                        </button>
-                    ))}
-                </nav>
-
-                <div className="relative p-6 mt-auto">
-                    <div className="bg-white/5 rounded-3xl p-4 border border-white/5 backdrop-blur-sm">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">Tu Soporte</p>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="bg-blue-500/20 p-2 rounded-xl">
-                                <AlertCircle size={18} className="text-blue-400" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-xs font-bold text-white">¿Ayuda?</span>
-                                <span className="text-[10px] text-slate-400">Ext: 4050</span>
-                            </div>
+                    <div className="relative p-7 flex items-center gap-3 border-b border-white/5">
+                        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20">
+                            <TicketIcon size={22} strokeWidth={2.5} />
                         </div>
-                        <button
-                            onClick={logout}
-                            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all duration-300 text-xs font-black uppercase tracking-widest"
-                        >
-                            <LogOut size={16} />
-                            Cerrar Sesión
-                        </button>
+                        <span className="font-black text-xl text-white tracking-tight">Mexsa<span className="text-blue-500">.</span></span>
                     </div>
-                </div>
-            </aside>
+
+                    <nav className="relative flex-1 py-8 px-4 space-y-2">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 px-3">Principal</div>
+                        {menuItems.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => { setCurrentView(item.id); setIsSidebarOpen(false); }}
+                                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${currentView === item.id
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 font-bold'
+                                    : 'text-slate-400 hover:bg-white/5 hover:text-white font-medium'
+                                    }`}
+                            >
+                                <item.icon size={20} className={`${currentView === item.id ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'} transition-colors`} />
+                                <span className="text-sm">{item.name}</span>
+                                {currentView === item.id && <ChevronRight size={14} className="ml-auto opacity-50" />}
+                            </button>
+                        ))}
+                    </nav>
+
+                    <div className="relative p-6 mt-auto">
+                        <div className="bg-white/5 rounded-3xl p-4 border border-white/5 backdrop-blur-sm">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">Tu Soporte</p>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="bg-blue-500/20 p-2 rounded-xl">
+                                    <AlertCircle size={18} className="text-blue-400" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-white">¿Ayuda?</span>
+                                    <span className="text-[10px] text-slate-400">Ext: 4050</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </aside>
             </div>
 
             {/* Main Content Area */}
