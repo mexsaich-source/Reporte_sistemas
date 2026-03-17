@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    FilePlus, History, Calendar as CalendarIcon, LogOut, Search, Bell,
+    FilePlus, History, Calendar as CalendarIcon, LogOut, Search, Bell, LayoutDashboard,
     Ticket as TicketIcon, CheckCircle, Clock, AlertCircle, ChevronRight, User,
     CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash, Menu
 } from 'lucide-react';
@@ -398,7 +398,7 @@ const UserTicketList = ({ tickets }) => {
 // --- COMPONENTE PRINCIPAL: Portal de Usuario ---
 const UserPortal = () => {
     const { user, profile, logout } = useAuth();
-    const [currentView, setCurrentView] = useState('MyTickets');
+    const [currentView, setCurrentView] = useState('Dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [myTickets, setMyTickets] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
@@ -449,8 +449,9 @@ const UserPortal = () => {
     }, [currentView, user]);
 
     const menuItems = [
-        { name: 'Mis Actividades', icon: History, id: 'MyTickets' },
-        { name: 'Nuevo Reporte', icon: FilePlus, id: 'NewTicket' },
+        { name: 'Inicio', icon: LayoutDashboard, id: 'Dashboard' },
+        { name: 'Mis Actividades', icon: History, id: 'Tickets' },
+        { name: 'Solicitar Equipo', icon: Laptop, id: 'NewRequest' },
         { name: 'Agenda', icon: CalendarIcon, id: 'Agenda' },
     ];
 

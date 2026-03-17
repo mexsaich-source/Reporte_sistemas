@@ -99,7 +99,7 @@ export default function AuthProvider({ children }) {
                 }
                 setLoading(false);
             }
-        }, 10000); // 10s total
+        }, 7000); // 7s total (Reducido de 10s para mejor UX)
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             (event, session) => {

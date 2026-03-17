@@ -9,9 +9,7 @@ import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
 import UserPortal from './components/UserPortal';
 
-/**
- * --- COMPONENTE DE ERROR COMPARTIDO ---
- */
+
 const AuthErrorScreen = ({ error, logout }) => {
   const isTimeout = error === 'FETCH_TIMEOUT';
   return (
@@ -21,8 +19,8 @@ const AuthErrorScreen = ({ error, logout }) => {
           {isTimeout ? 'Error de Conexión' : 'Error de Perfil'}
         </h2>
         <p className="text-slate-600 mb-4">
-          {isTimeout 
-            ? 'La conexión está tardando más de lo habitual. Por favor, verifica tu internet o intenta de nuevo.' 
+          {isTimeout
+            ? 'La conexión está tardando más de lo habitual. Por favor, verifica tu internet o intenta de nuevo.'
             : 'No se encontró tu perfil o hubo un problema al cargar los datos.'}
         </p>
         <div className="flex justify-center gap-3">
@@ -34,12 +32,34 @@ const AuthErrorScreen = ({ error, logout }) => {
   );
 };
 
-// Loader centrado reutilizable
-const FullPageLoader = () => (
-  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
-    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-  </div>
-);
+const FullPageLoader = () => {
+  const [showHelp, setShowHelp] = React.useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setShowHelp(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6"></div>
+
+      {showHelp && (
+        <div className="animate-in fade-in slide-in-from-top-4 duration-700">
+          <p className="text-slate-500 dark:text-slate-400 font-medium mb-4">
+            Esto está tardando más de lo normal...
+          </p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="text-blue-600 dark:text-blue-400 font-bold hover:underline"
+          >
+            ¿Ir al inicio de sesión?
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /**
  * --- REDIRECCIÓN INTELIGENTE ---
@@ -87,7 +107,7 @@ const ProtectedRoute = memo(({ children, allowedRoles = [] }) => {
 
   // 5. Verificación de Rol
   const userRole = profile?.role?.toLowerCase() || '';
-  
+
   if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
     console.warn("Acceso denegado. Rol:", userRole, "Rutas permitidas:", allowedRoles);
     // IMPORTANTE: Solo redirigimos si NO estamos ya en la ruta destino

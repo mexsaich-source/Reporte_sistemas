@@ -263,7 +263,7 @@ const AdminDashboard = () => {
                                         className={`px-4 py-2 text-xs sm:text-sm font-bold transition-all rounded-xl ${activeTab === tab
                                             ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
                                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
-                                        }`}
+                                            }`}
                                     >
                                         {tab}
                                     </button>
