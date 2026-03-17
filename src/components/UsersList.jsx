@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail, Trash2 } from 'lucide-react';
 import { userService } from '../services/userService';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 import StatCard from './StatCard';
 
 // --- SUBCOMPONENTE: Status Badge ---
@@ -222,7 +222,7 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rol</label>
                             <select
@@ -352,7 +352,7 @@ const UsersView = () => {
 
             {/* Main Table Container */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden transition-colors duration-300">
-                <div className="p-8 flex flex-col justify-between items-start gap-6 border-b border-slate-100/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-800/30">
+                <div className="p-4 sm:p-8 flex flex-col justify-between items-start gap-6 border-b border-slate-100/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-800/30">
                     <div className="w-full flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                             <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Directorio del Personal</h3>

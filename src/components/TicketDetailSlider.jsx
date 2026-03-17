@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Clock, MessageSquare, Paperclip, Send } from 'lucide-react';
 import { TicketStatusBadge } from './TicketsModule';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 
 const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateTicket }) => {
     const { profile } = useAuth();

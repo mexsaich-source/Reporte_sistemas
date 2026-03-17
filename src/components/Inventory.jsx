@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ListFilter, X, Laptop, Monitor, Smartphone, CheckCircle2, AlertCircle, Wrench, Search, HardDrive, Cpu, ShieldCheck } from 'lucide-react';
+import { Plus, ListFilter, X, Laptop, Monitor, Smartphone, CheckCircle2, AlertCircle, Wrench, Search, HardDrive, Cpu, ShieldCheck, Settings, Trash2 } from 'lucide-react';
 import StatCard from './StatCard';
 import { inventoryService } from '../services/inventoryService';
 
@@ -220,7 +220,7 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
-                             <div className="space-y-2">
+                            <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ID Activo Fijo</label>
                                 <input
                                     type="text"
@@ -362,7 +362,7 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                         >
                             Cancelar
                         </button>
-                         <button
+                        <button
                             type="submit"
                             className="flex-[2] py-4 px-6 rounded-2xl text-sm font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-black dark:hover:bg-blue-500 shadow-xl shadow-blue-500/20 hover:shadow-black/20 hover:-translate-y-0.5 transition-all"
                         >
@@ -395,13 +395,13 @@ const InventoryView = () => {
         setIsLoading(false);
     };
 
-     const handleSaveNewDevice = async (formData) => {
+    const handleSaveNewDevice = async (formData) => {
         setIsLoading(true);
         const newItem = {
             ...formData,
             user: formData.user || 'Unassigned'
         };
-        
+
         let success = false;
         if (editingDevice) {
             success = await inventoryService.update(editingDevice.id, {
@@ -545,19 +545,19 @@ const InventoryView = () => {
                                         <td className="p-4">
                                             <DeviceStatusBadge status={device.status} />
                                         </td>
-                                         <td className="p-4 font-medium text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+                                        <td className="p-4 font-medium text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
                                             {device.warranty}
                                         </td>
                                         <td className="p-4 pr-6 text-right">
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button 
+                                                <button
                                                     onClick={(e) => handleEditClick(device, e)}
                                                     className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all"
                                                     title="Editar"
                                                 >
                                                     <Settings size={16} />
                                                 </button>
-                                                <button 
+                                                <button
                                                     onClick={(e) => handleDeleteDevice(device.id, e)}
                                                     className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all"
                                                     title="Eliminar"
@@ -581,7 +581,7 @@ const InventoryView = () => {
                 onClose={() => setSelectedDevice(null)}
             />
 
-             <AddDeviceSlider
+            <AddDeviceSlider
                 isOpen={isAddModalOpen}
                 onClose={() => { setIsAddModalOpen(false); setEditingDevice(null); }}
                 onSave={handleSaveNewDevice}

@@ -31,10 +31,10 @@ export const importService = {
     validateUserColumns(data) {
         const required = ['name', 'email', 'department'];
         if (data.length === 0) return { valid: false, error: 'File is empty' };
-        
+
         const headers = Object.keys(data[0]);
         const missing = required.filter(h => !headers.some(header => header.toLowerCase() === h.toLowerCase()));
-        
+
         return {
             valid: missing.length === 0,
             missing: missing,
@@ -48,10 +48,10 @@ export const importService = {
     validateInventoryColumns(data) {
         const required = ['asset_type', 'brand', 'model', 'serial_number'];
         if (data.length === 0) return { valid: false, error: 'File is empty' };
-        
+
         const headers = Object.keys(data[0]);
         const missing = required.filter(h => !headers.some(header => header.toLowerCase() === h.toLowerCase()));
-        
+
         return {
             valid: missing.length === 0,
             missing: missing,
@@ -64,15 +64,15 @@ export const importService = {
      */
     async previewUsers(data) {
         const { data: existingUsers } = await supabase.from('profiles').select('id, email, employee_id, full_name, department');
-        
+
         return data.map(row => {
             const email = row.email || row.Email;
             const employeeId = row.employee_id || row.Employee_ID || row.id_empleado;
             const name = row.name || row.Name || row.full_name || row.Nombre;
             const dept = row.department || row.Department || row.Departamento;
 
-            const duplicate = existingUsers.find(u => 
-                (email && u.email === email) || 
+            const duplicate = existingUsers.find(u =>
+                (email && u.email === email) ||
                 (employeeId && u.employee_id === String(employeeId)) ||
                 (name && dept && u.full_name === name && u.department === dept)
             );
@@ -99,15 +99,15 @@ export const importService = {
      */
     async previewInventory(data) {
         const { data: existingAssets } = await supabase.from('assets').select('id, serial_number, inventory_tag, hostname');
-        
+
         return data.map(row => {
             const serial = row.serial_number || row.Serial || row.Serie;
             const assetId = row.asset_id || row.Asset_ID || row.id;
             const tag = row.inventory_tag || row.Tag;
             const hostname = row.hostname;
 
-            const duplicate = existingAssets.find(a => 
-                (serial && a.serial_number === String(serial)) || 
+            const duplicate = existingAssets.find(a =>
+                (serial && a.serial_number === String(serial)) ||
                 (assetId && a.id === String(assetId)) ||
                 (tag && a.inventory_tag === String(tag)) ||
                 (hostname && a.hostname === String(hostname))

@@ -1,14 +1,23 @@
 import React from 'react';
-import { Search, Bell, LogOut, Sun, Moon } from 'lucide-react';
+import { Search, Bell, LogOut, Sun, Moon, Menu } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 
-const Header = ({ userName = "Usuario", userType = "Operativo" }) => {
+const Header = ({ userName = "Usuario", userType = "Operativo", onMenuClick }) => {
     const { isDark, toggleTheme } = useTheme();
     const { logout } = useAuth();
 
     return (
-        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/60 px-8 flex items-center justify-between sticky top-0 z-10 shadow-sm transition-all duration-300">
+        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/60 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-10 shadow-sm transition-all duration-300">
+            {/* Botón hamburguesa: solo visible en móvil */}
+            <button
+                onClick={onMenuClick}
+                className="lg:hidden p-2.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all mr-2 shrink-0"
+                aria-label="Abrir menú"
+            >
+                <Menu size={22} />
+            </button>
+
             <div className="flex items-center gap-3 text-slate-400 bg-white dark:bg-slate-800 px-4 py-2.5 rounded-2xl w-full max-w-md border border-slate-200/60 dark:border-slate-700/60 shadow-sm focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all group">
                 <Search size={18} className="group-focus-within:text-blue-500 transition-colors" />
                 <input

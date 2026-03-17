@@ -13,9 +13,7 @@ export const ticketService = {
                     urgency,
                     created_at,
                     reported_by,
-                    profiles:reported_by (full_name, email),
-                    assigned_tech,
-                    tech_profile:assigned_tech (full_name)
+                    assigned_tech
                 `)
                 .order('created_at', { ascending: false });
 

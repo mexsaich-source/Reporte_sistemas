@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, ListFilter, X, Clock, MessageSquare, Paperclip, Send, AlertCircle, CheckCircle2, FilePlus } from 'lucide-react';
 import { ticketService } from '../services/ticketService';
 import { userService } from '../services/userService';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 
 // --- SUBCOMPONENTE: Badge de Estado Transversal ---
 export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => {

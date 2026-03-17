@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 import { 
     Plus, Search, Filter, Clock, CheckCircle, AlertCircle, 
     MoreHorizontal, Smartphone, Laptop, Monitor, Mail, 

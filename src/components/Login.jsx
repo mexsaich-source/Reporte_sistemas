@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 import { Navigate } from 'react-router-dom';
 
 const Login = () => {
     // 1. Solo importamos lo que realmente existe en nuestro AuthContext
-    const { login, register, user, loading, logout } = useAuth();
+    const { login, register, user, loading, logout, authError } = useAuth();
 
     const [isRegister, setIsRegister] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -32,7 +32,9 @@ const Login = () => {
         );
     }
 
-    if (user) {
+    // REDIRECT SOLO SI NO HAY ERROR.
+    // Si hay error (como FETCH_TIMEOUT), nos quedamos aquí para que el usuario pueda limpiar sesión.
+    if (user && !authError) {
         return <Navigate to="/" replace />;
     }
 

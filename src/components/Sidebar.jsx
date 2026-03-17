@@ -10,7 +10,7 @@ import {
     Settings,
     FileSpreadsheet
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 
 const Sidebar = ({ activeItem, onSelectItem }) => {
     // 1. Obtenemos el perfil del contexto
@@ -40,7 +40,7 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
     });
 
     return (
-        <div className="w-72 bg-slate-950 text-slate-300 flex flex-col min-h-screen sticky top-0 border-r border-slate-800 shadow-2xl z-20 transition-all duration-300">
+        <div className="w-72 bg-slate-950 text-slate-300 flex flex-col h-screen overflow-hidden sticky top-0 border-r border-slate-800 shadow-2xl z-20 transition-all duration-300">
             {/* Header/Logo */}
             <div className="p-8 flex items-center gap-4">
                 <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-500/20">

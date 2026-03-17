@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     FilePlus, History, Calendar as CalendarIcon, LogOut, Search, Bell,
     Ticket as TicketIcon, CheckCircle, Clock, AlertCircle, ChevronRight, User,
-    CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash
+    CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash, Menu
 } from 'lucide-react';
 import Header from './Header';
 import StatCard from './StatCard';
 import { TicketStatusBadge } from './TicketsModule';
 import TicketDetailSlider from './TicketDetailSlider';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
 import EquipmentRequestForm from './EquipmentRequestForm';
 
@@ -399,9 +399,9 @@ const UserTicketList = ({ tickets }) => {
 const UserPortal = () => {
     const { user, profile, logout } = useAuth();
     const [currentView, setCurrentView] = useState('MyTickets');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [myTickets, setMyTickets] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
-
     const [stats, setStats] = useState({ open: 0, pending: 0, resolved: 0 });
 
     const fetchMyTickets = async () => {
@@ -569,8 +569,24 @@ const UserPortal = () => {
 
     return (
         <div className="flex min-h-screen bg-[#fcfdfe] dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
+
+            {/* Overlay en móvil */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
+            {/* Sidebar como drawer en móvil */}
+            <div className={`
+                fixed lg:static inset-y-0 left-0 z-40
+                transform transition-transform duration-300 ease-in-out
+                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+                lg:translate-x-0
+            `}>
             {/* User Sidebar - Premium Dark Design */}
-            <aside className="w-64 bg-slate-950 flex flex-col min-h-screen sticky top-0 z-20 overflow-hidden">
+            <aside className="w-64 bg-slate-950 flex flex-col h-screen overflow-hidden sticky top-0 z-20">
                 {/* Decorative Background for Sidebar */}
                 <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
                     <div className="absolute top-[-20%] left-[-20%] w-full h-[60%] bg-blue-600/30 rounded-full blur-[80px]"></div>
@@ -588,7 +604,7 @@ const UserPortal = () => {
                     {menuItems.map((item) => (
                         <button
                             key={item.id}
-                            onClick={() => setCurrentView(item.id)}
+                            onClick={() => { setCurrentView(item.id); setIsSidebarOpen(false); }}
                             className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${currentView === item.id
                                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 font-bold'
                                 : 'text-slate-400 hover:bg-white/5 hover:text-white font-medium'
@@ -623,44 +639,17 @@ const UserPortal = () => {
                     </div>
                 </div>
             </aside>
+            </div>
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0">
-                <Header userName={profile?.full_name || user?.email || "Usuario"} userType={profile?.role || "Operativo"} />
+                <Header
+                    onMenuClick={() => setIsSidebarOpen(true)}
+                    userName={profile?.full_name || user?.email || "Usuario"}
+                    userType={profile?.role || "Operativo"}
+                />
 
-                <main className="p-10 max-w-7xl mx-auto w-full">
-                    <div className="flex items-center justify-between mb-10">
-                        <div className="space-y-1">
-                            <h1 className="text-3xl font-black text-slate-950 dark:text-white tracking-tight">
-                                {currentView === 'Dashboard' ? 'Dashboard' :
-                                    currentView === 'Tickets' ? 'Mis Actividades' :
-                                        currentView === 'NewTicket' ? 'Nuevo Reporte' :
-                                            currentView === 'NewRequest' ? 'Solicitar Equipo' : 'Agenda Personal'}
-                            </h1>
-                            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium text-sm">
-                                <span>IT Service Desk</span>
-                                <ChevronRight size={12} />
-                                <span className="text-blue-600 dark:text-blue-400">
-                                    {currentView === 'NewTicket' ? 'Solicitud Manual' : 
-                                     currentView === 'NewRequest' ? 'Pedido de Equipo' : 'Planificación'}
-                                </span>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={() => setCurrentView('NewTicket')}
-                            className="group relative overflow-hidden bg-slate-950 dark:bg-blue-600 text-white px-8 py-4 rounded-3xl font-black uppercase text-xs tracking-[0.2em] flex items-center gap-4 shadow-2xl shadow-slate-950/20 dark:shadow-blue-900/30 hover:bg-blue-600 dark:hover:bg-blue-500 transition-all hover:-translate-y-1 active:scale-95 border border-white/10"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-                            <div className="bg-white/10 p-2 rounded-xl group-hover:rotate-12 transition-transform">
-                                <FilePlus size={22} strokeWidth={2.5} />
-                            </div>
-                            <div className="flex flex-col items-start">
-                                <span>Reportar Falla</span>
-                                <span className="text-[8px] opacity-60 font-medium">IT Service Desk</span>
-                            </div>
-                        </button>
-                    </div>
+                <main className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full">
 
                     <div className="relative">
                         {renderView()}

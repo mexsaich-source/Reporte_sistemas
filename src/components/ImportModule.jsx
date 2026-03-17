@@ -4,7 +4,7 @@ import {
     XCircle, Info, Download, Trash2, ArrowRight, Save, Clock, History
 } from 'lucide-react';
 import { importService } from '../services/importService';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authStore';
 import ImportLogsView from './ImportLogsView';
 import * as XLSX from 'xlsx';
 

@@ -1,129 +1,103 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
-// IMPORTANTE: Solo importamos useAuth, porque AuthProvider ya está en main.jsx
-import { useAuth } from './context/AuthContext';
+// IMPORTANTE: Solo importamos useAuth de authStore
+import { useAuth } from './context/authStore';
 
 // Importamos tus vistas principales
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
 import UserPortal from './components/UserPortal';
 
-// --- NUEVO: REDIRECCIÓN INTELIGENTE ---
-const RootRedirect = () => {
-  const { user, profile, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+/**
+ * --- COMPONENTE DE ERROR COMPARTIDO ---
+ */
+const AuthErrorScreen = ({ error, logout }) => {
+  const isTimeout = error === 'FETCH_TIMEOUT';
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center">
+        <h2 className="text-xl font-bold text-red-600 mb-2">
+          {isTimeout ? 'Error de Conexión' : 'Error de Perfil'}
+        </h2>
+        <p className="text-slate-600 mb-4">
+          {isTimeout 
+            ? 'La conexión está tardando más de lo habitual. Por favor, verifica tu internet o intenta de nuevo.' 
+            : 'No se encontró tu perfil o hubo un problema al cargar los datos.'}
+        </p>
+        <div className="flex justify-center gap-3">
+          <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-6 py-2 rounded-xl">Reintentar</button>
+          <button onClick={logout} className="bg-red-50 text-red-600 px-6 py-2 rounded-xl font-bold hover:bg-red-100">Cerrar Sesión</button>
+        </div>
       </div>
-    );
+    </div>
+  );
+};
+
+// Loader centrado reutilizable
+const FullPageLoader = () => (
+  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
+
+/**
+ * --- REDIRECCIÓN INTELIGENTE ---
+ * El punto de entrada '/' decide a dónde enviar al usuario.
+ */
+const RootRedirect = () => {
+  const { user, profile, loading, authError, logout } = useAuth();
+
+  if (loading) return <FullPageLoader />;
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (!profile && !authError) return <FullPageLoader />;
+
+  if (!profile && authError) {
+    return <AuthErrorScreen error={authError} logout={logout} />;
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  const role = profile?.role?.toLowerCase();
-  if (role === 'admin' || role === 'tech') {
+  // Redirección por rol
+  const role = profile?.role?.toLowerCase() || '';
+  if (role === 'admin' || role === 'tech' || role === 'técnico') {
     return <Navigate to="/admin" replace />;
   }
 
   return <Navigate to="/portal" replace />;
 };
 
-// --- CADENERO 1: PROTECCIÓN PARA ADMIN / TECH ---
-const ProtectedAdminRoute = ({ children }) => {
-  const { user, profile, loading, logout } = useAuth();
+/**
+ * --- CADENERO PARA RUTAS PROTEGIDAS ---
+ */
+const ProtectedRoute = memo(({ children, allowedRoles = [] }) => {
+  const { user, profile, loading, authError, logout } = useAuth();
 
-  // DEBUG LOG
-  console.log("DEBUG [AdminRoute]:", { user: user?.email, role: profile?.role, loading });
+  // 1. Cargando sesión inicial
+  if (loading) return <FullPageLoader />;
 
-  // 1. Mientras Supabase responde, mostramos un loader
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
+  // 2. Sin sesión → Login
+  if (!user) return <Navigate to="/login" replace />;
 
-  // 2. Si no hay sesión, lo pateamos al Login
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  // 3. Esperando perfil (si ya tenemos usuario pero el fetchProfile no termina)
+  if (!profile && !authError) return <FullPageLoader />;
 
-  // NUEVO: Si hay usuario pero no se pudo cargar el perfil
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">Error de Perfil</h2>
-          <p className="text-slate-600 mb-4">No se encontró tu información en la tabla 'profiles'. Contacta al administrador para sincronizar tu cuenta.</p>
-          <div className="flex justify-center gap-3">
-            <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-6 py-2 rounded-xl">Reintentar</button>
-            <button onClick={logout} className="bg-red-50 text-red-600 px-6 py-2 rounded-xl font-bold hover:bg-red-100">Cerrar Sesión</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // 4. Error real del perfil
+  if (authError) return <AuthErrorScreen error={authError} logout={logout} />;
 
-  // 3. Si el rol NO es admin y NO es tech, lo mandamos al portal de usuarios normales
-  const role = profile?.role?.toLowerCase();
+  // 5. Verificación de Rol
+  const userRole = profile?.role?.toLowerCase() || '';
   
-  if (role !== 'admin' && role !== 'tech') {
-    console.warn("DEBUG [AdminRoute]: Access Denied. Role is:", role);
-    return <Navigate to="/portal" replace />;
+  if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
+    console.warn("Acceso denegado. Rol:", userRole, "Rutas permitidas:", allowedRoles);
+    // IMPORTANTE: Solo redirigimos si NO estamos ya en la ruta destino
+    // Para evitar bucles, si no tiene permiso aquí, lo mandamos al 'Root'
+    // y que RootRedirect decida según su rol real.
+    return <Navigate to="/" replace />;
   }
 
   return children;
-};
-
-// --- CADENERO 2: PROTECCIÓN PARA USUARIOS NORMALES ---
-const ProtectedUserRoute = ({ children }) => {
-  const { user, profile, loading, logout } = useAuth();
-
-  // DEBUG LOG
-  console.log("DEBUG [UserRoute]:", { user: user?.email, role: profile?.role, loading });
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // NUEVO: Si hay usuario pero no se pudo cargar el perfil
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">Error de Perfil</h2>
-          <p className="text-slate-600 mb-4">No se encontró tu información en la tabla 'profiles'. Contacta al administrador para sincronizar tu cuenta.</p>
-          <div className="flex justify-center gap-3">
-            <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-6 py-2 rounded-xl">Reintentar</button>
-            <button onClick={logout} className="bg-red-50 text-red-600 px-6 py-2 rounded-xl font-bold hover:bg-red-100">Cerrar Sesión</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Si un admin intenta entrar a la vista de usuario por la URL, lo regresamos a su Dashboard
-  const role = profile?.role?.toLowerCase();
-  if (role === 'admin' || role === 'tech') {
-    return <Navigate to="/admin" replace />;
-  }
-
-  return children;
-};
+});
 
 // --- APLICACIÓN PRINCIPAL ---
 function App() {
@@ -132,23 +106,23 @@ function App() {
       {/* Ruta pública */}
       <Route path="/login" element={<Login />} />
 
-      {/* Ruta protegida de Usuario Normal */}
+      {/* Portal de Usuarios Operativos */}
       <Route
         path="/portal"
         element={
-          <ProtectedUserRoute>
+          <ProtectedRoute allowedRoles={['user', 'operativo', 'operador']}>
             <UserPortal />
-          </ProtectedUserRoute>
+          </ProtectedRoute>
         }
       />
 
-      {/* Ruta protegida de Administrador / Técnico */}
+      {/* Dashboard de Administradores / Técnicos */}
       <Route
         path="/admin"
         element={
-          <ProtectedAdminRoute>
+          <ProtectedRoute allowedRoles={['admin', 'tech', 'técnico']}>
             <AdminDashboard />
-          </ProtectedAdminRoute>
+          </ProtectedRoute>
         }
       />
 
@@ -160,4 +134,3 @@ function App() {
 }
 
 export default App;
-
