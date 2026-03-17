@@ -18,7 +18,7 @@ const RequestsModule = () => {
         setIsLoading(true);
         try {
             const { data, error } = await supabase
-                .from('equipment_requests')
+                .from('general_requests')
                 .select(`
                     *,
                     profiles:user_id (full_name, email, department)
@@ -37,7 +37,7 @@ const RequestsModule = () => {
     const handleUpdateStatus = async (id, newStatus) => {
         try {
             const { error } = await supabase
-                .from('equipment_requests')
+                .from('general_requests')
                 .update({ status: newStatus })
                 .eq('id', id);
 
@@ -80,8 +80,8 @@ const RequestsModule = () => {
                         <thead>
                             <tr className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] text-left">
                                 <th className="p-6 pb-4">Usuario / Depto</th>
-                                <th className="p-6 pb-4">Equipo / Motivo</th>
-                                <th className="p-6 pb-4">Prioridad</th>
+                                <th className="p-6 pb-4">Asunto / Motivo</th>
+                                <th className="p-6 pb-4">Detalles</th>
                                 <th className="p-6 pb-4">Estado</th>
                                 <th className="p-6 pb-4">Fecha</th>
                                 <th className="p-6 pb-4 text-right">Acciones</th>
@@ -106,26 +106,40 @@ const RequestsModule = () => {
                                                 <User size={18} />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-900 dark:text-white">{req.profiles?.full_name || 'Usuario desconocido'}</p>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{req.profiles?.department || 'Sin Depto'}</p>
+                                                <p className="font-bold text-slate-900 dark:text-white">{req.first_name} {req.last_name}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{req.department}</p>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="p-6">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400">
-                                                <Laptop size={18} />
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-10 h-10 mt-1 bg-blue-50 dark:bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                                                <FileText size={18} />
                                             </div>
                                             <div className="max-w-[200px]">
-                                                <p className="font-bold text-slate-700 dark:text-slate-200">{req.equipment_type}</p>
-                                                <p className="text-[10px] text-slate-400 line-clamp-1">{req.reason}</p>
+                                                <p className="font-bold text-slate-700 dark:text-slate-200 line-clamp-2 leading-tight">{req.subject}</p>
+                                                <p className="text-[10px] text-slate-400 line-clamp-2 mt-1 leading-relaxed">{req.reason}</p>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="p-6">
-                                        <div className="flex items-center gap-1.5 font-bold text-xs">
-                                            <div className={`w-1.5 h-1.5 rounded-full ${req.urgency === 'Crítica' ? 'bg-rose-500' : req.urgency === 'Alta' ? 'bg-amber-500' : 'bg-slate-400'}`}></div>
-                                            <span className="text-slate-500 dark:text-slate-400">{req.urgency}</span>
+                                        <div className="flex flex-col gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                            {req.is_loan ? (
+                                                <>
+                                                    <span className="inline-flex items-center gap-1.5 font-bold text-blue-600 dark:text-blue-400 text-[10px] uppercase tracking-widest bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-md w-fit">
+                                                        <Calendar size={12} /> Préstamo
+                                                    </span>
+                                                    {req.loan_start_date && req.loan_end_date && (
+                                                        <span className="font-medium text-[10px]">
+                                                            {new Date(req.loan_start_date).toLocaleDateString()} a {new Date(req.loan_end_date).toLocaleDateString()}
+                                                        </span>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 font-bold text-slate-600 dark:text-slate-400 text-[10px] uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md w-fit">
+                                                    Petición General
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-6">

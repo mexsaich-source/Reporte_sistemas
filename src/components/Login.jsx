@@ -208,20 +208,7 @@ const Login = () => {
 
                         <div className="my-10 flex items-center gap-4 text-slate-300 font-bold text-[10px] uppercase tracking-[0.2em]">
                             <div className="h-px bg-slate-100 flex-1"></div>
-                            <span>o continuar con</span>
                             <div className="h-px bg-slate-100 flex-1"></div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-4">
-                            <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
-                                <Chrome size={20} className="text-slate-800" />
-                            </button>
-                            <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
-                                <Apple size={20} className="text-slate-800" />
-                            </button>
-                            <button className="flex items-center justify-center py-4 px-2 bg-white border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all hover:shadow-lg shadow-slate-200/50 group duration-300">
-                                <Facebook size={20} className="text-[#1877F2]" />
-                            </button>
                         </div>
 
                         <div className="mt-12 text-center">

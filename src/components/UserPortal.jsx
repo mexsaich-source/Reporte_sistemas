@@ -10,7 +10,7 @@ import { TicketStatusBadge } from './TicketsModule';
 import TicketDetailSlider from './TicketDetailSlider';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
-import EquipmentRequestForm from './EquipmentRequestForm';
+import GeneralRequestForm from './GeneralRequestForm';
 
 // --- SUBCOMPONENTE: Agenda de Usuario ---
 const UserAgenda = () => {
@@ -451,7 +451,7 @@ const UserPortal = () => {
     const menuItems = [
         { name: 'Inicio', icon: LayoutDashboard, id: 'Dashboard' },
         { name: 'Mis Actividades', icon: History, id: 'Tickets' },
-        { name: 'Solicitar Equipo', icon: Laptop, id: 'NewRequest' },
+        { name: 'Peticiones Generales', icon: FileText, id: 'NewRequest' },
         { name: 'Agenda', icon: CalendarIcon, id: 'Agenda' },
     ];
 
@@ -462,7 +462,7 @@ const UserPortal = () => {
             case 'NewTicket':
                 return <NewTicketForm onCancel={() => setCurrentView('Dashboard')} onSuccess={() => setCurrentView('Tickets')} />;
             case 'NewRequest':
-                return <EquipmentRequestForm onCancel={() => setCurrentView('Dashboard')} onSuccess={() => setCurrentView('Dashboard')} />;
+                return <GeneralRequestForm onCancel={() => setCurrentView('Dashboard')} onSuccess={() => setCurrentView('Dashboard')} />;
             case 'Agenda':
                 return <UserAgenda />;
             case 'Tickets':
@@ -526,8 +526,8 @@ const UserPortal = () => {
                                     onClick={() => setCurrentView('NewRequest')}
                                     className="bg-blue-500/20 backdrop-blur-md text-white border border-white/20 px-8 py-4 rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-white hover:text-blue-600 transition-all hover:-translate-y-2 active:scale-95 flex items-center gap-3 group/btn"
                                 >
-                                    <Laptop size={18} className="group-hover/btn:scale-110 transition-transform" />
-                                    Solicitar Equipo
+                                    <FileText size={18} className="group-hover/btn:scale-110 transition-transform" />
+                                    Peticiones Generales
                                 </button>
                             </div>
                         </div>
@@ -627,7 +627,7 @@ const UserPortal = () => {
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-xs font-bold text-white">¿Ayuda?</span>
-                                    <span className="text-[10px] text-slate-400">Ext: 4050</span>
+                                    <span className="text-[10px] text-slate-400">Ext:9026 </span>
                                 </div>
                             </div>
 
