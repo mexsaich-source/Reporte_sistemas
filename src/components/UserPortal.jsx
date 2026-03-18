@@ -11,6 +11,7 @@ import TicketDetailSlider from './TicketDetailSlider';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
 import GeneralRequestForm from './GeneralRequestForm';
+import TermsModal from './TermsModal';
 
 // --- SUBCOMPONENTE: Agenda de Usuario ---
 const UserAgenda = () => {
@@ -456,6 +457,8 @@ const UserPortal = () => {
     const [loadingData, setLoadingData] = useState(true);
     const [stats, setStats] = useState({ open: 0, pending: 0, resolved: 0 });
     const [searchTerm, setSearchTerm] = useState('');
+    const [isTermsOpen, setIsTermsOpen] = useState(false);
+    const [termsType, setTermsType] = useState('terms');
 
     const fetchMyTickets = async () => {
         if (!user) return;
@@ -504,7 +507,7 @@ const UserPortal = () => {
     const filteredMyTickets = React.useMemo(() => {
         if (!searchTerm) return myTickets;
         const s = searchTerm.toLowerCase();
-        return myTickets.filter(t => 
+        return myTickets.filter(t =>
             (t.displayId && t.displayId.toLowerCase().includes(s)) ||
             (t.issue && t.issue.toLowerCase().includes(s)) ||
             (t.status && t.status.toLowerCase().includes(s)) ||
@@ -577,7 +580,7 @@ const UserPortal = () => {
                                     </div>
                                     <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border border-white/10">
                                         <CheckCircle size={12} />
-                                        Soporte 24/7
+                                        Soporte de Lunes a Viernes de 8:00 AM a 6:00 PM
                                     </div>
                                 </div>
                             </div>
@@ -669,7 +672,7 @@ const UserPortal = () => {
                         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20">
                             <TicketIcon size={22} strokeWidth={2.5} />
                         </div>
-                        <span className="font-black text-xl text-white tracking-tight">Mexsa<span className="text-blue-500">.</span></span>
+                        <span className="font-black text-xl text-white tracking-tight">IT Helpdesk<span className="text-blue-500">.</span></span>
                     </div>
 
                     <nav className="relative flex-1 py-8 px-4 space-y-2">
@@ -702,6 +705,10 @@ const UserPortal = () => {
                                     <span className="text-[10px] text-slate-400">Ext:9026 </span>
                                 </div>
                             </div>
+                            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/10">
+                                <button onClick={() => { setTermsType('terms'); setIsTermsOpen(true); }} className="text-left text-[10px] text-slate-400 hover:text-white transition-colors font-medium">Términos de Servicio</button>
+                                <button onClick={() => { setTermsType('privacy'); setIsTermsOpen(true); }} className="text-left text-[10px] text-slate-400 hover:text-white transition-colors font-medium">Política de Privacidad</button>
+                            </div>
 
                         </div>
                     </div>
@@ -725,6 +732,12 @@ const UserPortal = () => {
                     </div>
                 </main>
             </div>
+
+            <TermsModal
+                isOpen={isTermsOpen}
+                onClose={() => setIsTermsOpen(false)}
+                type={termsType}
+            />
         </div>
     );
 };

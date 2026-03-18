@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 import { Navigate } from 'react-router-dom';
+import TermsModal from './TermsModal';
 
 const Login = () => {
     // 1. Solo importamos lo que realmente existe en nuestro AuthContext
@@ -19,6 +20,10 @@ const Login = () => {
     // Status State
     const [error, setError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Terms Modal State
+    const [isTermsOpen, setIsTermsOpen] = useState(false);
+    const [termsType, setTermsType] = useState('terms');
 
     const illustrationPath = "/image.png";
 
@@ -92,15 +97,8 @@ const Login = () => {
                             Soporte IT <br /> <span className="text-indigo-600">Simplificado</span>
                         </h2>
                         <p className="text-slate-600 font-medium text-base lg:text-lg max-w-xs mx-auto leading-relaxed opacity-80">
-                            Gestiona tus recursos y reportes con la inteligencia de Mexsa. Rápido, intuitivo y siempre conectado.
+                            Gestiona tus recursos y reportes con la inteligencia de IT Helpdesk. Rápido, intuitivo y dispuesto a ayudarte.
                         </p>
-
-                        <div className="flex gap-2 justify-center mt-10">
-                            <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
-                            <div className="w-2 h-2 rounded-full bg-indigo-200"></div>
-                            <div className="w-2 h-2 rounded-full bg-indigo-200"></div>
-                            <div className="w-2 h-2 rounded-full bg-indigo-200"></div>
-                        </div>
                     </div>
                 </div>
 
@@ -213,12 +211,18 @@ const Login = () => {
 
                         <div className="mt-12 text-center">
                             <p className="text-[10px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
-                                Al continuar, aceptas nuestros <button className="text-indigo-600 font-bold hover:underline">Términos de servicio</button> y la <button className="text-indigo-600 font-bold hover:underline">Política de privacidad</button>.
+                                Al continuar, aceptas nuestros <button type="button" onClick={() => { setTermsType('terms'); setIsTermsOpen(true); }} className="text-indigo-600 font-bold hover:underline">Términos de servicio</button> y la <button type="button" onClick={() => { setTermsType('privacy'); setIsTermsOpen(true); }} className="text-indigo-600 font-bold hover:underline">Política de privacidad</button>.
                             </p>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <TermsModal
+                isOpen={isTermsOpen}
+                onClose={() => setIsTermsOpen(false)}
+                type={termsType}
+            />
         </div>
     );
 };

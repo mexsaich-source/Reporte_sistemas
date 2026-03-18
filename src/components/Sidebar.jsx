@@ -47,7 +47,7 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
                     <Laptop size={28} strokeWidth={2.5} />
                 </div>
                 <div className="flex flex-col">
-                    <span className="font-black text-xl text-white tracking-tight leading-none">Mexsa IT</span>
+                    <span className="font-black text-xl text-white tracking-tight leading-none"> IT Helpdesk</span>
                     <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">
                         {isStaff ? 'Admin Portal' : 'User Portal'}
                     </span>
