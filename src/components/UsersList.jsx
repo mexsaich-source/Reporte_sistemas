@@ -268,7 +268,7 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
 };
 
 // --- COMPONENTE PRINCIPAL: Módulo de Usuarios ---
-const UsersView = () => {
+const UsersView = ({ searchTerm = '' }) => {
     const [selectedUser, setSelectedUser] = useState(null);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -294,6 +294,17 @@ const UsersView = () => {
             setLoading(false);
         }
     };
+
+    const filteredUsers = React.useMemo(() => {
+        if (!searchTerm) return users;
+        const s = searchTerm.toLowerCase();
+        return users.filter(u => 
+            (u.full_name && u.full_name.toLowerCase().includes(s)) ||
+            (u.email && u.email.toLowerCase().includes(s)) ||
+            (u.role && u.role.toLowerCase().includes(s)) ||
+            (u.department && u.department.toLowerCase().includes(s))
+        );
+    }, [users, searchTerm]);
 
     useEffect(() => {
         fetchUsers();
@@ -395,12 +406,14 @@ const UsersView = () => {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : users.length === 0 ? (
+                            ) : filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center text-slate-500">No hay usuarios registrados.</td>
+                                    <td colSpan={5} className="p-8 text-center text-slate-500">
+                                        {searchTerm ? 'No se encontraron usuarios con esa búsqueda.' : 'No hay usuarios registrados.'}
+                                    </td>
                                 </tr>
                             ) : (
-                                users.map((user) => (
+                                filteredUsers.map((user) => (
                                     <tr key={user.id} onClick={() => setSelectedUser(user)} className="group transition-all duration-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 cursor-pointer">
                                         <td className="p-4 pl-6">
                                             <div className="flex items-center gap-4">

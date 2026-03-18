@@ -131,6 +131,7 @@ const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('General');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [techs, setTechs] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         userService.getAll().then(data => {
@@ -176,19 +177,19 @@ const AdminDashboard = () => {
     const renderView = () => {
         switch (currentView) {
             case 'Tickets':
-                return <TicketsModule />;
+                return <TicketsModule searchTerm={searchTerm} />;
             case 'Inventory':
-                return <InventoryView />;
+                return <InventoryView searchTerm={searchTerm} />;
             case 'Activities':
-                return <ActivitiesView />;
+                return <ActivitiesView searchTerm={searchTerm} />;
             case 'Reports':
-                return <ReportsView />;
+                return <ReportsView searchTerm={searchTerm} />;
             case 'Users':
-                return <UsersView />;
+                return <UsersView searchTerm={searchTerm} />;
             case 'Import':
                 return <ImportModule />;
             case 'Requests':
-                return <RequestsModule />;
+                return <RequestsModule searchTerm={searchTerm} />;
             case 'Dashboard':
             default:
                 if (activeTab === 'Cola de Tickets') return <TicketsModule />;
@@ -241,6 +242,8 @@ const AdminDashboard = () => {
                     onMenuClick={() => setIsSidebarOpen(true)}
                     userName={profile?.full_name || "Admin"}
                     userType={profile?.role || "Personal IT"}
+                    searchTerm={searchTerm}
+                    onSearchChange={setSearchTerm}
                 />
 
                 <main className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full">

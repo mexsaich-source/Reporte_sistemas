@@ -8,6 +8,6 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    allowedHosts: ['amount-plasma-committees-divine.trycloudflare.com'] // <- sin https://
+    allowedHosts: ['rome-reached-libraries-particle.trycloudflare.com'] // <- sin https://
   }
 })

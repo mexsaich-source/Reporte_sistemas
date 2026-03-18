@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     FilePlus, History, Calendar as CalendarIcon, LogOut, Search, Bell, LayoutDashboard,
     Ticket as TicketIcon, CheckCircle, Clock, AlertCircle, ChevronRight, User,
-    CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash, Menu
+    CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash, Menu, FileText
 } from 'lucide-react';
 import Header from './Header';
 import StatCard from './StatCard';
@@ -14,12 +14,60 @@ import GeneralRequestForm from './GeneralRequestForm';
 
 // --- SUBCOMPONENTE: Agenda de Usuario ---
 const UserAgenda = () => {
-    const events = [
-        { id: 1, title: 'Revisión de Laptop', time: '10:00 AM', date: 'Mañana', type: 'Mantenimiento', status: 'pending' },
-        { id: 2, title: 'Instalación ERP', time: '02:30 PM', date: 'Oct 25', type: 'Software', status: 'pending' },
-        { id: 3, title: 'Capacitación O365', time: '09:00 AM', date: 'Oct 26', type: 'Soporte', status: 'pending' },
-        { id: 4, title: 'Cambio Teclado', time: '04:00 PM', date: 'Ayer', type: 'Hardware', status: 'completed' },
-    ];
+    const { user } = useAuth();
+    const [events, setEvents] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!user) return;
+        const fetchEvents = async () => {
+            setLoading(true);
+            try {
+                // Fetch active tickets
+                const { data: ticketsData } = await supabase
+                    .from('tickets')
+                    .select('*')
+                    .eq('reported_by', user.id)
+                    .neq('status', 'closed')
+                    .order('created_at', { ascending: false });
+
+                // Fetch active requests
+                const { data: requestsData, error } = await supabase
+                    .from('general_requests')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .neq('status', 'delivered')
+                    .order('created_at', { ascending: false });
+
+                const formattedTickets = (ticketsData || []).map(t => ({
+                    id: `ticket_${t.id}`,
+                    title: t.title,
+                    time: new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    date: new Date(t.created_at).toLocaleDateString(),
+                    type: 'Ticket - ' + t.status,
+                    status: t.status === 'resolved' ? 'completed' : 'pending'
+                }));
+
+                const formattedRequests = (requestsData || []).map(r => ({
+                    id: `req_${r.id}`,
+                    title: r.subject,
+                    time: new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    date: new Date(r.created_at).toLocaleDateString(),
+                    type: r.is_loan ? 'Préstamo' : 'Petición General',
+                    status: r.status === 'approved' ? 'completed' : 'pending'
+                }));
+
+                const allEvents = [...formattedTickets, ...formattedRequests];
+                setEvents(allEvents.slice(0, 5)); // show latest 5
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchEvents();
+    }, [user]);
 
     return (
         <div className="flex flex-col lg:flex-row gap-6 animate-in fade-in slide-in-from-bottom-2 duration-700 transition-colors">
@@ -52,11 +100,15 @@ const UserAgenda = () => {
                         <CalendarIcon size={16} className="text-blue-600 dark:text-blue-400" />
                         Próximas Actividades
                     </h3>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full uppercase tracking-widest">4 Eventos</span>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full uppercase tracking-widest">{events.length} Actividades</span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">
-                    {events.map((event) => (
+                    {loading ? (
+                        <div className="p-8 text-center text-slate-500">Cargando actividades...</div>
+                    ) : events.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px] border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">No hay actividades próximas</div>
+                    ) : events.map((event) => (
                         <div key={event.id} className="group relative bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between hover:border-blue-200 dark:hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/40 dark:hover:shadow-none cursor-pointer overflow-hidden">
                             <div className="absolute left-0 top-0 w-1 h-full bg-blue-600 scale-y-0 group-hover:scale-y-100 transition-transform duration-300 origin-top"></div>
 
@@ -403,6 +455,7 @@ const UserPortal = () => {
     const [myTickets, setMyTickets] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
     const [stats, setStats] = useState({ open: 0, pending: 0, resolved: 0 });
+    const [searchTerm, setSearchTerm] = useState('');
 
     const fetchMyTickets = async () => {
         if (!user) return;
@@ -443,10 +496,21 @@ const UserPortal = () => {
     };
 
     React.useEffect(() => {
-        if (currentView === 'MyTickets') {
+        if (currentView === 'Tickets' || currentView === 'Dashboard') {
             fetchMyTickets();
         }
     }, [currentView, user]);
+
+    const filteredMyTickets = React.useMemo(() => {
+        if (!searchTerm) return myTickets;
+        const s = searchTerm.toLowerCase();
+        return myTickets.filter(t => 
+            (t.displayId && t.displayId.toLowerCase().includes(s)) ||
+            (t.issue && t.issue.toLowerCase().includes(s)) ||
+            (t.status && t.status.toLowerCase().includes(s)) ||
+            (t.tech && t.tech.toLowerCase().includes(s))
+        );
+    }, [myTickets, searchTerm]);
 
     const menuItems = [
         { name: 'Inicio', icon: LayoutDashboard, id: 'Dashboard' },
@@ -482,8 +546,12 @@ const UserPortal = () => {
                                         <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                                         Cargando desde la nube...
                                     </div>
+                                ) : filteredMyTickets.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
+                                        No hay reportes que coincidan con la búsqueda.
+                                    </div>
                                 ) : (
-                                    <UserTicketList tickets={myTickets} />
+                                    <UserTicketList tickets={filteredMyTickets} />
                                 )}
                             </div>
                         </div>
@@ -558,8 +626,12 @@ const UserPortal = () => {
                                         <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                                         Cargando desde la nube...
                                     </div>
+                                ) : filteredMyTickets.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
+                                        No hay reportes que coincidan con la búsqueda.
+                                    </div>
                                 ) : (
-                                    <UserTicketList tickets={myTickets} />
+                                    <UserTicketList tickets={filteredMyTickets} />
                                 )}
                             </div>
                         </div>
@@ -642,6 +714,8 @@ const UserPortal = () => {
                     onMenuClick={() => setIsSidebarOpen(true)}
                     userName={profile?.full_name || user?.email || "Usuario"}
                     userType={profile?.role || "Operativo"}
+                    searchTerm={searchTerm}
+                    onSearchChange={setSearchTerm}
                 />
 
                 <main className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full">

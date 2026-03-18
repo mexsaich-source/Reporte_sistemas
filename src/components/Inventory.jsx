@@ -376,7 +376,7 @@ const AddDeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
 };
 
 // --- COMPONENTE EXPORTADO PRINCIPAL: Módulo de Inventario ---
-const InventoryView = () => {
+const InventoryView = ({ searchTerm: globalSearchTerm = '' }) => {
     const [selectedDevice, setSelectedDevice] = useState(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingDevice, setEditingDevice] = useState(null);
@@ -449,11 +449,12 @@ const InventoryView = () => {
         setIsAddModalOpen(true);
     };
 
+    const activeSearchTerm = globalSearchTerm || searchTerm;
     const filteredInventory = inventoryList.filter(device =>
-        device.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        device.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        device.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        device.department.toLowerCase().includes(searchTerm.toLowerCase())
+        device.id.toLowerCase().includes(activeSearchTerm.toLowerCase()) ||
+        device.model.toLowerCase().includes(activeSearchTerm.toLowerCase()) ||
+        device.user.toLowerCase().includes(activeSearchTerm.toLowerCase()) ||
+        device.department.toLowerCase().includes(activeSearchTerm.toLowerCase())
     );
 
     return (

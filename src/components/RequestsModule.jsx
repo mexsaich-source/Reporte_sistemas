@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { TicketStatusBadge } from './TicketsModule';
 
-const RequestsModule = () => {
+const RequestsModule = ({ searchTerm = '' }) => {
     const [requests, setRequests] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -33,6 +33,19 @@ const RequestsModule = () => {
             setIsLoading(false);
         }
     };
+
+    const filteredRequests = React.useMemo(() => {
+        if (!searchTerm) return requests;
+        const s = searchTerm.toLowerCase();
+        return requests.filter(req => 
+             (req.subject && req.subject.toLowerCase().includes(s)) ||
+             (req.first_name && req.first_name.toLowerCase().includes(s)) ||
+             (req.last_name && req.last_name.toLowerCase().includes(s)) ||
+             (req.department && req.department.toLowerCase().includes(s)) ||
+             (req.reason && req.reason.toLowerCase().includes(s)) ||
+             (req.status && req.status.toLowerCase().includes(s))
+        );
+    }, [requests, searchTerm]);
 
     const handleUpdateStatus = async (id, newStatus) => {
         try {
@@ -94,11 +107,13 @@ const RequestsModule = () => {
                                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
                                     </td>
                                 </tr>
-                            ) : requests.length === 0 ? (
+                            ) : filteredRequests.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No hay solicitudes registradas</td>
+                                    <td colSpan="6" className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                                        {searchTerm ? 'No se encontraron peticiones con esa búsqueda.' : 'No hay solicitudes registradas'}
+                                    </td>
                                 </tr>
-                            ) : requests.map((req) => (
+                            ) : filteredRequests.map((req) => (
                                 <tr key={req.id} className="group border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                     <td className="p-6">
                                         <div className="flex items-center gap-3">

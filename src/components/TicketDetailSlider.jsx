@@ -81,6 +81,20 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             
             if (error) throw error;
             setNewMessage('');
+            
+            // Auto-create notification for the other party
+            const { data: ticketData } = await supabase.from('tickets').select('reported_by, assigned_tech').eq('id', ticketId).single();
+            if (ticketData) {
+                const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
+                if (recipientId) {
+                    await supabase.from('notifications').insert([{
+                        user_id: recipientId,
+                        title: `Nuevo mensaje en Ticket #${ticketId}`,
+                        message: `${profile?.full_name || 'Alguien'} te ha enviado un mensaje.`,
+                    }]);
+                }
+            }
+
             // Automatic refetch handled by subscription or immediately
             await fetchMessages();
         } catch (error) {

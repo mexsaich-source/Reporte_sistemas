@@ -99,7 +99,7 @@ const AddTicketSlider = ({ isOpen, onClose, onSave }) => {
 };
 
 // --- COMPONENTE EXPORTADO PRINCIPAL: Tabla de Tickets ---
-const TicketsModule = () => {
+const TicketsModule = ({ searchTerm = '' }) => {
     const { profile } = useAuth();
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [tickets, setTickets] = useState([]);
@@ -142,6 +142,18 @@ const TicketsModule = () => {
             setLoading(false);
         }
     };
+
+    const filteredTickets = React.useMemo(() => {
+        if (!searchTerm) return tickets;
+        const s = searchTerm.toLowerCase();
+        return tickets.filter(t => 
+            (t.shortId && t.shortId.toLowerCase().includes(s)) ||
+            (t.issue && t.issue.toLowerCase().includes(s)) ||
+            (t.reportedBy && t.reportedBy.toLowerCase().includes(s)) ||
+            (t.status && t.status.toLowerCase().includes(s)) ||
+            (t.tech && t.tech.toLowerCase().includes(s))
+        );
+    }, [tickets, searchTerm]);
 
     const fetchTechUsers = async () => {
         try {
@@ -244,14 +256,14 @@ const TicketsModule = () => {
                                     </div>
                                 </td>
                             </tr>
-                        ) : tickets.length === 0 ? (
+                        ) : filteredTickets.length === 0 ? (
                             <tr>
                                 <td colSpan={6} className="p-8 text-center text-slate-500 font-medium border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                                    No hay reportes registrados en el sistema.
+                                    {searchTerm ? 'No se encontraron tickets con esa búsqueda.' : 'No hay reportes registrados en el sistema.'}
                                 </td>
                             </tr>
                         ) : (
-                            tickets.map((ticket) => (
+                            filteredTickets.map((ticket) => (
                                 <tr key={ticket.id} onClick={() => setSelectedTicket(ticket)} className="group transition-all duration-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 cursor-pointer">
                                     <td className="p-4 pl-6">
                                         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 group-hover:bg-white dark:group-hover:bg-slate-700 border border-transparent group-hover:border-slate-200 dark:group-hover:border-slate-600 transition-colors">
