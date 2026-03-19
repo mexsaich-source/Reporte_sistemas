@@ -1,22 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, CheckCircle2, AlertCircle, Wrench, Package, ArrowRightLeft, UploadCloud, Download, X, Laptop, Monitor, Smartphone, Server, FileDigit, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, CheckCircle2, AlertCircle, Wrench, Package, ArrowRightLeft, UploadCloud, Download, X, Laptop, Monitor, Smartphone, Server, FileDigit, Trash2, Edit, AlertTriangle, MonitorPlay, Settings, Filter } from 'lucide-react';
 import StatCard from './StatCard';
 import { inventoryService } from '../services/inventoryService';
 
 // --- HELPERS ---
 const STATUS_MAP = {
-    'active': { label: 'Activo', style: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20', icon: CheckCircle2 },
-    'available': { label: 'En Almacén', style: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20', icon: Package },
-    'decommissioned': { label: 'Dado de Baja', style: 'text-rose-600 bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20', icon: Trash2 },
+    'active': { label: 'En Uso', style: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20', icon: CheckCircle2 },
+    'available': { label: 'En Bodega', style: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20', icon: Package },
+    'decommissioned': { label: 'Obsoleto', style: 'text-slate-600 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700', icon: Trash2 },
 };
 
+const DEVICE_TYPES = ['Todos', 'Laptop', 'Workstation', 'Monitor', 'Teclado / Mouse', 'Switch / Red', 'Servidor', 'Smartphone', 'Impresora', 'Otros'];
+
 const getDeviceIcon = (type) => {
-    const t = type.toLowerCase();
-    if (t.includes('laptop') || t.includes('pc')) return <Laptop size={18} />;
+    const t = (type || '').toLowerCase();
+    if (t.includes('laptop')) return <Laptop size={18} />;
+    if (t.includes('workstation') || t.includes('desktop') || t.includes('pc')) return <MonitorPlay size={18} />;
     if (t.includes('monitor') || t.includes('pantalla')) return <Monitor size={18} />;
     if (t.includes('switch') || t.includes('server') || t.includes('red')) return <Server size={18} />;
     if (t.includes('celular') || t.includes('movil') || t.includes('phone')) return <Smartphone size={18} />;
-    return <Laptop size={18} />;
+    return <Package size={18} />;
 };
 
 const DeviceStatusBadge = ({ status, size = 'sm' }) => {
@@ -50,22 +53,16 @@ const ImportModal = ({ isOpen, onClose, onImportSuccess }) => {
             const text = event.target.result;
             const lines = text.split('\n').filter(l => l.trim() !== '');
             if (lines.length < 2) {
-                setError("El archivo parece estar vacío o no tiene encabezados.");
-                return;
+                setError("Archivo vacío."); return;
             }
-            
             const rawHeaders = lines[0].split(',').map(h => h.trim().toLowerCase());
             setHeaders(rawHeaders);
-            
             const parsed = lines.slice(1).map(line => {
                 const values = line.split(',');
                 const obj = {};
-                rawHeaders.forEach((header, index) => {
-                    obj[header] = values[index]?.trim() || '';
-                });
+                rawHeaders.forEach((header, index) => { obj[header] = values[index]?.trim() || ''; });
                 return obj;
             });
-            
             setCsvData(parsed);
             setError(null);
         };
@@ -74,137 +71,82 @@ const ImportModal = ({ isOpen, onClose, onImportSuccess }) => {
 
     const handleImport = async () => {
         setLoading(true);
-        // Map detected columns to backend schema
         const mappedItems = csvData.map(row => {
-            // Find columns by matching keywords
             const findCol = (keywords) => {
-                for (let h of headers) {
-                    for (let k of keywords) {
-                        if (h.includes(k)) return row[h];
-                    }
-                }
+                for (let h of headers) { for (let k of keywords) { if (h.includes(k)) return row[h]; } }
                 return '';
             };
 
+            let serial = findCol(['serial_number', 'serie', 'sn', 'sn_number']);
+            if (serial.toUpperCase().startsWith('MEXSA')) {
+                serial = serial.substring(5);
+            }
+
             return {
-                id: findCol(['id', 'activo fijo', 'asset']),
-                type: findCol(['nombre', 'tipo', 'equipo', 'name', 'type']),
-                model: findCol(['modelo', 'model']),
-                serial: findCol(['serie', 'serial']),
-                category: findCol(['categoria', 'category']),
-                status: 'available' // Todos entran a almacén por defecto al importar
+                id: findCol(['asset_type', 'id', 'activo fijo']),
+                type: findCol(['tipo', 'laptop', 'pc', 'monitor', 'equipo']),
+                brand: findCol(['brand', 'marca']),
+                model: findCol(['model', 'modelo']),
+                serial: serial,
+                status: 'available'
             };
         });
 
-        const success = await inventoryService.bulkImport(mappedItems);
-        if (success) {
-            onImportSuccess();
-        } else {
-            setError("Ocurrió un error al importar los equipos. Revisa el formato.");
-        }
+        const { importService } = await import('../services/importService');
+        await importService.processImport('inventory', mappedItems, 'Admin', 'Import.csv');
+        onImportSuccess();
         setLoading(false);
     };
 
-    const reset = () => {
-        setCsvData([]);
-        setHeaders([]);
-        setError(null);
-        onClose();
-    };
+    const reset = () => { setCsvData([]); setHeaders([]); setError(null); onClose(); };
 
     return (
         <>
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 transition-opacity" onClick={reset}></div>
-            <div className="fixed inset-4 sm:inset-10 lg:inset-x-32 xl:inset-x-64 bg-white dark:bg-slate-900 shadow-2xl z-50 rounded-[2rem] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-                    <div>
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Importación Masiva</h2>
-                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Cargar Inventario desde CSV</p>
-                    </div>
-                    <button onClick={reset} className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"><X size={24} /></button>
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100]" onClick={reset}></div>
+            <div className="fixed inset-4 sm:inset-10 lg:inset-x-32 xl:inset-x-64 bg-white dark:bg-slate-900 shadow-2xl z-[101] rounded-[2.5rem] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center text-slate-800 dark:text-white">
+                    <h2 className="text-2xl font-black">Importador Inteligente</h2>
+                    <button onClick={reset} className="p-2 hover:bg-slate-100 rounded-xl"><X size={24}/></button>
                 </div>
-                
-                <div className="flex-1 overflow-auto p-6 md:p-10 custom-scrollbar">
+                <div className="flex-1 p-8 overflow-auto custom-scrollbar">
                     {csvData.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center space-y-4">
-                            <label className="w-full max-w-xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500/50 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[2rem] p-12 flex flex-col items-center justify-center gap-4 transition-all cursor-pointer group">
+                        <div className="h-full flex flex-col items-center justify-center p-12 border-4 border-dashed border-slate-100 dark:border-slate-800 rounded-[2.5rem]">
+                            <UploadCloud size={48} className="text-blue-500 mb-4" />
+                            <label className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs cursor-pointer hover:bg-blue-500 transition-all">
+                                Seleccionar CSV
                                 <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
-                                <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm text-blue-500 group-hover:scale-110 transition-transform">
-                                    <UploadCloud size={32} />
-                                </div>
-                                <div className="text-center">
-                                    <h3 className="text-lg font-black text-slate-700 dark:text-slate-200">Subir Archivo CSV</h3>
-                                    <p className="text-sm text-slate-500 font-medium mt-1">El archivo debe contener columnas como: Activo Fijo, Nombre, Modelo, Serie, Categoría</p>
-                                </div>
                             </label>
-                            {error && <div className="text-red-500 text-sm font-bold bg-red-50 p-4 rounded-xl">{error}</div>}
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between">
-                                <h3 className="font-black text-slate-800 dark:text-white text-lg">Previsualización de Datos ({csvData.length} equipos)</h3>
-                                <button onClick={() => setCsvData([])} className="text-xs font-bold text-slate-400 hover:text-slate-900 dark:hover:text-white underline uppercase">Subir otro archivo</button>
-                            </div>
-                            
-                            <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-inner overflow-x-auto">
-                                <table className="w-full text-left border-collapse min-w-[600px]">
-                                    <thead>
-                                        <tr className="bg-slate-50 dark:bg-slate-800/50">
-                                            {headers.slice(0, 6).map((h, i) => (
-                                                <th key={i} className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{h}</th>
-                                            ))}
-                                            {headers.length > 6 && <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">...</th>}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                                        {csvData.slice(0, 5).map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
-                                                {headers.slice(0, 6).map((h, i) => (
-                                                    <td key={i} className="p-4 text-sm font-medium text-slate-700 dark:text-slate-300">{row[h] || '-'}</td>
-                                                ))}
-                                                {headers.length > 6 && <td className="p-4 text-sm font-medium text-slate-500">...</td>}
-                                            </tr>
-                                        ))}
-                                    </tbody>
+                        <div className="space-y-4">
+                            <p className="font-bold text-slate-500">Detectamos {csvData.length} registros listos.</p>
+                            <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-2xl">
+                                <table className="w-full text-left text-xs bg-slate-50/50 dark:bg-slate-900/50">
+                                    <thead><tr className="border-b"><th className="p-4">Vista Previa</th></tr></thead>
+                                    <tbody>{csvData.slice(0, 3).map((r, i) => <tr key={i} className="border-b"><td className="p-4">{JSON.stringify(r)}</td></tr>)}</tbody>
                                 </table>
-                                {csvData.length > 5 && <div className="p-3 text-center text-xs font-bold text-slate-400 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 uppercase tracking-widest">Mostrando 5 de {csvData.length} filas</div>}
                             </div>
                         </div>
                     )}
                 </div>
-
-                <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-4 bg-white dark:bg-slate-900">
-                    <button onClick={reset} className="px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">Cancelar</button>
-                    <button 
-                        onClick={handleImport}
-                        disabled={csvData.length === 0 || loading}
-                        className="px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-blue-500/20"
-                    >
-                        {loading ? 'Importando...' : 'Confirmar y Guardar'}
-                    </button>
+                <div className="p-8 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/30">
+                    <button onClick={reset} className="px-6 py-3 font-black text-xs uppercase text-slate-400">Cancelar</button>
+                    <button onClick={handleImport} disabled={csvData.length === 0 || loading} className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs shadow-xl shadow-blue-500/20">Procesar Ahora</button>
                 </div>
             </div>
         </>
     );
 };
 
-// --- ADD/EDIT DEVICE SLIDER ---
+// --- DEVICE SLIDER ---
 const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
-    const [formData, setFormData] = useState({
-        id: '',
-        type: '',
-        model: '',
-        serial: '',
-        category: '',
-        status: 'available',
-        specsDetails: ''
-    });
-
+    const [formData, setFormData] = useState({ id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', status: 'available', specsDetails: '' });
     useEffect(() => {
         if (editingDevice) {
             setFormData({
                 id: editingDevice.id,
-                type: editingDevice.type || '',
+                type: editingDevice.type || 'Laptop',
+                brand: editingDevice.brand || '',
                 model: editingDevice.model || '',
                 serial: editingDevice.serial || '',
                 category: editingDevice.category || '',
@@ -212,97 +154,80 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                 specsDetails: editingDevice.specsDetails || ''
             });
         } else {
-            setFormData({
-                id: '', type: '', model: '', serial: '', category: '', status: 'available', specsDetails: ''
-            });
+            setFormData({ id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', status: 'available', specsDetails: '' });
         }
     }, [editingDevice, isOpen]);
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSave(formData);
-        onClose();
-    };
-
+    const handleSubmit = (e) => { e.preventDefault(); onSave(formData); onClose(); };
     const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
     return (
         <>
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 transition-opacity animate-in fade-in" onClick={onClose}></div>
-            <div className="fixed top-0 right-0 h-full w-full sm:w-[500px] bg-white dark:bg-slate-950 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100]" onClick={onClose}></div>
+            <div className={`fixed top-0 right-0 h-full w-full sm:w-[500px] bg-white dark:bg-slate-950 shadow-2xl z-[101] flex flex-col animate-in slide-in-from-right duration-300`}>
                 <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <div>
                         <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{editingDevice ? 'Editar Equipo' : 'Alta de Equipo'}</h2>
-                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Gestión de Inventario IT</p>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Ficha Técnica de Activo</p>
                     </div>
-                    <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"><X size={20}/></button>
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl"><X size={20}/></button>
                 </div>
 
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-                    
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Activo Fijo (Opcional)</label>
-                                <input type="text" name="id" disabled={!!editingDevice} value={formData.id} onChange={handleChange} placeholder="Auto-generado si vacío" className={`w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 focus:ring-4 focus:ring-blue-500/10 outline-none ${editingDevice ? 'opacity-60 cursor-not-allowed' : ''}`} />
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ID Activo Fijo</label>
+                                <input type="text" name="id" disabled={!!editingDevice} value={formData.id} onChange={handleChange} placeholder="Ej. 11709" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estatus</label>
-                                <select name="status" value={formData.status} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none">
-                                    <option value="active">Activo (En Uso)</option>
-                                    <option value="available">En Almacén</option>
-                                    <option value="decommissioned">Dado de Baja (Obsoleto)</option>
+                                <select name="status" value={formData.status} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white">
+                                    <option value="active">En Uso</option>
+                                    <option value="available">En Bodega</option>
+                                    <option value="decommissioned">Obsoleto / Baja</option>
                                 </select>
                             </div>
                         </div>
-
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre / Tipo de Equipo</label>
-                            <input type="text" name="type" required value={formData.type} onChange={handleChange} placeholder="Ej. Laptop, PC, Switch..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10" />
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Activo</label>
+                            <input type="text" name="type" required value={formData.type} onChange={handleChange} placeholder="Ej. Laptop, Monitor..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
                         </div>
-
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Modelo / Marca</label>
-                                <input type="text" name="model" value={formData.model} onChange={handleChange} placeholder="Ej. Dell XPS 15" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10" />
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Marca</label>
+                                <input type="text" name="brand" value={formData.brand} onChange={handleChange} placeholder="Ej. HP, Dell..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Número de Serie</label>
-                                <input type="text" name="serial" value={formData.serial} onChange={handleChange} placeholder="S/N..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10" />
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Modelo</label>
+                                <input type="text" name="model" value={formData.model} onChange={handleChange} placeholder="Ej. EliteBook 840 G3" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
                             </div>
                         </div>
-
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría</label>
-                            <input type="text" name="category" value={formData.category} onChange={handleChange} placeholder="Ej. Laptops Nuevas, Redes, etc." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10" />
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Especificaciones Adicionales</label>
-                            <textarea name="specsDetails" value={formData.specsDetails} onChange={handleChange} rows="4" placeholder="RAM, Disco Duro, Observaciones libres..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 resize-none"></textarea>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Número de Serial</label>
+                            <input type="text" name="serial" value={formData.serial} onChange={handleChange} placeholder="S/N..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
                         </div>
                     </div>
-
                     <div className="pt-8 flex gap-4">
-                        <button type="button" onClick={onClose} className="flex-1 py-4 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">Cancelar</button>
-                        <button type="submit" className="flex-[2] py-4 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-black dark:hover:bg-blue-500 shadow-xl shadow-blue-500/20 transition-all">{editingDevice ? 'Guardar Cambios' : 'Registrar Equipo'}</button>
+                        <button type="button" onClick={onClose} className="flex-1 py-4 px-6 rounded-xl text-[10px] font-black uppercase text-slate-500 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100">Cancelar</button>
+                        <button type="submit" className="flex-[2] py-4 px-6 rounded-xl text-[10px] font-black uppercase text-white bg-blue-600 shadow-xl shadow-blue-500/20">Guardar Cambios</button>
                     </div>
                 </form>
             </div>
         </>
     );
-}
+};
 
-// --- MAIN MODULE VIEW ---
+// --- MAIN VIEW ---
 const InventoryView = () => {
-    const [activeTab, setActiveTab] = useState('active'); // active, obsolete
+    const [activeTab, setActiveTab] = useState('inventory');
     const [inventoryList, setInventoryList] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    
-    // Modals
+    const [filterType, setFilterType] = useState('Todos');
+    const [filterStatus, setFilterStatus] = useState('Todos');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingDevice, setEditingDevice] = useState(null);
@@ -314,207 +239,140 @@ const InventoryView = () => {
         setIsLoading(false);
     };
 
+    const handleSaveDevice = async (formData) => {
+        const success = editingDevice ? await inventoryService.update(editingDevice.id, formData) : await inventoryService.add(formData);
+        if (success) { await loadInventory(); setEditingDevice(null); }
+    };
+
+    const handlePermanentDelete = async (id) => {
+        if (window.confirm("Borrando permanentemente... ¿Continuar?")) {
+            if (await inventoryService.remove(id)) loadInventory();
+        }
+    };
+
     useEffect(() => { loadInventory(); }, []);
 
-    const handleSaveDevice = async (formData) => {
-        let success = false;
-        if (editingDevice) {
-            success = await inventoryService.update(editingDevice.id, formData);
-        } else {
-            success = await inventoryService.add(formData);
-        }
-        
-        if (success) {
-            await loadInventory();
-            setEditingDevice(null);
-        } else {
-            alert("Hubo un error al procesar el equipo.");
-        }
-    };
-
-    const handleDelete = async (id) => {
-        if(window.confirm("¿Seguro que deseas eliminar permanentemente este registro? (No aparecerá en Obsoletos)")) {
-            if(await inventoryService.remove(id)){
-                loadInventory();
-            }
-        }
-    };
-
-    const handleStatusQuickChange = async (id, newStatus) => {
-        if(await inventoryService.update(id, {status: newStatus})){
-            loadInventory();
-        }
-    }
-
-    // Filters
     const filteredList = inventoryList.filter(d => {
-        const matchesTab = activeTab === 'active' 
-            ? (d.status === 'active' || d.status === 'available')
-            : d.status === 'decommissioned';
-            
-        const search = searchTerm.toLowerCase();
-        const matchesSearch = 
-            (d.id && d.id.toLowerCase().includes(search)) ||
-            (d.type && d.type.toLowerCase().includes(search)) ||
-            (d.model && d.model.toLowerCase().includes(search)) ||
-            (d.serial && d.serial.toLowerCase().includes(search)) ||
-            (d.category && d.category.toLowerCase().includes(search));
-            
-        return matchesTab && matchesSearch;
+        const matchesTab = activeTab === 'inventory' ? (d.status !== 'decommissioned') : (d.status === 'decommissioned');
+        const matchesType = filterType === 'Todos' || d.type.toLowerCase().includes(filterType.toLowerCase().split(' ')[0]);
+        const matchesStatus = filterStatus === 'Todos' || (filterStatus === 'En Uso' ? d.status === 'active' : d.status === 'available');
+        const search = (searchTerm || '').toLowerCase();
+        const matchesSearch = d.id.toLowerCase().includes(search) || d.model.toLowerCase().includes(search) || d.brand.toLowerCase().includes(search) || d.serial.toLowerCase().includes(search);
+        
+        return matchesTab && matchesType && matchesStatus && matchesSearch;
     });
 
-    const activeCount = inventoryList.filter(i => i.status === 'active').length;
-    const warehouseCount = inventoryList.filter(i => i.status === 'available').length;
-    const obsoleteCount = inventoryList.filter(i => i.status === 'decommissioned').length;
-
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 transition-colors duration-300 relative z-0">
-            {/* Headers & Stats */}
-            <div className="flex flex-col xl:flex-row gap-6">
-                <div className="xl:w-2/3 bg-slate-950 dark:bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden flex flex-col justify-center">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px] pointer-events-none"></div>
-                    <h2 className="text-3xl font-black text-white tracking-tight leading-tight">Gestión de Activos Fijos</h2>
-                    <p className="text-slate-400 text-sm font-medium max-w-lg mt-2 mb-6">Administra el inventario de hardware. Mantén un control de equipos activos, almacenados y aquellos que han cumplido su ciclo de vida.</p>
-                    
-                    <div className="flex flex-wrap gap-4 mt-auto relative z-10">
-                        <button onClick={() => {setEditingDevice(null); setIsAddModalOpen(true);}} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2">
-                            <Plus size={16} /> Alta Manual
-                        </button>
-                        <button onClick={() => setIsImportModalOpen(true)} className="bg-white/10 hover:bg-white/20 text-white border border-white/10 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all backdrop-blur-sm flex items-center gap-2">
-                            <UploadCloud size={16} /> Importar Desde Excel
-                        </button>
+        <div className="space-y-8 animate-in fade-in duration-700">
+            <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+                <div className="flex-1 bg-slate-950 p-6 rounded-[2rem] flex items-center justify-between shadow-2xl relative overflow-hidden group">
+                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity"><Settings size={120} className="animate-spin-slow" /></div>
+                    <div className="relative z-10">
+                        <h2 className="text-xl font-black text-white tracking-tight">Equipos</h2>
+                        <button onClick={()=>{setEditingDevice(null); setIsAddModalOpen(true);}} className="mt-3 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-xl font-black uppercase text-[10px] transition-all shadow-lg shadow-blue-500/20 active:scale-95">Alta Manual</button>
                     </div>
-                </div>
 
-                <div className="xl:w-1/3 flex flex-col gap-4">
-                    <StatCard label="Equipos Asignados (En Uso)" value={activeCount} icon={CheckCircle2} color="text-emerald-500" bg="bg-emerald-50 dark:bg-emerald-500/10" />
-                    <StatCard label="Disponibles (Almacén)" value={warehouseCount} icon={Package} color="text-blue-500" bg="bg-blue-50 dark:bg-blue-500/10" />
-                    <StatCard label="Viejos / Obsoletos" value={obsoleteCount} icon={Trash2} color="text-rose-500" bg="bg-rose-50 dark:bg-rose-500/10" />
+                    <div className="flex gap-4 relative z-10 h-full">
+                        <div className="flex items-center gap-3 bg-white/5 border border-white/5 px-5 py-3 rounded-2xl">
+                            <div className="p-2 bg-blue-500/10 text-blue-400 rounded-lg"><Package size={18} /></div>
+                            <div>
+                                <div className="text-[18px] font-black text-white leading-none">{inventoryList.filter(i=>i.status==='available').length}</div>
+                                <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-0.5">Bodega</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 bg-white/5 border border-white/5 px-5 py-3 rounded-2xl">
+                            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg"><CheckCircle2 size={18} /></div>
+                            <div>
+                                <div className="text-[18px] font-black text-white leading-none">{inventoryList.filter(i=>i.status==='active').length}</div>
+                                <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-0.5">Operación</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Inventory Container */}
-            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden flex flex-col transition-colors">
-                
-                {/* Search and Tabs Bar */}
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-6 bg-slate-50/50 dark:bg-slate-800/50">
-                    <div className="flex bg-slate-200/50 dark:bg-slate-800 p-1.5 rounded-2xl w-full sm:w-auto overflow-x-auto">
-                        <button onClick={() => setActiveTab('active')} className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${activeTab === 'active' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
-                            Nuevos y Activos
-                        </button>
-                        <button onClick={() => setActiveTab('obsolete')} className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${activeTab === 'obsolete' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
-                            Viejos / Obsoletos
-                        </button>
+            <div className="bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
+                <div className="p-10 border-b border-slate-50 dark:border-slate-800 flex flex-col gap-8">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-2 rounded-2xl">
+                        <button onClick={()=>setActiveTab('inventory')} className={`px-10 py-3 rounded-xl font-black uppercase text-xs transition-all ${activeTab==='inventory' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-xl' : 'text-slate-400'}`}>Inventario Activo</button>
+                        <button onClick={()=>setActiveTab('obsolete')} className={`px-10 py-3 rounded-xl font-black uppercase text-xs transition-all ${activeTab==='obsolete' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-white shadow-xl' : 'text-slate-400'}`}>Bajas / Obsoletos</button>
                     </div>
 
-                    <div className="w-full sm:max-w-xs flex items-center gap-3 bg-white dark:bg-slate-800 px-5 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
-                        <Search size={16} className="text-slate-400 focus-within:text-blue-500" />
-                        <input type="text" placeholder="Buscar ID, Modelo, Serie..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full text-slate-700 dark:text-slate-200 placeholder:text-slate-400 font-bold" />
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="relative md:col-span-2">
+                            <Search size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input className="w-full bg-slate-50 dark:bg-slate-800/50 pl-16 pr-6 py-5 rounded-[2rem] border-none outline-none font-bold text-slate-700 dark:text-white" placeholder="Buscar ID, Marca o Serial..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} />
+                        </div>
+                        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 px-6 py-5 rounded-[2rem]">
+                            <Filter size={18} className="text-slate-400" />
+                            <select className="bg-transparent border-none outline-none font-bold text-sm w-full text-slate-600 dark:text-slate-300" value={filterType} onChange={(e)=>setFilterType(e.target.value)}>
+                                {DEVICE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 px-6 py-5 rounded-[2rem]">
+                            <ArrowRightLeft size={18} className="text-slate-400" />
+                            <select className="bg-transparent border-none outline-none font-bold text-sm w-full text-slate-600 dark:text-slate-300" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
+                                <option value="Todos">Ubicación (Todas)</option>
+                                <option value="En Uso">En Uso</option>
+                                <option value="Bodega">En Bodega</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
-                {/* Data Table */}
                 <div className="overflow-x-auto min-h-[400px]">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-                                <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-slate-400">Equipo</th>
-                                <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-slate-400">Identificación</th>
-                                <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-slate-400">Categoría</th>
-                                <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-slate-400">Estatus</th>
-                                <th className="py-5 px-6 font-black text-[10px] uppercase tracking-widest text-slate-400 text-right">Acciones</th>
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+                            <tr>
+                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Dispositivo</th>
+                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Identificadores</th>
+                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Marca</th>
+                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Estado Actual</th>
+                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest text-right">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
                             {isLoading ? (
-                                <tr>
-                                    <td colSpan="5" className="p-16 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px] animate-pulse">Cargando inventario...</td>
-                                </tr>
-                            ) : filteredList.length === 0 ? (
-                                <tr>
-                                    <td colSpan="5" className="p-16 text-center">
-                                        <div className="flex flex-col items-center gap-3 text-slate-400">
-                                            <FileDigit size={32} />
-                                            <span className="font-bold uppercase tracking-widest text-[10px]">No hay equipos en esta sección.</span>
+                                <tr><td colSpan={5} className="p-20 text-center font-black uppercase text-xs text-slate-300 animate-pulse">Sincronizando...</td></tr>
+                            ) : filteredList.map(item => (
+                                <tr key={item.id} className="group hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-all">
+                                    <td className="p-5 px-8 text-slate-200">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-11 h-11 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm">{getDeviceIcon(item.type)}</div>
+                                            <div>
+                                                <div className="font-black text-slate-800 dark:text-white text-sm">{item.type}</div>
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{item.model || 'Genérico'}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="p-5 px-8">
+                                        <div className="font-black text-slate-900 dark:text-white text-xs">{item.id}</div>
+                                        <div className="text-[9px] text-blue-500 font-bold uppercase tracking-[0.15em] mt-0.5">SN: {item.serial || 'NO REGISTRADO'}</div>
+                                    </td>
+                                    <td className="p-5 px-8"><span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-xl text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">{item.brand || 'Personalizado'}</span></td>
+                                    <td className="p-5 px-8"><DeviceStatusBadge status={item.status} size="sm" /></td>
+                                    <td className="p-5 px-8 text-right">
+                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
+                                            <button onClick={()=>{setEditingDevice(item); setIsAddModalOpen(true);}} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 hover:text-blue-600 shadow-sm"><Edit size={16}/></button>
+                                            {activeTab === 'obsolete' ? (
+                                                <>
+                                                    <button onClick={()=>inventoryService.update(item.id, {status: 'available'}).then(loadInventory)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg shadow-emerald-500/20">Reactivar</button>
+                                                    <button onClick={()=>handlePermanentDelete(item.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white"><Trash2 size={16}/></button>
+                                                </>
+                                            ) : (
+                                                <button onClick={()=>inventoryService.update(item.id, {status: 'decommissioned'}).then(loadInventory)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 hover:text-rose-500"><ArrowRightLeft size={16}/></button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
-                            ) : (
-                                filteredList.map(item => (
-                                    <tr key={item.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                                        <td className="py-4 px-6">
-                                            <div className="flex items-center gap-4">
-                                                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-500 dark:text-slate-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/40 group-hover:text-blue-500 transition-colors">
-                                                    {getDeviceIcon(item.type)}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-slate-900 dark:text-white text-sm">{item.type} <span className="text-slate-400 font-normal">| {item.model || 'Sin Modelo'}</span></div>
-                                                    <div className="text-[10px] text-slate-500 uppercase tracking-widest mt-1 font-bold">{item.specsDetails ? 'Ver Especificaciones...' : 'Sin especificaciones detalladas'}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-6">
-                                            <div className="flex flex-col">
-                                                <span className="text-xs font-black text-slate-900 dark:text-white tracking-tight">{item.id}</span>
-                                                <span className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5 font-bold shrink-0">SN: {item.serial || 'N/A'}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-6">
-                                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
-                                                {item.category || 'General'}
-                                            </span>
-                                        </td>
-                                        <td className="py-4 px-6">
-                                            <DeviceStatusBadge status={item.status} />
-                                        </td>
-                                        <td className="py-4 px-6 text-right">
-                                            <div className="flex items-center justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                                                {activeTab === 'active' ? (
-                                                    <button onClick={() => handleStatusQuickChange(item.id, item.status === 'active' ? 'available' : 'active')} title="Cambiar Almacén / Uso" className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:text-blue-600 transition-colors rounded-xl">
-                                                        <ArrowRightLeft size={16} />
-                                                    </button>
-                                                ) : (
-                                                    <button onClick={() => handleStatusQuickChange(item.id, 'available')} title="Reactivar a Almacén" className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 hover:text-emerald-600 transition-colors rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center gap-1">
-                                                        <CheckCircle2 size={14} /> Reactivar
-                                                    </button>
-                                                )}
-
-                                                <button onClick={() => {setEditingDevice(item); setIsAddModalOpen(true);}} title="Editar" className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:text-indigo-600 transition-colors rounded-xl">
-                                                    <Edit size={16} />
-                                                </button>
-
-                                                {activeTab === 'active' ? (
-                                                    <button onClick={() => handleStatusQuickChange(item.id, 'decommissioned')} title="Dar de Baja" className="p-2 bg-rose-50 dark:bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors rounded-xl">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                ) : (
-                                                    <button onClick={() => handleDelete(item.id)} title="Eliminar Definitivo" className="p-2 bg-rose-50 dark:bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors rounded-xl">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
+                            ))}
                         </tbody>
                     </table>
                 </div>
             </div>
-
-            {/* Modals */}
-            <DeviceSlider 
-                isOpen={isAddModalOpen} 
-                onClose={() => setIsAddModalOpen(false)} 
-                editingDevice={editingDevice}
-                onSave={handleSaveDevice}
-            />
             
-            <ImportModal 
-                isOpen={isImportModalOpen} 
-                onClose={() => setIsImportModalOpen(false)} 
-                onImportSuccess={() => { setIsImportModalOpen(false); loadInventory(); }}
-            />
+            <DeviceSlider isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} onSave={handleSaveDevice} editingDevice={editingDevice} />
+            <ImportModal isOpen={isImportModalOpen} onClose={()=>setIsImportModalOpen(false)} onImportSuccess={()=>{setIsImportModalOpen(false); loadInventory();}} />
         </div>
     );
 };
