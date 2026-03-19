@@ -7,6 +7,6 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    allowedHosts: ['cross-monetary-fails-pace.trycloudflare.com'] // <- sin https://
+    allowedHosts: ['ada-oasis-fundamentals-batch.trycloudflare.com'] // <- sin https://
   }
 })

@@ -1,10 +1,8 @@
 import { supabase } from '../lib/supabaseClient';
 
 export const inventoryService = {
-
     async getAll() {
         try {
-            // Hacemos el fetch principal buscando los perfiles asignados también por si existe UUID (para el futuro)
             const { data, error } = await supabase
                 .from('assets')
                 .select(`
@@ -24,46 +22,20 @@ export const inventoryService = {
                 return [];
             }
 
-            // Mapeamos los datos de backend a lo que el frontend Inventory.jsx espera
             return data.map(asset => {
-
-                // Determinamos el usuario asignado basado en BD o meta info spec
-                let assignedUser = 'Unassigned';
-                let assignedDept = 'General';
-
-                if (asset.profiles?.full_name) {
-                    // Si tiene una relación real con UUID
-                    assignedUser = asset.profiles.full_name;
-                    assignedDept = asset.profiles.department || 'General';
-                } else if (asset.specs?.assigned_user_name) {
-                    // Si usamos la metadata temporal ingresada desde el frontend
-                    assignedUser = asset.specs.assigned_user_name;
-                    assignedDept = asset.specs.department || 'General';
-                }
-
-                // Transformamos los enums de BD a formato visual del frontend
-                const statusMap = {
-                    'active': 'Active',
-                    'in_repair': 'In Repair',
-                    'available': 'Available',
-                    'decommissioned': 'Available'
-                };
-
-                const conditionMap = {
-                    'excellent': 'Excelente',
-                    'good': 'Bueno',
-                    'failing': 'Regular'
-                };
-
+                const specs = asset.specs || {};
+                
                 return {
-                    id: asset.id,
-                    type: asset.type,
-                    model: asset.model,
-                    user: assignedUser,
-                    department: assignedDept,
-                    status: statusMap[asset.status] || 'Available',
-                    warranty: asset.warranty_date || 'Sin registrar',
-                    condition: conditionMap[asset.condition] || asset.specs?.condition || 'No definida'
+                    id: asset.id, 
+                    type: asset.type || specs.type || '', 
+                    model: asset.model || '',
+                    serial: specs.serial_number || '', 
+                    category: specs.category || '',
+                    specsDetails: specs.details || '',
+                    user: specs.assigned_user_name || '',
+                    department: specs.department || '',
+                    status: asset.status || 'available', 
+                    condition: asset.condition || 'good'
                 };
             });
         } catch (error) {
@@ -74,78 +46,90 @@ export const inventoryService = {
 
     async add(item) {
         try {
-            const newId = `MEX-DEV-${Math.floor(1000 + Math.random() * 9000)}`;
-
-            // Transformamos los estados visuales del form a los Enums de BD
-            const statusMapToDB = {
-                'Available': 'available',
-                'Active': 'active',
-                'In Repair': 'in_repair'
-            };
-
-            const conditionMapToDB = {
-                'Nuevo': 'excellent',
-                'Excelente': 'excellent',
-                'Bueno': 'good',
-                'Regular': 'failing'
-            };
-
             const newAsset = {
-                id: item.id || newId, // Si ya trae un ID o generamos uno automático
-                type: item.type,
-                model: item.model,
-                status: statusMapToDB[item.status] || 'available',
-                warranty_date: item.warranty ? new Date(item.warranty).toISOString().split('T')[0] : null,
-                condition: conditionMapToDB[item.condition] || 'good',
-                // En lugar de meter el texto libre a assigned_to (que rompería FK), lo guardamos en specs
+                id: item.id || `MEX-DEV-${Date.now().toString().slice(-6)}`,
+                type: item.type || 'General',
+                model: item.model || '',
+                status: item.status || 'available', 
+                condition: item.condition || 'good',
                 specs: {
-                    assigned_user_name: item.user || 'Unassigned',
-                    department: item.department || 'Sin Departamento',
-                    condition_raw_frontend: item.condition // Respaldamos el valor original por si aca
+                    serial_number: item.serial || '',
+                    category: item.category || '',
+                    details: item.specsDetails || '',
+                    assigned_user_name: item.user || '',
+                    department: item.department || ''
                 }
             };
 
-            const { data, error } = await supabase
-                .from('assets')
-                .insert([newAsset])
-                .select()
-                .single();
-
-            if (error) {
-                console.error("--- Supabase Error adding asset ---");
-                return null;
-            }
-
+            const { data, error } = await supabase.from('assets').insert([newAsset]).select().single();
+            if (error) throw error;
             return data;
         } catch (error) {
-            console.error("Catch Exception adding asset:", error);
+            console.error("Exception adding asset:", error);
             return null;
         }
     },
 
     async update(id, updates) {
         try {
-            // Mapeo inverso de DB Enums opcional (dependiendo de que manda el form, usualmente no se usa aún update en el frontend actual)
-            const { data, error } = await supabase
-                .from('assets')
-                .update(updates)
-                .eq('id', id);
+            const { data: current } = await supabase.from('assets').select('specs').eq('id', id).single();
+            const currentSpecs = current?.specs || {};
 
+            const mergedSpecs = {
+                ...currentSpecs,
+                serial_number: updates.serial !== undefined ? updates.serial : currentSpecs.serial_number,
+                category: updates.category !== undefined ? updates.category : currentSpecs.category,
+                details: updates.specsDetails !== undefined ? updates.specsDetails : currentSpecs.details,
+                assigned_user_name: updates.user !== undefined ? updates.user : currentSpecs.assigned_user_name,
+                department: updates.department !== undefined ? updates.department : currentSpecs.department,
+            };
+
+            const dbUpdates = {
+                type: updates.type,
+                model: updates.model,
+                status: updates.status,
+                condition: updates.condition,
+                specs: mergedSpecs
+            };
+
+            Object.keys(dbUpdates).forEach(key => dbUpdates[key] === undefined && delete dbUpdates[key]);
+
+            const { error } = await supabase.from('assets').update(dbUpdates).eq('id', id);
             if (error) throw error;
             return true;
         } catch (error) {
-            console.error("Catch Exception updating asset:", error);
+            console.error("Exception updating asset:", error);
             return false;
+        }
+    },
+
+    async bulkImport(items) {
+        try {
+            const assetsToInsert = items.map((item, idx) => ({
+                id: item.id || `MEX-DEV-${Date.now().toString().slice(-4)}${idx}`,
+                type: item.type || 'General',
+                model: item.model || '',
+                status: item.status || 'available',
+                condition: 'good',
+                specs: {
+                    serial_number: item.serial || '',
+                    category: item.category || '',
+                    details: item.specsDetails || ''
+                }
+            }));
+
+            const { data, error } = await supabase.from('assets').insert(assetsToInsert).select();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error("Bulk import exception:", error);
+            return null;
         }
     },
 
     async remove(id) {
         try {
-            const { error } = await supabase
-                .from('assets')
-                .delete()
-                .eq('id', id);
-
+            const { error } = await supabase.from('assets').delete().eq('id', id);
             if (error) throw error;
             return true;
         } catch (error) {

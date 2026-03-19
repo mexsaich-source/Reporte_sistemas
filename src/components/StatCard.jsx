@@ -1,6 +1,6 @@
 import React from 'react';
 
-const StatCard = ({ label, value, trend, icon: Icon, color, bg }) => {
+const StatCard = ({ label, value, trend = '', icon: Icon, color, bg }) => {
     // Generate a softer shadow color based on the bg class (e.g., bg-blue-100 -> shadow-blue-500/10)
     const shadowMap = {
         'bg-blue-100': 'group-hover:shadow-blue-500/20 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
@@ -10,8 +10,8 @@ const StatCard = ({ label, value, trend, icon: Icon, color, bg }) => {
         'bg-amber-100': 'group-hover:shadow-amber-500/20 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
     };
 
-    const isPositive = trend.startsWith('+');
-    const isNegative = trend.startsWith('-');
+    const isPositive = trend?.startsWith('+') || false;
+    const isNegative = trend?.startsWith('-') || false;
 
     return (
         <div className="bg-white dark:bg-slate-900 p-6 lg:p-7 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none flex flex-col gap-5 hover:-translate-y-1 hover:shadow-2xl dark:hover:shadow-white/5 transition-all duration-300 group cursor-default">
