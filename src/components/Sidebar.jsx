@@ -17,7 +17,7 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
     const { profile } = useAuth();
 
     // 2. Verificamos si es administrador o técnico
-    const isStaff = profile?.role === 'admin' || profile?.role === 'tech';
+    const isStaff = profile?.role === 'admin' || profile?.role === 'tech' || profile?.role === 'técnico';
 
     // 3. Definimos todos los botones y quién puede verlos (requireStaff)
     const allMenuItems = [

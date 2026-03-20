@@ -56,6 +56,33 @@ const GeneralRequestForm = ({ onCancel, onSuccess }) => {
                 }]);
 
             if (error) throw error;
+
+            // Notificación best-effort para admin/tech
+            try {
+                const actorName = profile?.full_name || user?.email || 'Un usuario';
+                const { data: recipients } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .in('role', ['admin', 'tech', 'técnico']);
+
+                const title = 'Nueva solicitud de equipo';
+                const message = `${actorName} envió una solicitud: "${formData.subject || 'Solicitud'}".`;
+
+                if (recipients?.length) {
+                    await Promise.all(
+                        recipients
+                            .map(r => r?.id)
+                            .filter(Boolean)
+                            .map(recipientId =>
+                                supabase.from('notifications').insert([
+                                    { user_id: recipientId, title, message }
+                                ])
+                            )
+                    );
+                }
+            } catch (notifyErr) {
+                console.warn('General request notification failed:', notifyErr);
+            }
             onSuccess();
         } catch (error) {
             console.error('Error creating general request:', error);

@@ -17,37 +17,32 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     const isClosed = ticket?.status === 'resolved' || ticket?.status === 'closed';
     const isAdmin = profile?.role === 'admin';
 
-    React.useEffect(() => {
-        if (isOpen && ticketId) {
-            fetchMessages();
-            // Subscribe to real-time changes
-            const channel = supabase
-                .channel(`messages_${ticketId}`)
-                .on('postgres_changes', {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'ticket_messages',
-                    filter: `ticket_id=eq.${ticketId}`
-                }, (payload) => {
-                    // Re-fetch to get user details, or just append
-                    fetchMessages();
-                })
-                .subscribe();
-
-            return () => {
-                supabase.removeChannel(channel);
-            };
-        } else {
-            setMessages([]);
-        }
-    }, [isOpen, ticketId]);
-
-    React.useEffect(() => {
-        // Scroll to bottom when messages update
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const systemTimes = React.useMemo(() => {
+        const assigned = messages.find(m => (m?.message || '').startsWith('[STATUS_ASSIGNED]'))?.created_at || null;
+        const inProgress = messages.find(m => (m?.message || '').startsWith('[STATUS_IN_PROGRESS]'))?.created_at || null;
+        const resolved = messages.find(m => (m?.message || '').startsWith('[STATUS_RESOLVED]'))?.created_at || null;
+        return { assigned, inProgress, resolved };
     }, [messages]);
 
-    const fetchMessages = async () => {
+    const renderMessageText = (raw) => {
+        if (!raw) return '';
+        return raw
+            .replace(/^\[STATUS_ASSIGNED\]\s*/u, '')
+            .replace(/^\[STATUS_IN_PROGRESS\]\s*/u, '')
+            .replace(/^\[STATUS_RESOLVED\]\s*/u, '');
+    };
+
+    const isSystemMessage = (raw) => {
+        if (!raw) return false;
+        return (
+            raw.startsWith('[STATUS_ASSIGNED]') ||
+            raw.startsWith('[STATUS_IN_PROGRESS]') ||
+            raw.startsWith('[STATUS_RESOLVED]')
+        );
+    };
+
+    // MOVEMOS fetchMessages AQUÍ ARRIBA para que el useEffect lo encuentre
+    const fetchMessages = React.useCallback(async () => {
         try {
             const { data, error } = await supabase
                 .from('ticket_messages')
@@ -66,7 +61,37 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
         } catch (error) {
             console.error('Error fetching messages:', error);
         }
-    };
+    }, [ticketId, setMessages]);
+
+    React.useEffect(() => {
+        if (isOpen && ticketId) {
+            fetchMessages();
+            // Subscribe to real-time changes
+            const channel = supabase
+                .channel(`messages_${ticketId}`)
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'ticket_messages',
+                    filter: `ticket_id=eq.${ticketId}`
+                }, () => {
+                    // Re-fetch to get user details, or just append
+                    fetchMessages();
+                })
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
+        } else {
+            setMessages([]);
+        }
+    }, [isOpen, ticketId, fetchMessages]);
+
+    React.useEffect(() => {
+        // Scroll to bottom when messages update
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
 
     const handleSendMessage = async () => {
         if (!newMessage.trim() || !ticketId || isClosed) return;
@@ -132,6 +157,15 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <TicketStatusBadge status={ticket?.status} size="lg" withIcon />
                             <span className="text-slate-400 dark:text-slate-500 font-medium flex items-center gap-1"><Clock size={14} /> {ticket?.date}</span>
                         </div>
+
+                        <div className="flex flex-wrap gap-3 pt-2">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl">
+                                Asignado: {systemTimes.assigned ? new Date(systemTimes.assigned).toLocaleString() : '—'}
+                            </div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl">
+                                Resuelto: {systemTimes.resolved ? new Date(systemTimes.resolved).toLocaleString() : '—'}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-4 shadow-inner">
@@ -143,7 +177,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                         <div className="flex border-t border-slate-200 dark:border-slate-700 pt-6 mt-2 flex-col gap-4">
                             {isAdmin && ticket?.status === 'pending_admin' && !ticket?.assigned_tech && (
                                 <button 
-                                    onClick={() => onUpdateTicket(ticket.fullId, { assigned_tech: user.id, status: 'assigned' })}
+                                    onClick={() => onUpdateTicket(ticket.fullId, { assigned_tech: user.id, status: 'assigned' }, user.id)}
                                     className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all"
                                 >
                                     Tomar Ticket
@@ -156,7 +190,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                     <select 
                                         className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
                                         value={ticket?.assigned_tech || ''}
-                                        onChange={(e) => onUpdateTicket(ticket.fullId, { assigned_tech: e.target.value, status: e.target.value ? 'assigned' : 'pending_admin' })}
+                                        onChange={(e) => onUpdateTicket(ticket.fullId, { assigned_tech: e.target.value, status: e.target.value ? 'assigned' : 'pending_admin' }, user.id)}
                                     >
                                         <option value="">Sin Asignar</option>
                                         {techUsers.filter(u => u.role !== 'user').map(u => (
@@ -172,7 +206,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                     <select 
                                         className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
                                         value={ticket?.status || 'pending_admin'}
-                                        onChange={(e) => onUpdateTicket(ticket.fullId, { status: e.target.value })}
+                                        onChange={(e) => onUpdateTicket(ticket.fullId, { status: e.target.value }, user.id)}
                                     >
                                         <option value="pending_admin">Pendiente Admin</option>
                                         <option value="assigned">Asignado</option>
@@ -204,6 +238,20 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                     const isMine = msg.sender_id === user?.id;
                                     const senderName = msg.profiles?.full_name || 'Usuario';
                                     const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                    const system = isSystemMessage(msg.message);
+                                    const text = renderMessageText(msg.message);
+
+                                    if (system) {
+                                        return (
+                                            <div
+                                                key={msg.id}
+                                                className="mx-auto max-w-[90%] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl shadow-sm"
+                                            >
+                                                <p className="text-slate-800 dark:text-slate-200 text-sm whitespace-pre-wrap font-semibold">{text}</p>
+                                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-1 block text-right">{time}</span>
+                                            </div>
+                                        );
+                                    }
 
                                     if (isMine) {
                                         return (

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Menu } from 'lucide-react';
-// NUEVO: Importamos el contexto de autenticación
 import { useAuth } from '../context/authStore';
 
 import Header from './Header';
@@ -15,6 +14,21 @@ import ImportModule from './ImportModule';
 import RequestsModule from './RequestsModule';
 import { userService } from '../services/userService';
 import { AlertCircle, Clock, CheckCircle, MonitorSmartphone, Wrench, ShieldCheck, Shield } from 'lucide-react';
+
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+    Legend
+} from 'recharts';
+import { BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 
 const statsData = [
     { id: 1, label: 'Open Tickets', value: '0', trend: 'N/A', icon: AlertCircle, color: 'text-blue-600', bg: 'bg-blue-100' },
@@ -33,24 +47,9 @@ const failingDevices = [
 ];
 
 const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'];
-import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Cell,
-    Legend
-} from 'recharts';
-import { BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 
 const ChartSection = () => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-        {/* Bar Chart Container */}
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none flex flex-col h-[400px]">
             <div className="flex items-center gap-3 mb-6">
                 <div className="p-2.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
@@ -62,8 +61,8 @@ const ChartSection = () => (
                 </div>
             </div>
 
-            <div className="flex-1 w-full min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
+            <div className="w-full flex-1">
+                <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={ticketsByDepartment} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 13, fontWeight: 600 }} dy={10} />
@@ -78,7 +77,6 @@ const ChartSection = () => (
             </div>
         </div>
 
-        {/* Donut Chart Container */}
         <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none flex flex-col h-[400px]">
             <div className="flex items-center gap-3 mb-6">
                 <div className="p-2.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
@@ -90,8 +88,8 @@ const ChartSection = () => (
                 </div>
             </div>
 
-            <div className="flex-1 w-full min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
+            <div className="w-full flex-1">
+                <ResponsiveContainer width="100%" height={260}>
                     <PieChart margin={{ top: 0, right: 0, bottom: 20, left: 0 }}>
                         <Pie
                             data={failingDevices}
@@ -139,7 +137,6 @@ const AdminDashboard = () => {
         });
     }, []);
 
-    // Vista de técnicos
     const TecnicosView = () => (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -194,7 +191,6 @@ const AdminDashboard = () => {
             default:
                 if (activeTab === 'Cola de Tickets') return <TicketsModule />;
                 if (activeTab === 'Técnicos') return <TecnicosView />;
-                // General (default)
                 return (
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -212,7 +208,6 @@ const AdminDashboard = () => {
     return (
         <div className="flex min-h-screen bg-[#f3f4f6] dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-sans selection:bg-blue-500/30 transition-colors duration-300">
 
-            {/* Overlay oscuro en móvil cuando el sidebar está abierto */}
             {isSidebarOpen && (
                 <div
                     className="fixed inset-0 bg-black/50 z-30 lg:hidden"
@@ -220,7 +215,6 @@ const AdminDashboard = () => {
                 />
             )}
 
-            {/* Sidebar: drawer en móvil, fijo en desktop */}
             <div className={`
                 fixed lg:static inset-y-0 left-0 z-40
                 transform transition-transform duration-300 ease-in-out
@@ -237,7 +231,6 @@ const AdminDashboard = () => {
             </div>
 
             <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-                {/* NUEVO: Le pasamos el rol real al Header y la función para abrir el sidebar */}
                 <Header
                     onMenuClick={() => setIsSidebarOpen(true)}
                     userName={profile?.full_name || "Admin"}

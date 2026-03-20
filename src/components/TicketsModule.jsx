@@ -172,8 +172,8 @@ const TicketsModule = ({ searchTerm = '' }) => {
         }
     };
 
-    const handleUpdateTicket = async (ticketId, updates) => {
-        const data = await ticketService.update(ticketId, updates);
+    const handleUpdateTicket = async (ticketId, updates, actorId) => {
+        const data = await ticketService.update(ticketId, updates, actorId);
         if (data) {
             // Recargar la lista para reflejar los cambios globalmente
             await fetchTickets();

@@ -5,10 +5,13 @@ import {
     Check, X, Laptop, User, Calendar, FileText
 } from 'lucide-react';
 import { TicketStatusBadge } from './TicketsModule';
+import { useAuth } from '../context/authStore';
 
 const RequestsModule = ({ searchTerm = '' }) => {
     const [requests, setRequests] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const { user, profile } = useAuth();
+    const actorName = profile?.full_name || user?.email || 'Administrador';
 
     useEffect(() => {
         loadRequests();
@@ -49,12 +52,38 @@ const RequestsModule = ({ searchTerm = '' }) => {
 
     const handleUpdateStatus = async (id, newStatus) => {
         try {
+            const { data: reqRow, error: preErr } = await supabase
+                .from('general_requests')
+                .select('id,user_id,subject,status')
+                .eq('id', id)
+                .single();
+
+            if (preErr) throw preErr;
+
+            const statusLabel = (() => {
+                switch (newStatus) {
+                    case 'approved': return 'Aprobado';
+                    case 'rejected': return 'Rechazado';
+                    case 'delivered': return 'Entregado';
+                    default: return 'Pendiente';
+                }
+            })();
+
             const { error } = await supabase
                 .from('general_requests')
                 .update({ status: newStatus })
                 .eq('id', id);
 
             if (error) throw error;
+
+            if (reqRow?.user_id) {
+                await supabase.from('notifications').insert([{
+                    user_id: reqRow.user_id,
+                    title: 'Actualización de solicitud',
+                    message: `${actorName} marcó tu solicitud "${reqRow.subject || 'Solicitud'}" como ${statusLabel}.`
+                }]);
+            }
+
             await loadRequests();
         } catch (error) {
             console.error('Error updating status:', error);

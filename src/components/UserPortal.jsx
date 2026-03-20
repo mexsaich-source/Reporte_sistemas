@@ -251,7 +251,7 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                 device_type: deviceType,
                 asset_tag: assetTag.trim() || null,
                 urgency: urgencyMap[urgency] || 'medium',
-                status: 'open'
+                status: 'pending_admin'
             };
 
             const { error: insertError } = await supabase
@@ -505,7 +505,7 @@ const UserTicketList = ({ tickets }) => {
 
 // --- COMPONENTE PRINCIPAL: Portal de Usuario ---
 const UserPortal = () => {
-    const { user, profile, logout } = useAuth();
+    const { user, profile } = useAuth();
     const [currentView, setCurrentView] = useState('Dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [myTickets, setMyTickets] = useState([]);
