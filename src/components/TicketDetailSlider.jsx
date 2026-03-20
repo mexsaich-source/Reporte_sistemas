@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Clock, MessageSquare, Paperclip, Send } from 'lucide-react';
+import { X, Clock, MessageSquare, Paperclip, Send, Printer } from 'lucide-react';
 import { TicketStatusBadge } from './TicketsModule';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
@@ -41,7 +41,6 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
         );
     };
 
-    // MOVEMOS fetchMessages AQUÍ ARRIBA para que el useEffect lo encuentre
     const fetchMessages = React.useCallback(async () => {
         try {
             const { data, error } = await supabase
@@ -75,7 +74,6 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                     table: 'ticket_messages',
                     filter: `ticket_id=eq.${ticketId}`
                 }, () => {
-                    // Re-fetch to get user details, or just append
                     fetchMessages();
                 })
                 .subscribe();
@@ -89,7 +87,6 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     }, [isOpen, ticketId, fetchMessages]);
 
     React.useEffect(() => {
-        // Scroll to bottom when messages update
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
@@ -108,7 +105,6 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             if (error) throw error;
             setNewMessage('');
             
-            // Auto-create notification for the other party
             const { data: ticketData } = await supabase.from('tickets').select('reported_by, assigned_tech').eq('id', ticketId).single();
             if (ticketData) {
                 const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
@@ -120,8 +116,6 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                     }]);
                 }
             }
-
-            // Automatic refetch handled by subscription or immediately
             await fetchMessages();
         } catch (error) {
             console.error('Error sending message:', error);
@@ -129,6 +123,106 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             setIsSending(false);
         }
     };
+
+    // ==========================================
+    // NUEVA FUNCIÓN: Generador de Recibo Térmico
+    // ==========================================
+    const handleDownloadReceipt = () => {
+        const printDate = new Date().toLocaleString('es-MX');
+        const reporterName = ticket?.reportedBy || "Desconocido"; 
+        const techName = ticket?.tech || "Técnico Asignado"; 
+        
+        const receiptHTML = `
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Comprobante Ticket #${ticket?.id}</title>
+                    <style>
+                        body {
+                            font-family: 'Courier New', Courier, monospace;
+                            width: 300px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            color: #000;
+                            font-size: 14px;
+                            line-height: 1.4;
+                        }
+                        .header { text-align: center; margin-bottom: 15px; }
+                        .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+                        .subtitle { font-size: 14px; }
+                        .divider { border-top: 1px dashed #000; margin: 15px 0; }
+                        .row { display: flex; justify-content: space-between; margin: 5px 0; }
+                        .label { font-weight: bold; }
+                        .text-center { text-align: center; }
+                        .content-box { margin: 15px 0; }
+                        .content-box .label { margin-bottom: 5px; display: block; }
+                        .data-text { margin-left: 10px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="title">IT HELPDESK</div>
+                        <div class="subtitle">Comprobante de Solución</div>
+                    </div>
+                    
+                    <div class="divider"></div>
+                    
+                    <div class="row">
+                        <span class="label">Ticket #:</span>
+                        <span>${ticket?.id}</span>
+                    </div>
+                    <div class="row">
+                        <span class="label">Fecha Solución:</span>
+                        <span>${printDate}</span>
+                    </div>
+                    <div class="row">
+                        <span class="label">Estado:</span>
+                        <span>RESUELTO</span>
+                    </div>
+
+                    <div class="divider"></div>
+                    
+                    <div class="content-box">
+                        <span class="label">Petición / Falla:</span>
+                        <div class="data-text">${ticket?.issue || 'Sin descripción'}</div>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <div class="content-box">
+                        <span class="label">Reportado por:</span>
+                        <div class="data-text">${reporterName}</div>
+                    </div>
+
+                    <div class="content-box">
+                        <span class="label">Atendido por:</span>
+                        <div class="data-text">${techName}</div>
+                    </div>
+
+                    <div class="divider"></div>
+                    
+                    <div class="text-center" style="margin-top: 20px; font-size: 12px;">
+                        ¡Problema solucionado!<br>
+                        Gracias por utilizar nuestro sistema.
+                    </div>
+
+                    <script>
+                        window.onload = () => { 
+                            window.print(); 
+                            setTimeout(() => window.close(), 500); 
+                        }
+                    </script>
+                </body>
+            </html>
+        `;
+
+        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        if (printWindow) {
+            printWindow.document.write(receiptHTML);
+            printWindow.document.close();
+        }
+    };
+    // ==========================================
 
     if (!isOpen) return null;
 
@@ -277,8 +371,16 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
 
                 <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                     {isClosed ? (
-                        <div className="text-center p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-400 uppercase tracking-widest border border-slate-100 dark:border-slate-700">
-                            Ticket cerrado. El chat está deshabilitado.
+                        <div className="flex flex-col gap-3">
+                            <button 
+                                onClick={handleDownloadReceipt}
+                                className="w-full bg-slate-900 dark:bg-slate-700 text-white py-3 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-slate-600 transition-all shadow-md active:scale-95"
+                            >
+                                <Printer size={16} /> Descargar Comprobante
+                            </button>
+                            <div className="text-center p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-400 uppercase tracking-widest border border-slate-100 dark:border-slate-700">
+                                Ticket cerrado. El chat está deshabilitado.
+                            </div>
                         </div>
                     ) : (
                         <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-1.5 focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-500 dark:focus-within:border-blue-500 transition-all">

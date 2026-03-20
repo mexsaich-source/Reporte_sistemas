@@ -7,6 +7,6 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    allowedHosts: ['ada-oasis-fundamentals-batch.trycloudflare.com'] // <- sin https://
+    allowedHosts: ['debian-wants-manufacturer-word.trycloudflare.com'] // <- sin https://
   }
 })

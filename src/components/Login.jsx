@@ -97,7 +97,7 @@ const Login = () => {
                             Soporte IT <br /> <span className="text-indigo-600">Simplificado</span>
                         </h2>
                         <p className="text-slate-600 font-medium text-base lg:text-lg max-w-xs mx-auto leading-relaxed opacity-80">
-                            Gestiona tus recursos y reportes con la inteligencia de IT Helpdesk. Rápido, intuitivo y dispuesto a ayudarte.
+                            Gestiona tus recursos y reportes con la inteligencia de IT Helpdesk. Rápido, intuitivo y listo para ayudarte.
                         </p>
                     </div>
                 </div>

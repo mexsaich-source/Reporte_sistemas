@@ -246,6 +246,7 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
 
             const newTicket = {
                 reported_by: user.id,
+                reporter_name: profile?.full_name || user.email || 'Usuario', 
                 title: title.trim(),
                 description: description.trim(),
                 device_type: deviceType,
@@ -255,8 +256,8 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
             };
 
             const { error: insertError } = await supabase
-                .from('tickets')
-                .insert([newTicket]);
+            .from('tickets')
+            .insert([newTicket]);
 
             if (insertError) throw insertError;
 
