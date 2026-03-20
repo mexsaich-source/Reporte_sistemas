@@ -15,6 +15,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
 
     const ticketId = ticket?.id || ticket?.fullId;
     const isClosed = ticket?.status === 'resolved' || ticket?.status === 'closed';
+    const isAdmin = profile?.role === 'admin';
 
     React.useEffect(() => {
         if (isOpen && ticketId) {
@@ -139,36 +140,48 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <span className="text-slate-900 dark:text-slate-200 font-semibold">{ticket?.reportedBy}</span>
                         </div>
                         
-                        {isTechOrAdmin && (
-                            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Asignar Técnico</span>
-                                <select 
-                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200"
-                                    value={techUsers.find(u => u.full_name === ticket?.tech)?.id || ''}
-                                    onChange={(e) => onUpdateTicket(ticket.fullId, { assigned_tech: e.target.value })}
+                        <div className="flex border-t border-slate-200 dark:border-slate-700 pt-6 mt-2 flex-col gap-4">
+                            {isAdmin && ticket?.status === 'pending_admin' && !ticket?.assigned_tech && (
+                                <button 
+                                    onClick={() => onUpdateTicket(ticket.fullId, { assigned_tech: user.id, status: 'assigned' })}
+                                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all"
                                 >
-                                    <option value="">Sin Asignar</option>
-                                    {techUsers.map(u => (
-                                        <option key={u.id} value={u.id}>{u.full_name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
+                                    Tomar Ticket
+                                </button>
+                            )}
 
-                        {isTechOrAdmin && (
-                            <div className="flex flex-col gap-2 mt-4">
-                                <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Cambiar Estado</span>
-                                <select 
-                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200"
-                                    value={ticket?.status || 'open'}
-                                    onChange={(e) => onUpdateTicket(ticket.fullId, { status: e.target.value })}
-                                >
-                                    <option value="open">Abierto</option>
-                                    <option value="pending">Pendiente</option>
-                                    <option value="resolved">Resuelto</option>
-                                </select>
-                            </div>
-                        )}
+                            {isAdmin && (
+                                <div className="space-y-2">
+                                    <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest ml-1">Asignar a Técnico</label>
+                                    <select 
+                                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                        value={ticket?.assigned_tech || ''}
+                                        onChange={(e) => onUpdateTicket(ticket.fullId, { assigned_tech: e.target.value, status: e.target.value ? 'assigned' : 'pending_admin' })}
+                                    >
+                                        <option value="">Sin Asignar</option>
+                                        {techUsers.filter(u => u.role !== 'user').map(u => (
+                                            <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {isTechOrAdmin && ticket?.assigned_tech && (
+                                <div className="space-y-2">
+                                    <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest ml-1">Estado del Ticket</label>
+                                    <select 
+                                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                        value={ticket?.status || 'pending_admin'}
+                                        onChange={(e) => onUpdateTicket(ticket.fullId, { status: e.target.value })}
+                                    >
+                                        <option value="pending_admin">Pendiente Admin</option>
+                                        <option value="assigned">Asignado</option>
+                                        <option value="in_progress">En Proceso</option>
+                                        <option value="resolved">Resuelto</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
 
                         {!isTechOrAdmin && (
                             <div className="flex justify-between items-center mt-2">

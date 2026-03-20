@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ListFilter, X, Clock, MessageSquare, Paperclip, Send, AlertCircle, CheckCircle2, FilePlus } from 'lucide-react';
+import { Plus, ListFilter, X, Clock, MessageSquare, Paperclip, Send, AlertCircle, CheckCircle2, FilePlus, Shield, Wrench } from 'lucide-react';
 import { ticketService } from '../services/ticketService';
 import { userService } from '../services/userService';
 import { useAuth } from '../context/authStore';
@@ -9,13 +9,23 @@ export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => 
     const config = {
         open: {
             style: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-100/50 dark:border-rose-500/20 shadow-sm shadow-rose-500/5',
-            icon: AlertCircle,
-            label: 'Abierto'
+            icon: Shield,
+            label: 'Pendiente Admin'
         },
-        pending: {
-            style: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-100/50 dark:border-amber-500/20 shadow-sm shadow-amber-500/5',
+        pending_admin: {
+            style: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-100/50 dark:border-rose-500/20 shadow-sm shadow-rose-500/5',
+            icon: Shield,
+            label: 'Pendiente Admin'
+        },
+        assigned: {
+            style: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-100/50 dark:border-blue-500/20 shadow-sm shadow-blue-500/5',
             icon: Clock,
-            label: 'Pendiente'
+            label: 'Asignado'
+        },
+        in_progress: {
+            style: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-100/50 dark:border-amber-500/20 shadow-sm shadow-amber-500/5',
+            icon: Wrench,
+            label: 'En Proceso'
         },
         resolved: {
             style: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100/50 dark:border-emerald-500/20 shadow-sm shadow-emerald-500/5',
@@ -25,8 +35,8 @@ export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => 
     };
 
     // Handle both case variations just in case
-    const normalizedStatus = status ? status.toLowerCase() : 'open';
-    const current = config[normalizedStatus] || config['open'];
+    const normalizedStatus = status ? status.toLowerCase() : 'pending_admin';
+    const current = config[normalizedStatus] || config['pending_admin'];
 
     const Icon = current.icon;
     const isSm = size === 'sm';
@@ -34,7 +44,7 @@ export const TicketStatusBadge = ({ status, withIcon = false, size = 'sm' }) => 
 
     return (
         <span className={`inline-flex items-center gap-2 rounded-xl border ${padding} ${current.style} transition-all`}>
-            {withIcon && <Icon size={isSm ? 14 : 14} className={normalizedStatus === 'open' ? 'animate-pulse' : ''} />}
+            {withIcon && <Icon size={isSm ? 14 : 14} className={normalizedStatus === 'pending_admin' ? 'animate-pulse' : ''} />}
             {current.label}
         </span>
     );
@@ -52,7 +62,7 @@ const AddTicketSlider = ({ isOpen, onClose, onSave }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        const result = await onSave({ title, status: 'open', description: title });
+        const result = await onSave({ title, status: 'pending_admin', description: title });
         setLoading(false);
         if (result) {
             setTitle('');
@@ -113,15 +123,13 @@ const TicketsModule = ({ searchTerm = '' }) => {
             const data = await ticketService.getAll();
 
             let filteredData = data;
-            if (profile?.role === 'tech') {
-                // Support sees: 1. Unassigned open tickets (to pick up) OR 2. Their assigned tickets
-                filteredData = data.filter(t => 
-                    (t.status === 'open' && !t.assigned_tech) || 
-                    t.assigned_tech === profile.id
-                );
-            } else if (profile?.role === 'user') {
+            if (profile?.role === 'tech' || profile?.role === 'técnico') {
+                // Support sees only tickets assigned to them
+                filteredData = data.filter(t => t.assigned_tech === profile.id);
+            } else if (profile?.role === 'user' || profile?.role === 'operativo' || profile?.role === 'operador') {
                 filteredData = data.filter(t => t.reported_by === profile?.id);
             }
+            // Admin sees all
 
             const formatted = filteredData.map(t => ({
                 id: t.id.toString(),

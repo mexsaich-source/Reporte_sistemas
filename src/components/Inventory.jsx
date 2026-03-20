@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, CheckCircle2, AlertCircle, Wrench, Package, ArrowRightLeft, UploadCloud, Download, X, Laptop, Monitor, Smartphone, Server, FileDigit, Trash2, Edit, AlertTriangle, MonitorPlay, Settings, Filter } from 'lucide-react';
+import { Plus, Search, CheckCircle2, AlertCircle, Wrench, Package, ArrowRightLeft, UploadCloud, Download, X, Laptop, Monitor, Smartphone, Server, FileDigit, Trash2, Edit, AlertTriangle, MonitorPlay, Settings, Filter, Clock } from 'lucide-react';
 import StatCard from './StatCard';
 import { inventoryService } from '../services/inventoryService';
 
 // --- HELPERS ---
 const STATUS_MAP = {
     'active': { label: 'En Uso', style: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20', icon: CheckCircle2 },
-    'available': { label: 'En Bodega', style: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20', icon: Package },
+    'available': { label: 'En Bodega', style: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 border-blue-100/50 dark:border-blue-500/20', icon: Package },
+    'loaned': { label: 'Prestado', style: 'text-purple-600 bg-purple-50 dark:bg-purple-500/10 border-purple-100/50 dark:border-purple-500/20', icon: Clock },
     'decommissioned': { label: 'Obsoleto', style: 'text-slate-600 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700', icon: Trash2 },
 };
 
@@ -140,7 +141,10 @@ const ImportModal = ({ isOpen, onClose, onImportSuccess }) => {
 
 // --- DEVICE SLIDER ---
 const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
-    const [formData, setFormData] = useState({ id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', status: 'available', specsDetails: '' });
+    const [formData, setFormData] = useState({ 
+        id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', 
+        status: 'available', specsDetails: '', loanDate: '', returnDate: '', loanUser: '' 
+    });
     useEffect(() => {
         if (editingDevice) {
             setFormData({
@@ -151,10 +155,23 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                 serial: editingDevice.serial || '',
                 category: editingDevice.category || '',
                 status: editingDevice.status || 'available',
-                specsDetails: editingDevice.specsDetails || ''
+                specsDetails: editingDevice.specsDetails || '',
+                loanDate: editingDevice.loanDate || '',
+                returnDate: editingDevice.returnDate || '',
+                loanUser: editingDevice.loanUser || '',
+                rejectReason: editingDevice.rejectReason || '',
+                requestReason: editingDevice.requestReason || '',
+                requestedById: editingDevice.requestedById || '',
+                deliveredAt: editingDevice.deliveredAt || '',
+                receivedAt: editingDevice.receivedAt || '',
+                returnedAt: editingDevice.returnedAt || ''
             });
         } else {
-            setFormData({ id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', status: 'available', specsDetails: '' });
+            setFormData({ 
+                id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', 
+                status: 'available', specsDetails: '', loanDate: '', returnDate: '', loanUser: '',
+                rejectReason: '', requestReason: '', requestedById: '', deliveredAt: '', receivedAt: '', returnedAt: ''
+            });
         }
     }, [editingDevice, isOpen]);
 
@@ -185,12 +202,44 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estatus</label>
                                 <select name="status" value={formData.status} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white">
-                                    <option value="active">En Uso</option>
-                                    <option value="available">En Bodega</option>
+                                    <option value="available">En Bodega (Disponible)</option>
+                                    <option value="active">En Uso / Operación</option>
+                                    <option value="request_pending">Solicitar Préstamo (Pendiente)</option>
+                                    <option value="loaned">Prestado (En Tránsito)</option>
                                     <option value="decommissioned">Obsoleto / Baja</option>
+                                    <option value="denied">Denegado</option>
                                 </select>
                             </div>
                         </div>
+
+                        {formData.status === 'denied' && formData.rejectReason && (
+                            <div className="p-4 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-800 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <AlertTriangle className="text-rose-500 shrink-0" size={20} />
+                                <div>
+                                    <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest">Motivo de Rechazo</p>
+                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mt-1">{formData.rejectReason}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {(formData.status === 'loaned' || formData.status === 'request_pending' || formData.status === 'approved') && (
+                            <div className="p-4 bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest ml-1">¿A quién se le presta?</label>
+                                    <input type="text" name="loanUser" value={formData.loanUser} onChange={handleChange} placeholder="Nombre del usuario" className="w-full bg-white dark:bg-slate-900 border border-purple-100 dark:border-gray-800 px-4 py-3 rounded-xl text-sm font-bold" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest ml-1">Fecha Salida</label>
+                                        <input type="date" name="loanDate" value={formData.loanDate} onChange={handleChange} className="w-full bg-white dark:bg-slate-900 border border-purple-100 dark:border-gray-800 px-4 py-3 rounded-xl text-sm font-bold" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest ml-1">Fecha Devolución</label>
+                                        <input type="date" name="returnDate" value={formData.returnDate} onChange={handleChange} className="w-full bg-white dark:bg-slate-900 border border-purple-100 dark:border-gray-800 px-4 py-3 rounded-xl text-sm font-bold" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Activo</label>
                             <input type="text" name="type" required value={formData.type} onChange={handleChange} placeholder="Ej. Laptop, Monitor..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />

@@ -1,97 +1,177 @@
-import React from 'react';
-import { FileText, Download, Eye, TrendingUp, Clock, ShieldCheck, Zap, Filter, Search } from 'lucide-react';
-const reportsList = [];
-const reportStats = { efficiency: '0%', avgResolution: '0 hrs', compliance: '0%', costSavings: '$0' };
+import React, { useState, useEffect } from 'react';
+import { FileText, Download, TrendingUp, Clock, ShieldCheck, Zap, Filter, Search, AlertTriangle, Hammer, CheckCircle2 } from 'lucide-react';
 import StatCard from './StatCard';
+import { ticketService } from '../services/ticketService';
+import { inventoryService } from '../services/inventoryService';
+import { 
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+    PieChart, Pie, Cell, Legend, LineChart, Line 
+} from 'recharts';
+
+const PIE_COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#10b981'];
 
 const ReportsView = () => {
+    const [tickets, setTickets] = useState([]);
+    const [assets, setAssets] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [failureAnalytics, setFailureAnalytics] = useState({
+        byType: [],
+        byUrgency: [],
+        resolutionTrend: []
+    });
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const [ticketsData, assetsData] = await Promise.all([
+                    ticketService.getAll(),
+                    inventoryService.getAll()
+                ]);
+                
+                setTickets(ticketsData);
+                setAssets(assetsData);
+                
+                // Process Failure Analytics
+                analyzeData(ticketsData, assetsData);
+            } catch (err) {
+                console.error("Error loading reports data:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    const analyzeData = (ticketsData, assetsData) => {
+        // 1. Failures by Device Type
+        const typeCount = {};
+        ticketsData.forEach(t => {
+            const matchedType = t.device_type || 'General';
+            typeCount[matchedType] = (typeCount[matchedType] || 0) + 1;
+        });
+
+        const byType = Object.entries(typeCount).map(([name, value]) => ({ name, value }));
+
+        // 2. Tickets by Urgency
+        const urgencyCount = {};
+        ticketsData.forEach(t => {
+            const u = t.urgency || 'medium';
+            const label = u.charAt(0).toUpperCase() + u.slice(1);
+            urgencyCount[label] = (urgencyCount[label] || 0) + 1;
+        });
+        const byUrgency = Object.entries(urgencyCount).map(([name, value]) => ({ name, value }));
+
+        // 3. Resolution Trend (Real usage of ticket dates)
+        const last5Days = Array.from({length: 5}, (_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - (4 - i));
+            return d.toLocaleDateString([], { weekday: 'short' });
+        });
+
+        const trendData = last5Days.map(day => {
+            const count = ticketsData.filter(t => 
+                new Date(t.created_at).toLocaleDateString([], { weekday: 'short' }) === day
+            ).length;
+            return { name: day, tickets: count };
+        });
+
+        setFailureAnalytics({
+            byType,
+            byUrgency,
+            resolutionTrend: trendData
+        });
+    };
+
+    const generateCSV = () => {
+        const headers = ["ID", "Título", "Estado", "Urgencia", "Fecha Creación"];
+        const rows = tickets.map(t => [t.id, t.title, t.status, t.urgency, t.created_at]);
+        const content = [headers, ...rows].map(e => e.join(",")).join("\n");
+        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `reporte_equipos_${new Date().toISOString().slice(0,10)}.csv`);
+        link.click();
+    };
+
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center p-20 text-slate-400 font-bold uppercase tracking-widest gap-4">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            Analizando Infraestructura...
+        </div>
+    );
+
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 transition-colors duration-300">
-            {/* Métricas de Reportes */}
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Métricas */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard label="Eficiencia Operativa" value={reportStats.efficiency} trend="+2.4%" icon={Zap} color="text-yellow-600" bg="bg-amber-100" />
-                <StatCard label="Resolución Promedio" value={reportStats.avgResolution} trend="-15m" icon={Clock} color="text-blue-600" bg="bg-blue-100" />
-                <StatCard label="Cumplimiento SLA" value={reportStats.compliance} trend="Estable" icon={ShieldCheck} color="text-emerald-600" bg="bg-emerald-100" />
-                <StatCard label="Ahorro Estimado" value={reportStats.costSavings} trend="Anual" icon={TrendingUp} color="text-purple-600" bg="bg-purple-100" />
+                <StatCard label="Total Tickets" value={tickets.length} icon={AlertTriangle} color="text-rose-600" bg="bg-rose-100" />
+                <StatCard label="Equipos en Inventario" value={assets.length} icon={Hammer} color="text-blue-600" bg="bg-blue-100" />
+                <StatCard label="Tickets Resueltos" value={tickets.filter(t => t.status === 'resolved').length} icon={CheckCircle2} color="text-emerald-600" bg="bg-emerald-100" />
+                <StatCard label="Tasa de Falla" value={`${((tickets.length / (assets.length || 1)) * 10).toFixed(1)}%`} icon={TrendingUp} color="text-amber-600" bg="bg-amber-100" />
             </div>
 
-            {/* Contenedor Principal de Reportes */}
-            <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden transition-colors duration-300">
-                <div className="p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-800/30">
-                    <div>
-                        <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Centro de Reportes</h3>
-                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Análisis de Datos y Exportación</p>
-                    </div>
-
-                    <div className="flex gap-3 w-full md:w-auto">
-                        <div className="flex-1 md:w-64 flex items-center gap-3 text-slate-400 bg-white dark:bg-slate-800 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm focus-within:border-blue-500 transition-all group">
-                            <Search size={16} className="group-focus-within:text-blue-500" />
-                            <input
-                                type="text"
-                                placeholder="Filtrar reportes..."
-                                className="bg-transparent border-none outline-none text-sm w-full text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
-                            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Fallas por Tipo de Equipo */}
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Fallas por Equipo</h3>
+                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Identificando lo más problemático</p>
                         </div>
-                        <button className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
-                            <Filter size={20} />
-                        </button>
+                        <div className="p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-2xl">
+                            <AlertTriangle size={24} />
+                        </div>
+                    </div>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={failureAnalytics.byType}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12, fontWeight: 600}} />
+                                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                                <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
 
-                <div className="overflow-x-auto p-4">
-                    <table className="w-full text-left border-collapse whitespace-nowrap">
-                        <thead>
-                            <tr className="text-slate-400 dark:text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black">
-                                <th className="p-4 pl-6 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Nombre del Reporte</th>
-                                <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Categoría</th>
-                                <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50 text-center">Formato</th>
-                                <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Fecha de Generación</th>
-                                <th className="p-4 pr-6 pb-6 border-b border-slate-100/50 dark:border-slate-800/50 text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="text-sm">
-                            {reportsList.map((report) => (
-                                <tr key={report.id} className="group transition-all duration-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
-                                    <td className="p-4 pl-6">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-2.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl group-hover:scale-110 transition-transform">
-                                                <FileText size={20} />
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-slate-900 dark:text-slate-200">{report.title}</span>
-                                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{report.size}</span>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">
-                                        {report.category}
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${report.type === 'PDF'
-                                            ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20'
-                                            : 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20'
-                                            }`}>
-                                            {report.type}
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-slate-500 dark:text-slate-500 font-medium">
-                                        {report.date}
-                                    </td>
-                                    <td className="p-4 pr-6 text-right">
-                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all shadow-sm">
-                                                <Eye size={18} />
-                                            </button>
-                                            <button className="p-2 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all shadow-sm">
-                                                <Download size={18} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                {/* Composición de Urgencia */}
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Densidad de Urgencia</h3>
+                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Crucial para prioridad</p>
+                        </div>
+                        <div className="p-3 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl">
+                            <Zap size={24} />
+                        </div>
+                    </div>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={failureAnalytics.byUrgency} innerRadius={60} outerRadius={100} paddingAngle={8} dataKey="value" stroke="none">
+                                    {failureAnalytics.byUrgency.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
+            </div>
+
+            <div className="flex justify-center pt-4">
+                <button 
+                    onClick={generateCSV}
+                    className="flex items-center gap-3 bg-slate-900 dark:bg-blue-600 text-white px-10 py-5 rounded-3xl font-black uppercase text-xs tracking-[0.2em] shadow-2xl hover:bg-blue-600 dark:hover:bg-blue-500 transition-all hover:-translate-y-1 active:scale-95 border border-white/10"
+                >
+                    <Download size={20} />
+                    Generar Reporte Integral
+                </button>
             </div>
         </div>
     );

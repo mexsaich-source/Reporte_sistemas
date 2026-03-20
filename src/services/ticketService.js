@@ -1,5 +1,12 @@
 import { supabase } from '../lib/supabaseClient';
 
+export const TICKET_STATUS = {
+    PENDING_ADMIN: 'pending_admin',
+    ASSIGNED: 'assigned',
+    IN_PROGRESS: 'in_progress',
+    RESOLVED: 'resolved'
+};
+
 export const ticketService = {
     async getAll() {
         try {
@@ -13,7 +20,8 @@ export const ticketService = {
                     urgency,
                     created_at,
                     reported_by,
-                    assigned_tech
+                    assigned_tech,
+                    owner_id
                 `)
                 .order('created_at', { ascending: false });
 

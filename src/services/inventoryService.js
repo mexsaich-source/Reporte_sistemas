@@ -30,7 +30,16 @@ export const inventoryService = {
                     user: specs.assigned_user_name || '',
                     department: specs.department || '',
                     status: asset.status || 'available', 
-                    condition: asset.condition || 'good'
+                    condition: asset.condition || 'good',
+                    loanDate: specs.loan_date || '',
+                    returnDate: specs.return_date || '',
+                    loanUser: specs.loan_user || '',
+                    rejectReason: specs.reject_reason || '',
+                    requestReason: specs.request_reason || '',
+                    requestedById: specs.requested_by_id || '',
+                    deliveredAt: specs.delivered_at || '',
+                    receivedAt: specs.received_at || '',
+                    returnedAt: specs.returned_at || ''
                 };
             });
         } catch (error) {
@@ -60,7 +69,10 @@ export const inventoryService = {
                     category: item.category || '',
                     details: item.specsDetails || '',
                     assigned_user_name: item.user || '',
-                    department: item.department || ''
+                    department: item.department || '',
+                    loan_date: item.loanDate || '',
+                    return_date: item.returnDate || '',
+                    loan_user: item.loanUser || ''
                 }
             };
 
@@ -91,6 +103,15 @@ export const inventoryService = {
                 details: updates.specsDetails !== undefined ? updates.specsDetails : currentSpecs.details,
                 assigned_user_name: updates.user !== undefined ? updates.user : currentSpecs.assigned_user_name,
                 department: updates.department !== undefined ? updates.department : currentSpecs.department,
+                loan_date: updates.loanDate !== undefined ? updates.loanDate : currentSpecs.loan_date,
+                return_date: updates.returnDate !== undefined ? updates.returnDate : currentSpecs.return_date,
+                loan_user: updates.loanUser !== undefined ? updates.loanUser : currentSpecs.loan_user,
+                reject_reason: updates.rejectReason !== undefined ? updates.rejectReason : currentSpecs.reject_reason,
+                request_reason: updates.requestReason !== undefined ? updates.requestReason : currentSpecs.request_reason,
+                requested_by_id: updates.requestedById !== undefined ? updates.requestedById : currentSpecs.requested_by_id,
+                delivered_at: updates.deliveredAt !== undefined ? updates.deliveredAt : currentSpecs.delivered_at,
+                received_at: updates.receivedAt !== undefined ? updates.receivedAt : currentSpecs.received_at,
+                returned_at: updates.returnedAt !== undefined ? updates.returnedAt : currentSpecs.returned_at,
             };
 
             const dbUpdates = {

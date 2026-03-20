@@ -10,6 +10,7 @@ import { TicketStatusBadge } from './TicketsModule';
 import TicketDetailSlider from './TicketDetailSlider';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
+import { inventoryService } from '../services/inventoryService';
 import GeneralRequestForm from './GeneralRequestForm';
 import TermsModal from './TermsModal';
 
@@ -18,122 +19,176 @@ const UserAgenda = () => {
     const { user } = useAuth();
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [currentDate, setCurrentDate] = useState(new Date());
 
-    useEffect(() => {
+    const fetchEvents = async () => {
         if (!user) return;
-        const fetchEvents = async () => {
-            setLoading(true);
-            try {
-                // Fetch active tickets
-                const { data: ticketsData } = await supabase
-                    .from('tickets')
-                    .select('*')
-                    .eq('reported_by', user.id)
-                    .neq('status', 'closed')
-                    .order('created_at', { ascending: false });
+        setLoading(true);
+        try {
+            // Fetch tickets
+            const { data: ticketsData } = await supabase
+                .from('tickets')
+                .select('*')
+                .eq('reported_by', user.id)
+                .order('created_at', { ascending: false });
 
-                // Fetch active requests
-                const { data: requestsData, error } = await supabase
-                    .from('general_requests')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .neq('status', 'delivered')
-                    .order('created_at', { ascending: false });
+            // Fetch loans from assets
+            const data = await inventoryService.getAll();
+            const loanEvents = data.filter(item => 
+                (item.requestedById === user.id || item.loanUser === (user.email || user.id)) && 
+                ['request_pending', 'loaned', 'delivered', 'received', 'returned', 'denied'].includes(item.status)
+            );
 
-                const formattedTickets = (ticketsData || []).map(t => ({
-                    id: `ticket_${t.id}`,
-                    title: t.title,
-                    time: new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    date: new Date(t.created_at).toLocaleDateString(),
-                    type: 'Ticket - ' + t.status,
-                    status: t.status === 'resolved' ? 'completed' : 'pending'
-                }));
+            const formattedTickets = (ticketsData || []).map(t => ({
+                id: `ticket_${t.id}`,
+                title: t.title,
+                time: new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                date: new Date(t.created_at).toLocaleDateString(),
+                rawDate: new Date(t.created_at),
+                type: 'Ticket - ' + t.status,
+                status: t.status === 'resolved' ? 'completed' : 'pending',
+                fullItem: t
+            }));
 
-                const formattedRequests = (requestsData || []).map(r => ({
-                    id: `req_${r.id}`,
-                    title: r.subject,
-                    time: new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    date: new Date(r.created_at).toLocaleDateString(),
-                    type: r.is_loan ? 'Préstamo' : 'Petición General',
-                    status: r.status === 'approved' ? 'completed' : 'pending'
-                }));
+            const formattedLoans = (loanEvents || []).map(l => ({
+                id: `loan_${l.id}`,
+                title: `${l.type} - ${l.brand} ${l.model}`,
+                time: l.loanDate ? 'Todo el día' : 'Pendiente',
+                date: l.loanDate || new Date().toLocaleDateString(),
+                rawDate: l.loanDate ? new Date(l.loanDate) : new Date(),
+                type: 'Préstamo',
+                itemStatus: l.status,
+                status: l.status === 'received' ? 'completed' : 'pending',
+                fullItem: l
+            }));
 
-                const allEvents = [...formattedTickets, ...formattedRequests];
-                setEvents(allEvents.slice(0, 5)); // show latest 5
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
+            const allEvents = [...formattedTickets, ...formattedLoans];
+            setEvents(allEvents.sort((a,b) => b.rawDate - a.rawDate));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        fetchEvents();
-    }, [user]);
+    useEffect(() => { fetchEvents(); }, [user]);
+
+    const handleAction = async (item, action) => {
+        if (!item.fullItem?.id) return;
+        let nextStatus = '';
+        if (action === 'receive') nextStatus = 'received';
+        if (action === 'return') nextStatus = 'returned';
+
+        if (nextStatus) {
+            const updates = { status: nextStatus };
+            if (nextStatus === 'received') updates.receivedAt = new Date().toISOString();
+            if (nextStatus === 'returned') updates.returnedAt = new Date().toISOString();
+            
+            await inventoryService.update(item.fullItem.id, updates);
+            fetchEvents();
+        }
+    };
+
+    // Calendar logic
+    const daysInMonth = (month, year) => new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = (month, year) => new Date(year, month, 1).getDay();
+    
+    const month = currentDate.getMonth();
+    const year = currentDate.getFullYear();
+    const numDays = daysInMonth(month, year);
+    const startDay = firstDayOfMonth(month, year);
+    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+    const changeMonth = (offset) => {
+        const d = new Date(currentDate);
+        d.setMonth(d.getMonth() + offset);
+        setCurrentDate(d);
+    };
+
+    const hasEvent = (day) => {
+        return events.some(e => {
+            const d = e.rawDate;
+            return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
+        });
+    };
 
     return (
-        <div className="flex flex-col lg:flex-row gap-6 animate-in fade-in slide-in-from-bottom-2 duration-700 transition-colors">
-            {/* Calendar Placeholder - Premium Style */}
-            <div className="lg:w-72 bg-white dark:bg-slate-900 p-5 rounded-[2rem] border border-slate-200/60 dark:border-slate-800 shadow-xl shadow-slate-200/30 dark:shadow-none shrink-0 transition-colors">
-                <div className="flex items-center justify-between mb-5">
-                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">Octubre 23</h3>
+        <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in slide-in-from-bottom-2 duration-700 transition-colors">
+            {/* Real Interactive Calendar */}
+            <div className="lg:w-80 bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-800 shadow-2xl shadow-slate-200/20 dark:shadow-none shrink-0 transition-all hover:shadow-blue-500/5">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">{monthNames[month]} {year}</h3>
                     <div className="flex gap-2">
-                        <button className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 transition-colors"><ChevronLeft size={16} className="text-slate-400 dark:text-slate-500" /></button>
-                        <button className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 transition-colors"><ChevronRight size={16} className="text-slate-400 dark:text-slate-500" /></button>
+                        <button onClick={() => changeMonth(-1)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 transition-all active:scale-90"><ChevronLeft size={16} className="text-slate-500" /></button>
+                        <button onClick={() => changeMonth(1)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 transition-all active:scale-90"><ChevronRight size={16} className="text-slate-500" /></button>
                     </div>
                 </div>
-                <div className="grid grid-cols-7 text-center text-[10px] font-black text-slate-300 dark:text-slate-600 mb-3 uppercase tracking-tighter">
+                <div className="grid grid-cols-7 text-center text-[10px] font-black text-slate-300 dark:text-slate-600 mb-4 uppercase tracking-[0.2em]">
                     <span>Dom</span><span>Lun</span><span>Mar</span><span>Mie</span><span>Jue</span><span>Vie</span><span>Sab</span>
                 </div>
                 <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                    {Array.from({ length: 31 }, (_, i) => (
-                        <div key={i} className={`relative py-2 rounded-xl cursor-pointer transition-all duration-300 font-bold group ${i + 1 === 24 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 text-slate-600 dark:text-slate-400'}`}>
-                            {i + 1}
-                            {i + 1 === 12 && <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-red-400 rounded-full"></div>}
-                        </div>
-                    ))}
+                    {/* Empty slots for first week */}
+                    {Array.from({ length: startDay }).map((_, i) => <div key={`empty-${i}`} className="py-2.5"></div>)}
+                    
+                    {Array.from({ length: numDays }, (_, i) => {
+                        const day = i + 1;
+                        const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                        const dayHasEvent = hasEvent(day);
+                        
+                        return (
+                            <div key={day} className={`relative py-3 rounded-xl cursor-pointer transition-all duration-300 font-black group ${isToday ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/30' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 text-slate-600 dark:text-slate-400'}`}>
+                                {day}
+                                {dayHasEvent && <div className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${isToday ? 'bg-white' : 'bg-blue-500'}`}></div>}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Events List - Compacted Premium */}
-            <div className="flex-1 space-y-3">
+            {/* Interactive Activities List */}
+            <div className="flex-1 space-y-4">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-black text-slate-900 dark:text-white text-sm flex items-center gap-2 uppercase tracking-widest">
-                        <CalendarIcon size={16} className="text-blue-600 dark:text-blue-400" />
+                    <h3 className="font-black text-slate-900 dark:text-white text-sm flex items-center gap-3 uppercase tracking-[0.2em]">
+                        <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20">
+                            <CalendarIcon size={14} />
+                        </div>
                         Próximas Actividades
                     </h3>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full uppercase tracking-widest">{events.length} Actividades</span>
+                    <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 px-4 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-100 dark:border-blue-800 uppercase tracking-widest leading-none">{events.length} Tareas</span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-1 gap-4">
                     {loading ? (
-                        <div className="p-8 text-center text-slate-500">Cargando actividades...</div>
+                        <div className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest animate-pulse">Sincronizando...</div>
                     ) : events.length === 0 ? (
-                        <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px] border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">No hay actividades próximas</div>
+                        <div className="p-16 text-center text-slate-400 font-black uppercase tracking-[0.2em] text-xs border-4 border-dashed border-slate-50 dark:border-slate-900 rounded-[3rem]">No hay actividades registradas</div>
                     ) : events.map((event) => (
-                        <div key={event.id} className="group relative bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between hover:border-blue-200 dark:hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/40 dark:hover:shadow-none cursor-pointer overflow-hidden">
-                            <div className="absolute left-0 top-0 w-1 h-full bg-blue-600 scale-y-0 group-hover:scale-y-100 transition-transform duration-300 origin-top"></div>
-
-                            <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-2xl transition-transform group-hover:scale-110 duration-300 ${event.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm shadow-emerald-500/10' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-sm shadow-blue-500/10'}`}>
-                                    {event.status === 'completed' ? <CheckCircle2 size={20} /> : <Clock size={20} />}
+                        <div key={event.id} className="group bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-blue-500/50 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/40 dark:hover:shadow-none cursor-pointer">
+                            <div className="flex items-center gap-5">
+                                <div className={`p-4 rounded-2xl transition-all group-hover:rotate-12 duration-500 ${event.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400'}`}>
+                                    {event.status === 'completed' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
                                 </div>
                                 <div>
-                                    <h4 className="text-sm font-black text-slate-900 dark:text-white transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400">{event.title}</h4>
-                                    <div className="flex items-center gap-4 mt-1">
-                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 uppercase tracking-widest transition-colors group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 group-hover:text-blue-600 dark:group-hover:text-blue-400">{event.type}</span>
-                                        <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-tighter">
-                                            <CalendarIcon size={12} />
-                                            {event.date}
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-tighter">
-                                            <Clock size={12} />
-                                            {event.time}
+                                    <h4 className="text-base font-black text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors uppercase tracking-tight">{event.title}</h4>
+                                    <div className="flex flex-wrap items-center gap-4 mt-2">
+                                        <span className={`text-[10px] font-black px-3 py-1 rounded-xl uppercase tracking-widest ${event.itemStatus === 'delivered' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{event.type} {event.itemStatus && `(${event.itemStatus})`}</span>
+                                        <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+                                            <CalendarIcon size={12} /> {event.date}
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div className="p-2 transition-transform group-hover:translate-x-1 duration-300">
-                                <ChevronRight size={20} className="text-slate-200 dark:text-slate-700 group-hover:text-blue-500 dark:group-hover:text-blue-400" />
+
+                            <div className="flex items-center gap-3">
+                                {event.itemStatus === 'delivered' && (
+                                    <button onClick={() => handleAction(event, 'receive')} className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-black transition-all">Confirmar Recibido</button>
+                                )}
+                                {event.itemStatus === 'received' && (
+                                    <button onClick={() => handleAction(event, 'return')} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 transition-all">Devolver Equipo</button>
+                                )}
+                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-300 dark:text-slate-600 group-hover:text-blue-500 transition-all">
+                                    <ChevronRight size={18} />
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -475,9 +530,11 @@ const UserPortal = () => {
             // Compute stats
             let open = 0, pending = 0, resolved = 0;
             const formattedTickets = data.map(t => {
-                if (t.status === 'open' || t.status === 'Open') open++;
-                if (t.status === 'pending' || t.status === 'Pending' || t.status === 'In Progress') pending++;
-                if (t.status === 'resolved' || t.status === 'Resolved' || t.status === 'Closed') resolved++;
+                const s = (t.status || '').toLowerCase();
+                // Map to UI buckets: 'open' is now treated as 'pending_admin' for the user
+                if (s === 'open' || s === 'pending_admin') open++;
+                if (s === 'assigned' || s === 'in_progress') pending++;
+                if (s === 'resolved') resolved++;
 
                 return {
                     id: t.id,
