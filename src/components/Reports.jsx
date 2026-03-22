@@ -84,15 +84,34 @@ const ReportsView = () => {
     };
 
     const generateCSV = () => {
+        // SECURITY FIX #9: Prevenir CSV Injection
+        // Saneamos cada valor para evitar que ejecute fórmulas en Excel
+        const sanitizeCSV = (val) => {
+            const str = String(val ?? '').replace(/"/g, '""'); // Escapar comillas dobles
+            // Bloquear inicio de fórmulas maliciosas (=, +, -, @)
+            const dangerous = ['=', '+', '-', '@', '\t', '\r'];
+            if (dangerous.some(c => str.startsWith(c))) {
+                return `"'${str}"`; // Prefijar con apóstrofe para forzar texto
+            }
+            return `"${str}"`;
+        };
+
         const headers = ["ID", "Título", "Estado", "Urgencia", "Fecha Creación"];
-        const rows = tickets.map(t => [t.id, t.title, t.status, t.urgency, t.created_at]);
-        const content = [headers, ...rows].map(e => e.join(",")).join("\n");
-        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        const rows = tickets.map(t => [
+            sanitizeCSV(t.id),
+            sanitizeCSV(t.title),
+            sanitizeCSV(t.status),
+            sanitizeCSV(t.urgency),
+            sanitizeCSV(t.created_at)
+        ]);
+        const content = [headers.map(sanitizeCSV), ...rows].map(e => e.join(",")).join("\n");
+        const blob = new Blob(["\uFEFF" + content], { type: 'text/csv;charset=utf-8;' }); // BOM para UTF-8 en Excel
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `reporte_equipos_${new Date().toISOString().slice(0,10)}.csv`);
+        link.setAttribute("download", `reporte_tickets_${new Date().toISOString().slice(0,10)}.csv`);
         link.click();
+        URL.revokeObjectURL(url); // Limpiar URL en memoria
     };
 
     if (loading) return (

@@ -109,8 +109,17 @@ export const importService = {
 
             try {
                 if (type === 'users') {
-                    // (User import logic remains the same)
-                    const payload = { full_name: row.name || row.Nombre, email: row.email };
+                    // SECURITY FIX #4: Whitelist de roles permitidos.
+                    // Nunca se puede importar un admin o técnico desde Excel.
+                    const ALLOWED_IMPORT_ROLES = ['user', 'operativo', 'operador'];
+                    const importedRole = (row.role || row.Rol || '').toString().toLowerCase().trim();
+                    const safeRole = ALLOWED_IMPORT_ROLES.includes(importedRole) ? importedRole : 'user';
+
+                    const payload = {
+                        full_name: row.name || row.Nombre,
+                        email: row.email,
+                        role: safeRole
+                    };
                     const { error } = await supabase.from('profiles').insert([payload]);
                     if (error) throw error;
                     newCount++;

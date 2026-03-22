@@ -1,34 +1,22 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Chrome, Apple, Facebook } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 import { Navigate } from 'react-router-dom';
 import TermsModal from './TermsModal';
 
 const Login = () => {
-    // 1. Solo importamos lo que realmente existe en nuestro AuthContext
-    const { login, register, user, loading, logout, authError } = useAuth();
+    const { login, user, loading, logout, authError } = useAuth();
 
-    const [isRegister, setIsRegister] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-
-    // Form State
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
-    const [role, setRole] = useState('user');
-
-    // Status State
     const [error, setError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // Terms Modal State
     const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [termsType, setTermsType] = useState('terms');
 
     const illustrationPath = "/image.png";
 
-    // 2. Si Supabase está cargando la sesión en segundo plano, mostramos un loader.
-    // Esto evita el error de que "hay sesión abierta pero te muestra el login".
     if (loading) {
         return (
             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -37,8 +25,7 @@ const Login = () => {
         );
     }
 
-    // REDIRECT SOLO SI NO HAY ERROR.
-    // Si hay error (como FETCH_TIMEOUT), nos quedamos aquí para que el usuario pueda limpiar sesión.
+    // Redirigir solo si no hay error de autenticación pendiente
     if (user && !authError) {
         return <Navigate to="/" replace />;
     }
@@ -46,29 +33,21 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
+
+        // SECURITY FIX #6: Política mínima de contraseña
+        if (password.length < 8) {
+            setError('La contraseña debe tener al menos 8 caracteres.');
+            return;
+        }
+
         setIsSubmitting(true);
-
-
         try {
-            if (isRegister) {
-                // Registramos al usuario (nuestro AuthContext ya inserta el perfil automáticamente)
-                const { error: signUpError } = await register(email, password, fullName, role);
-                if (signUpError) throw signUpError;
-
-                setError('Cuenta creada exitosamente. Iniciando sesión...');
-                setIsRegister(false);
-            } else {
-                // Iniciamos sesión
-                const { error: signInError } = await login(email, password);
-                if (signInError) {
-                    if (signInError.message.includes('Invalid login credentials')) {
-                        throw new Error('Correo o contraseña incorrectos.');
-                    }
-                    throw signInError;
+            const { error: signInError } = await login(email, password);
+            if (signInError) {
+                if (signInError.message.includes('Invalid login credentials')) {
+                    throw new Error('Correo o contraseña incorrectos.');
                 }
-                // ¡OJO! Ya no hacemos "navigate" manual aquí.
-                // Al hacer login, el AuthContext actualiza al "user" y nuestro App.jsx
-                // automáticamente oculta el Login y te teletransporta a tu Dashboard.
+                throw signInError;
             }
         } catch (err) {
             setError(err.message || 'Ocurrió un error inesperado.');
@@ -81,6 +60,7 @@ const Login = () => {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-0 sm:p-4 lg:p-8 font-sans">
             <div className="bg-white w-full max-w-6xl flex flex-col lg:flex-row rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden min-h-[600px] lg:h-[800px]">
 
+                {/* Panel Izquierdo — Ilustración */}
                 <div className="lg:w-1/2 bg-[#efebff] p-8 lg:p-16 flex flex-col items-center justify-center text-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
 
@@ -102,23 +82,16 @@ const Login = () => {
                     </div>
                 </div>
 
+                {/* Panel Derecho — Login */}
                 <div className="lg:w-1/2 bg-white p-8 lg:p-20 flex flex-col justify-center relative overflow-hidden">
                     <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-8 duration-700">
 
                         <div className="mb-10 text-center lg:text-left">
                             <h3 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
-                                {isRegister ? 'Crea una cuenta' : '¡Hola de nuevo!'}
+                                ¡Hola de nuevo!
                             </h3>
-                            <p className="text-slate-500 font-medium">
-                                {isRegister ? '¿Ya tienes cuenta?' : '¿Aún no tienes cuenta?'} {' '}
-                                <button
-                                    type="button"
-                                    // Eliminamos el setAuthError que causaba el crash
-                                    onClick={() => { setIsRegister(!isRegister); setError(null); }}
-                                    className="text-indigo-600 font-bold hover:underline transition-all"
-                                >
-                                    {isRegister ? 'Inicia sesión' : 'Regístrate aquí'}
-                                </button>
+                            <p className="text-slate-500 font-medium text-sm">
+                                Acceso restringido al personal autorizado.
                             </p>
                         </div>
 
@@ -138,22 +111,6 @@ const Login = () => {
                         )}
 
                         <form className="space-y-6" onSubmit={handleSubmit}>
-                            {isRegister && (
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Completo</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Juan Pérez"
-                                        required
-                                        value={fullName}
-                                        onChange={(e) => setFullName(e.target.value)}
-                                        className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
-                                    />
-                                </div>
-                            )}
-
-
-
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
                                 <input
@@ -169,17 +126,16 @@ const Login = () => {
                             <div className="space-y-2">
                                 <div className="flex justify-between items-center ml-1">
                                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Contraseña</label>
-                                    {!isRegister && (
-                                        <button type="button" className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 uppercase tracking-widest">
-                                            ¿Olvidaste tu contraseña?
-                                        </button>
-                                    )}
+                                    <button type="button" className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 uppercase tracking-widest">
+                                        ¿Olvidaste tu contraseña?
+                                    </button>
                                 </div>
                                 <div className="relative group">
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         placeholder="••••••••"
                                         required
+                                        minLength={8}
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         className="w-full bg-[#f8f9fc] border border-slate-100 px-6 py-4 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/50 transition-all font-medium text-slate-700 placeholder:text-slate-300"
@@ -200,14 +156,9 @@ const Login = () => {
                                 className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-black hover:shadow-black/20 transition-all active:scale-[0.98] duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                             >
                                 {isSubmitting && <div className="w-5 h-5 border-2 border-white/50 border-t-transparent rounded-full animate-spin"></div>}
-                                {isRegister ? 'Crear mi cuenta' : 'Continuar'}
+                                Continuar
                             </button>
                         </form>
-
-                        <div className="my-10 flex items-center gap-4 text-slate-300 font-bold text-[10px] uppercase tracking-[0.2em]">
-                            <div className="h-px bg-slate-100 flex-1"></div>
-                            <div className="h-px bg-slate-100 flex-1"></div>
-                        </div>
 
                         <div className="mt-12 text-center">
                             <p className="text-[10px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">

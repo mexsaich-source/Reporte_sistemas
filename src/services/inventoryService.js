@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
+import { auditService } from './auditService';
 
 export const inventoryService = {
     /**
@@ -138,13 +139,19 @@ export const inventoryService = {
      * PERMANENT DELETION: Removes the record from the database.
      * Use only when a record was an error or is no longer needed in any history.
      */
-    async remove(id) {
+    async remove(id, actorId = null) {
         try {
             const { error } = await supabase.from('assets').delete().eq('id', id);
             if (error) throw error;
+
+            // Audit log: registrar borrado permanente de activo
+            if (actorId) {
+                await auditService.log(actorId, 'DELETE_ASSET', 'assets', id, { deleted_id: id });
+            }
+
             return true;
         } catch (error) {
-            console.error("Inventory Delete Error:", error);
+            if (import.meta.env.DEV) console.error("Inventory Delete Error:", error);
             return false;
         }
     }
