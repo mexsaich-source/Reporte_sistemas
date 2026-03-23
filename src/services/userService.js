@@ -93,71 +93,61 @@ export const userService = {
         }
     },
 
+    // --- EL NUEVO SISTEMA DE BORRADO REAL  ---
+
     async unregisterMemberFromDepartment(email, department) {
-        try {
-            // Hacemos borrado suave (soft delete) para preservar historial de tickets/actividades
-            const result = await this.softDeleteUser(email);
-            if (!result.success) throw new Error(result.error);
-
-            // Nota: El borrado en Auth requiere una Edge Function
-            // Ver: supabase.com -> Edge Functions
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
+        // Redirigimos esto a nuestra función de borrado real
+        return this.deleteUserCompleto(email);
     },
 
-    // --- FUNCIONES AUXILIARES ---
-
-    async removeUserFromAuth(email) {
-        try {
-            // IMPORTANTE: Por seguridad, Supabase no permite borrar usuarios de Auth 
-            // desde el cliente web. Esto requiere una Edge Function con Service Role Key.
-            console.warn(`Nota: Para borrar a ${email} de Auth por completo, necesitas usar una Edge Function o borrarlo a mano en el panel de Supabase.`);
-            return { success: true };
-        } catch (error) {
-            console.error("Error removing user from auth:", error);
-            throw error;
-        }
+    async deleteUserFromProfiles(email) {
+        // Redirigimos esto a nuestra función de borrado real
+        return this.deleteUserCompleto(email);
     },
 
-    // Borrado suave: desactiva el usuario sin borrar sus registros
-    // Esto evita errores 409 por claves foráneas (tickets, actividades, etc.)
-    async softDeleteUser(email, actorId = null) {
+    // Esta es la función maestra que hace el trabajo sucio
+    async deleteUserCompleto(email, actorId = null) {
         try {
-            const { data: prev } = await supabase.from('profiles').select('id, full_name').eq('email', email).maybeSingle();
+            console.log(`Intentando borrar usuario con correo: ${email}`);
 
-            const { error } = await supabase
+            // 1. Buscamos el ID del usuario usando su correo
+            const { data: user } = await supabase
                 .from('profiles')
-                .update({
-                    // status no existe en la tabla — se desactiva quitando el rol y renombrando el email
-                    role: 'user',
-                    email: `deleted_${Date.now()}_${email}`
-                })
-                .eq('email', email);
+                .select('id, full_name')
+                .eq('email', email)
+                .maybeSingle();
+
+            if (!user) {
+                return { success: false, error: 'Usuario no encontrado en la base de datos.' };
+            }
+
+            console.log(`ID encontrado: ${user.id}. Ejecutando Modo Dios (RPC)...`);
+
+            // 2. Ejecutamos la función SQL (RPC) para borrar de raíz (Auth, Profiles, limpia Inventario)
+            const { error } = await supabase.rpc('delete_auth_user', {
+                target_user_id: user.id
+            });
 
             if (error) {
-                if (error.code === 'PGRST116') return { success: false, error: 'Usuario no encontrado.' };
+                // AQUÍ ESTÁ EL TRUCO: Imprimir el error real en la consola
+                console.error("Detalle del error de Supabase:", JSON.stringify(error, null, 2));
                 throw error;
             }
 
-            // Audit log: registrar borrado de usuario
-            if (actorId && prev?.id) {
-                await auditService.log(actorId, 'SOFT_DELETE_USER', 'profiles', prev.id, {
+            // 3. Audit log: registrar que eliminamos al usuario
+            if (actorId) {
+                await auditService.log(actorId, 'HARD_DELETE_USER', 'profiles', user.id, {
                     deleted_email: email,
-                    name: prev.full_name
+                    name: user.full_name,
+                    details: 'Usuario eliminado completamente del sistema.'
                 });
             }
 
             return { success: true };
         } catch (error) {
-            return { success: false, error: 'No se pudo desactivar el usuario: ' + error.message };
+            console.error("Error crítico al eliminar:", error);
+            return { success: false, error: error.message || 'No se pudo eliminar el usuario de raíz.' };
         }
-    },
-
-    // Mantenemos la firma original por compatibilidad
-    async deleteUserFromProfiles(email) {
-        return this.softDeleteUser(email);
     },
 
     async updateUserRoles() {

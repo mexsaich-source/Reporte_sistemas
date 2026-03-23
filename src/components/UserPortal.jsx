@@ -34,8 +34,8 @@ const UserAgenda = () => {
 
             // Fetch loans from assets
             const data = await inventoryService.getAll();
-            const loanEvents = data.filter(item => 
-                (item.requestedById === user.id || item.loanUser === (user.email || user.id)) && 
+            const loanEvents = data.filter(item =>
+                (item.requestedById === user.id || item.loanUser === (user.email || user.id)) &&
                 ['request_pending', 'loaned', 'delivered', 'received', 'returned', 'denied'].includes(item.status)
             );
 
@@ -63,7 +63,7 @@ const UserAgenda = () => {
             }));
 
             const allEvents = [...formattedTickets, ...formattedLoans];
-            setEvents(allEvents.sort((a,b) => b.rawDate - a.rawDate));
+            setEvents(allEvents.sort((a, b) => b.rawDate - a.rawDate));
         } catch (err) {
             console.error(err);
         } finally {
@@ -83,7 +83,7 @@ const UserAgenda = () => {
             const updates = { status: nextStatus };
             if (nextStatus === 'received') updates.receivedAt = new Date().toISOString();
             if (nextStatus === 'returned') updates.returnedAt = new Date().toISOString();
-            
+
             await inventoryService.update(item.fullItem.id, updates);
             fetchEvents();
         }
@@ -92,7 +92,7 @@ const UserAgenda = () => {
     // Calendar logic
     const daysInMonth = (month, year) => new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = (month, year) => new Date(year, month, 1).getDay();
-    
+
     const month = currentDate.getMonth();
     const year = currentDate.getFullYear();
     const numDays = daysInMonth(month, year);
@@ -129,12 +129,12 @@ const UserAgenda = () => {
                 <div className="grid grid-cols-7 gap-1 text-center text-xs">
                     {/* Empty slots for first week */}
                     {Array.from({ length: startDay }).map((_, i) => <div key={`empty-${i}`} className="py-2.5"></div>)}
-                    
+
                     {Array.from({ length: numDays }, (_, i) => {
                         const day = i + 1;
                         const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
                         const dayHasEvent = hasEvent(day);
-                        
+
                         return (
                             <div key={day} className={`relative py-3 rounded-xl cursor-pointer transition-all duration-300 font-black group ${isToday ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/30' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 text-slate-600 dark:text-slate-400'}`}>
                                 {day}
@@ -200,28 +200,84 @@ const UserAgenda = () => {
 
 // --- SUBCOMPONENTE: Formulario de Nuevo Ticket ---
 const NewTicketForm = ({ onCancel, onSuccess }) => {
-    const { user } = useAuth();
+    const { user, profile } = useAuth(); // Perfil para el reporter_name y departamento
 
-    // Form state
-    const [deviceType, setDeviceType] = useState('Laptop');
+    // --- State para los equipos del usuario (Mis Equipos Asignados) ---
+    const [myAssets, setMyAssets] = useState([]);
+    const [loadingAssets, setLoadingAssets] = useState(true);
+
+    // --- State para el flujo dinámico ---
+    const [selectedCategoryId, setSelectedCategoryId] = useState(null); // ID de equipo (UUID) o 'category_otro_equipo', 'category_software', 'category_red'
+    const [selectedGenericDeviceType, setSelectedGenericDeviceType] = useState('Laptop'); // Solo si elige 'category_otro_equipo'
+
+    // Form state (Final data)
     const [title, setTitle] = useState('');
-    const [assetTag, setAssetTag] = useState('');
-    const [urgency, setUrgency] = useState('Media');
     const [description, setDescription] = useState('');
+    const [urgency, setUrgency] = useState('Media');
+    const [assetTag, setAssetTag] = useState(''); // Autocompletado si selecciona equipo, opcional/oculto en otros
 
     // UI state
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const deviceTypes = [
+    // Constantes genéricas (solo para 'category_otro_equipo')
+    const genericDeviceTypes = [
         { id: 'Laptop', icon: Laptop },
         { id: 'Monitor', icon: Monitor },
         { id: 'Desktop', icon: Settings },
         { id: 'Phone', icon: Smartphone },
     ];
 
+    // Cargar los equipos asignados al usuario al abrir el formulario
+    useEffect(() => {
+        const fetchMyAssets = async () => {
+            if (!user?.id) return;
+            try {
+                const { data, error } = await supabase
+                    .from('assets')
+                    .select('*')
+                    .eq('assigned_to', user.id);
+
+                if (error) throw error;
+                setMyAssets(data || []);
+            } catch (err) {
+                console.error("Error al cargar equipos del usuario:", err);
+            } finally {
+                setLoadingAssets(false);
+            }
+        };
+
+        fetchMyAssets();
+    }, [user]);
+
+    // --- Lógica del Flujo Dinámico (Árbol de Decisión) ---
+    const handleCategorySelection = (selection) => {
+        setSelectedGenericDeviceType('Laptop'); // Resetear genérico por si acaso
+
+        // Es un equipo del usuario?
+        if (typeof selection === 'object' && selection.id) {
+            setSelectedCategoryId(selection.id); // Guardamos el ID del equipo (UUID)
+            setAssetTag(selection.serial_number || selection.id || ''); // Autocompletar Tag
+            return;
+        }
+
+        // Es una categoría fija?
+        setSelectedCategoryId(selection); // 'category_otro_equipo', 'category_software', 'category_red'
+
+        if (selection === 'category_otro_equipo') {
+            setAssetTag(''); // Usuario debe ponerlo a mano u opcional
+        } else {
+            setAssetTag(''); // Software/Red no necesitan Tag
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (!selectedCategoryId) {
+            setError("Por favor, selecciona qué está fallando.");
+            return;
+        }
 
         if (!title.trim() || !description.trim()) {
             setError("El título y la descripción son obligatorios.");
@@ -232,9 +288,8 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
         setError(null);
 
         try {
-            // Asumiendo que el demo-user no puede insertar en la DB real.
             if (user?.id === 'demo-user') {
-                throw new Error("No puedes crear tickets reales en modo Demo. Usa una cuenta real.");
+                throw new Error("No puedes crear tickets reales en modo Demo.");
             }
 
             const urgencyMap = {
@@ -244,24 +299,44 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                 'Crítica': 'critical'
             };
 
+            // Determinar el device_type final según la categoría
+            let finalDeviceType = 'Hardware';
+
+            // Caso 1: Usuario eligió uno de "Mis Equipos"
+            if (myAssets.some(a => a.id === selectedCategoryId)) {
+                const myAsset = myAssets.find(a => a.id === selectedCategoryId);
+                finalDeviceType = myAsset.category || 'Hardware';
+
+                // Caso 2: Usuario eligió "Otro Equipo"
+            } else if (selectedCategoryId === 'category_otro_equipo') {
+                finalDeviceType = selectedGenericDeviceType;
+
+                // Caso 3: Usuario eligió Software/Red
+            } else if (selectedCategoryId === 'category_software') {
+                finalDeviceType = 'Software';
+            } else if (selectedCategoryId === 'category_red') {
+                finalDeviceType = 'Network';
+            }
+
+            // Payload final dinámico
             const newTicket = {
                 reported_by: user.id,
-                reporter_name: profile?.full_name || user.email || 'Usuario', 
+                reporter_name: profile?.full_name || user.email || 'Usuario',
                 title: title.trim(),
                 description: description.trim(),
-                device_type: deviceType,
-                asset_tag: assetTag.trim() || null,
+                device_type: finalDeviceType,
+                asset_tag: assetTag.trim() || null, // Nulo para Software/Red
                 urgency: urgencyMap[urgency] || 'medium',
-                status: 'pending_admin'
+                status: 'pending_admin',
+                department: profile?.department || 'General' // Útil para los reportes
             };
 
             const { error: insertError } = await supabase
-            .from('tickets')
-            .insert([newTicket]);
+                .from('tickets')
+                .insert([newTicket]);
 
             if (insertError) throw insertError;
 
-            // Success
             if (onSuccess) onSuccess();
             else onCancel();
 
@@ -273,6 +348,20 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
         }
     };
 
+    // Auxiliar: Determinar ícono de equipo de usuario
+    const getAssetIcon = (category) => {
+        const cat = (category || '').toLowerCase();
+        if (cat.includes('laptop')) return <Laptop size={24} />;
+        if (cat.includes('monitor')) return <Monitor size={24} />;
+        if (cat.includes('teléfono') || cat.includes('celular') || cat.includes('phone')) return <Smartphone size={24} />;
+        return <Desktop size={24} />; // Icono por defecto (Escritorio/Ajustes)
+    };
+
+    // Variables de control de renderizado (El "Cerebro" del formulario)
+    const isAssignedAssetSelected = myAssets.some(a => a.id === selectedCategoryId);
+    const showGenericIcons = selectedCategoryId === 'category_otro_equipo';
+    const showAssetTagInput = (selectedCategoryId === 'category_otro_equipo' || isAssignedAssetSelected);
+
     return (
         <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-800 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 transition-colors">
             <div className="p-8 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/30 flex justify-between items-center">
@@ -282,7 +371,7 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                     </div>
                     <div>
                         <h3 className="font-black text-slate-950 dark:text-white text-xl tracking-tight">Reportar Falla Técnica</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Completa los detalles para asignar un soporte.</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Llenado inteligente y dinámico.</p>
                     </div>
                 </div>
                 <button
@@ -302,27 +391,127 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                         </div>
                     )}
 
-                    {/* Device Selection Grid */}
-                    <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">1. Tipo de Dispositivo</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                            {deviceTypes.map((type) => (
+                    {/* --- 1. ¿Qué está fallando? (Selección Adaptativa) --- */}
+                    <div className="space-y-6">
+                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">1. ¿Qué está fallando?</label>
+
+                        {/* A) Mis Equipos Asignados */}
+                        {myAssets.length > 0 && (
+                            <div className="space-y-4">
+                                <span className="text-xs font-black text-slate-900 dark:text-white ml-1">Mis Equipos Asignados (Hardware)</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {myAssets.map((asset) => (
+                                        <button
+                                            key={asset.id}
+                                            type="button"
+                                            onClick={() => handleCategorySelection(asset)}
+                                            className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === asset.id
+                                                ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
+                                                : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                                }`}
+                                        >
+                                            <div className={`p-3 rounded-2xl ${selectedCategoryId === asset.id ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                                {getAssetIcon(asset.category)}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-black truncate">{asset.brand} {asset.model}</p>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">S/N: {asset.serial_number || 'N/A'}</p>
+                                            </div>
+                                            {selectedCategoryId === asset.id && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* B) Otras Categorías Fijas */}
+                        <div className="space-y-4">
+                            <span className="text-xs font-black text-slate-900 dark:text-white ml-1">Otras Categorías / Servicios</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {/* Otro Equipo */}
                                 <button
-                                    key={type.id}
                                     type="button"
-                                    onClick={() => setDeviceType(type.id)}
-                                    className={`flex flex-col items-center gap-3 p-5 rounded-3xl border-2 transition-all duration-300 ${deviceType === type.id
-                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-lg shadow-blue-500/5'
-                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                    onClick={() => handleCategorySelection('category_otro_equipo')}
+                                    className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_otro_equipo'
+                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
+                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                                         }`}
                                 >
-                                    <type.icon size={28} strokeWidth={deviceType === type.id ? 2.5 : 2} />
-                                    <span className="text-xs font-black uppercase tracking-widest">{type.id}</span>
+                                    <div className={`p-3 rounded-2xl ${selectedCategoryId === 'category_otro_equipo' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                        <Monitor size={24} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-black truncate">Otro Equipo</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">Impresora, Proyector</p>
+                                    </div>
+                                    {selectedCategoryId === 'category_otro_equipo' && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
                                 </button>
-                            ))}
+
+                                {/* Software */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleCategorySelection('category_software')}
+                                    className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_software'
+                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
+                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                        }`}
+                                >
+                                    <div className={`p-3 rounded-2xl ${selectedCategoryId === 'category_software' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                        <Settings size={24} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-black truncate">Software/Apps</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">Windows, Office, SAP</p>
+                                    </div>
+                                    {selectedCategoryId === 'category_software' && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
+                                </button>
+
+                                {/* Red */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleCategorySelection('category_red')}
+                                    className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_red'
+                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
+                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                        }`}
+                                >
+                                    <div className={`p-3 rounded-2xl ${selectedCategoryId === 'category_red' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                        <Smartphone size={24} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-black truncate">Red e Internet</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">WiFi, VPN, Correo</p>
+                                    </div>
+                                    {selectedCategoryId === 'category_red' && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
+                    {/* NUEVO: Mostrar iconos genéricos SOLO si eligió "Otro Equipo" (Hardware genérico) */}
+                    {showGenericIcons && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 bg-slate-50/50 dark:bg-slate-900/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Tipo de Dispositivo Genérico</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                {genericDeviceTypes.map((type) => (
+                                    <button
+                                        key={type.id}
+                                        type="button"
+                                        onClick={() => setSelectedGenericDeviceType(type.id)}
+                                        className={`flex flex-col items-center gap-3 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedGenericDeviceType === type.id
+                                            ? 'border-slate-400 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                            : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 hover:border-slate-200 dark:hover:border-slate-700'
+                                            }`}
+                                    >
+                                        <type.icon size={24} strokeWidth={selectedGenericDeviceType === type.id ? 2.5 : 2} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">{type.id}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- Detalles del Reporte --- */}
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="group space-y-2">
@@ -331,20 +520,30 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                                     type="text"
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
-                                    placeholder="Ej: Laptop no conecta a WiFi"
+                                    placeholder="Ej: La pantalla parpadea"
                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 dark:focus:border-blue-500 transition-all font-medium text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600"
                                 />
                             </div>
-                            <div className="group space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">ID de Activo / Asset Tag</label>
-                                <input
-                                    type="text"
-                                    value={assetTag}
-                                    onChange={(e) => setAssetTag(e.target.value)}
-                                    placeholder="Ej: MEX-LAP-042"
-                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 dark:focus:border-blue-500 transition-all font-medium text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600"
-                                />
-                            </div>
+
+                            {/* NUEVO: Ocultar o Bloquear el Asset Tag automáticamente */}
+                            {showAssetTagInput && (
+                                <div className="group space-y-2 animate-in fade-in slide-in-from-top-2">
+                                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">
+                                        ID de Activo / Serie {isAssignedAssetSelected && '(Autocompletado)'}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={assetTag}
+                                        onChange={(e) => setAssetTag(e.target.value)}
+                                        readOnly={isAssignedAssetSelected} // Bloquear si es equipo asignado
+                                        placeholder={selectedCategoryId === 'category_otro_equipo' ? "Opcional (Ej. MEX-IMP-001)" : "Selecciona un equipo arriba"}
+                                        className={`w-full border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-3 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 dark:focus:border-blue-500 transition-all font-medium text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 ${isAssignedAssetSelected
+                                                ? 'bg-slate-100 dark:bg-slate-900/80 opacity-70 cursor-not-allowed' // Estilo bloqueado
+                                                : 'bg-slate-50 dark:bg-slate-800'
+                                            }`}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <div className="group space-y-2">
@@ -376,41 +575,6 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 px-5 py-4 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 dark:focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600 font-medium text-sm resize-none"
                             ></textarea>
                         </div>
-
-                        <div className="group space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Evidencia Visual (Opcional)</label>
-                            <label className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 rounded-3xl p-6 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer">
-                                <input type="file" className="hidden" accept="image/*" />
-                                <div className="bg-white dark:bg-slate-800 p-2.5 rounded-full shadow-sm text-blue-500 mb-1">
-                                    <ImagePlus size={20} />
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Subir Captura de Pantalla</p>
-                                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-1">PNG, JPG hasta 5MB</p>
-                                </div>
-                            </label>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div className="space-y-2 text-slate-400 bg-emerald-50/30 dark:bg-emerald-500/5 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-500/20 flex items-center gap-3">
-                                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm">
-                                    <AlertCircle size={18} className="text-emerald-600 dark:text-emerald-400" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest leading-tight">Ubicación Actual</span>
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-tight">Detección Automática por Red</span>
-                                </div>
-                            </div>
-                            <div className="space-y-2 text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex items-center gap-3">
-                                <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm">
-                                    <AlertCircle size={18} className="text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-tight">Tiempo de Respuesta</span>
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 leading-tight">SLA Estándar (4h laborables)</span>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <div className="pt-6 flex gap-4">
@@ -418,14 +582,14 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                             type="button"
                             onClick={onCancel}
                             disabled={loading}
-                            className="flex-1 px-8 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-black uppercase text-xs tracking-[0.2em] hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all font-bold disabled:opacity-50"
+                            className="flex-1 px-8 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-black uppercase text-xs tracking-[0.2em] hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all disabled:opacity-50"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex-[2] bg-slate-950 dark:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-slate-900/20 dark:shadow-blue-900/20 hover:bg-blue-600 dark:hover:bg-blue-500 hover:shadow-blue-600/20 transition-all hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex-[2] bg-slate-950 dark:bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] flex items-center justify-center gap-3 shadow-xl shadow-slate-900/20 dark:shadow-blue-900/20 hover:bg-blue-600 dark:hover:bg-blue-500 hover:shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? (
                                 <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
@@ -437,69 +601,6 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                     </div>
                 </form>
             </div>
-        </div>
-    );
-};
-
-// --- SUBCOMPONENTE: Lista de Tickets del Usuario ---
-const UserTicketList = ({ tickets }) => {
-    const [selectedTicket, setSelectedTicket] = useState(null);
-
-    if (!tickets || tickets.length === 0) {
-        return <div className="p-8 text-center text-slate-500 font-medium border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">No hay reportes recientes.</div>;
-    }
-
-    return (
-        <div className="space-y-3">
-            {tickets.map((ticket) => (
-                <div
-                    key={ticket.id}
-                    onClick={() => setSelectedTicket(ticket)}
-                    className="group relative bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl flex items-center justify-between transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/40 dark:hover:shadow-none cursor-pointer overflow-hidden"
-                >
-                    {/* Accent Line on Hover */}
-                    <div className="absolute left-0 top-0 w-1 h-full bg-blue-600 scale-y-0 group-hover:scale-y-100 transition-transform duration-300 origin-top"></div>
-
-                    <div className="flex items-center gap-6 flex-1 min-w-0">
-                        <div className="flex flex-col shrink-0">
-                            <div className="flex items-center gap-1 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">
-                                <Hash size={10} />
-                                ID
-                            </div>
-                            <span className="font-black text-blue-600 dark:text-blue-400 text-sm tracking-tight">{ticket.displayId}</span>
-                        </div>
-
-                        <div className="h-10 w-px bg-slate-100 dark:bg-slate-800"></div>
-
-                        <div className="flex flex-col flex-1 min-w-0">
-                            <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                {ticket.issue}
-                            </h4>
-                            <div className="flex items-center gap-3 mt-1.5">
-                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors uppercase tracking-widest">
-                                    {ticket.tech}
-                                </span>
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                                    {ticket.date}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 group-hover:scale-105 transition-all">
-                            <TicketStatusBadge status={ticket.status} withIcon size="lg" />
-                        </div>
-                    </div>
-                    <div className="ml-6 p-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-300 dark:text-slate-600 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-all group-hover:rotate-90">
-                        <ChevronRight size={18} />
-                    </div>
-                </div>
-            ))}
-
-            <TicketDetailSlider
-                ticket={selectedTicket}
-                isOpen={!!selectedTicket}
-                onClose={() => setSelectedTicket(null)}
-            />
         </div>
     );
 };

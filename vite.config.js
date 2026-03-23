@@ -7,6 +7,6 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    allowedHosts: ['debian-wants-manufacturer-word.trycloudflare.com'] // <- sin https://
+    allowedHosts: ['yesterday-worth-rough-put.trycloudflare.com'] // <- sin https://
   }
 })
