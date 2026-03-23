@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabaseClient';
 const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateTicket }) => {
     const { profile, user } = useAuth();
     const isTechOrAdmin = profile?.role === 'admin' || profile?.role === 'tech' || profile?.role === 'técnico';
-    
+
     const [messages, setMessages] = React.useState([]);
     const [newMessage, setNewMessage] = React.useState('');
     const [isSending, setIsSending] = React.useState(false);
@@ -101,10 +101,10 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                     sender_id: user.id,
                     message: newMessage.trim()
                 }]);
-            
+
             if (error) throw error;
             setNewMessage('');
-            
+
             const { data: ticketData } = await supabase.from('tickets').select('reported_by, assigned_tech').eq('id', ticketId).single();
             if (ticketData) {
                 const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
@@ -129,9 +129,9 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     // ==========================================
     const handleDownloadReceipt = () => {
         const printDate = new Date().toLocaleString('es-MX');
-        const reporterName = ticket?.reportedBy || "Desconocido"; 
-        const techName = ticket?.tech || "Técnico Asignado"; 
-        
+        const reporterName = ticket?.reportedBy || "Desconocido";
+        const techName = ticket?.tech || "Técnico Asignado";
+
         const receiptHTML = `
             <!DOCTYPE html>
             <html>
@@ -202,7 +202,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                     <div class="divider"></div>
                     
                     <div class="text-center" style="margin-top: 20px; font-size: 12px;">
-                        ¡Problema solucionado!<br>
+                        ¡Ticket cerrado!<br>
                         Gracias por utilizar nuestro sistema.
                     </div>
 
@@ -267,10 +267,10 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <span className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Reportado por</span>
                             <span className="text-slate-900 dark:text-slate-200 font-semibold">{ticket?.reportedBy}</span>
                         </div>
-                        
+
                         <div className="flex border-t border-slate-200 dark:border-slate-700 pt-6 mt-2 flex-col gap-4">
                             {isAdmin && ticket?.status === 'pending_admin' && !ticket?.assigned_tech && (
-                                <button 
+                                <button
                                     onClick={() => onUpdateTicket(ticket.fullId, { assigned_tech: user.id, status: 'assigned' }, user.id)}
                                     className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all"
                                 >
@@ -281,7 +281,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             {isAdmin && (
                                 <div className="space-y-2">
                                     <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest ml-1">Asignar a Técnico</label>
-                                    <select 
+                                    <select
                                         className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
                                         value={ticket?.assigned_tech || ''}
                                         onChange={(e) => onUpdateTicket(ticket.fullId, { assigned_tech: e.target.value, status: e.target.value ? 'assigned' : 'pending_admin' }, user.id)}
@@ -297,7 +297,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             {isTechOrAdmin && ticket?.assigned_tech && (
                                 <div className="space-y-2">
                                     <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest ml-1">Estado del Ticket</label>
-                                    <select 
+                                    <select
                                         className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
                                         value={ticket?.status || 'pending_admin'}
                                         onChange={(e) => onUpdateTicket(ticket.fullId, { status: e.target.value }, user.id)}
@@ -372,7 +372,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                 <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                     {isClosed ? (
                         <div className="flex flex-col gap-3">
-                            <button 
+                            <button
                                 onClick={handleDownloadReceipt}
                                 className="w-full bg-slate-900 dark:bg-slate-700 text-white py-3 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-slate-600 transition-all shadow-md active:scale-95"
                             >
@@ -387,16 +387,16 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <button className="text-slate-400 p-2.5 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all" disabled={isSending}>
                                 <Paperclip size={18} />
                             </button>
-                            <input 
-                                type="text" 
-                                placeholder="Escribe un mensaje..." 
+                            <input
+                                type="text"
+                                placeholder="Escribe un mensaje..."
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                                 disabled={isSending}
-                                className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 dark:text-slate-200 font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 px-2" 
+                                className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 dark:text-slate-200 font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 px-2"
                             />
-                            <button 
+                            <button
                                 onClick={handleSendMessage}
                                 disabled={isSending || !newMessage.trim()}
                                 className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 hover:shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
