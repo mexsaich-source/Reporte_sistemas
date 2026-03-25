@@ -1,4 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
+import { userService } from './userService';
+import { notificationService } from './notificationService';
 
 // Estos son los estados que tu React UI conoce y usa
 export const TICKET_STATUS = {
@@ -47,8 +49,17 @@ export const ticketService = {
 
             if (error) throw error;
             
+            // Map users
+            const users = await userService.getAll();
+            const userMap = users.reduce((acc, user) => { 
+                acc[user.id] = user; 
+                return acc; 
+            }, {});
+
             return data.map(ticket => ({
                 ...ticket,
+                profiles: userMap[ticket.reported_by] || null,
+                tech_profile: userMap[ticket.assigned_tech] || null,
                 status: toUIStatus(ticket.status, ticket.assigned_tech)
             }));
         } catch (error) {
@@ -90,11 +101,14 @@ export const ticketService = {
                         recipients
                             .map(r => r?.id)
                             .filter(Boolean)
-                            .map(recipientId =>
-                                supabase.from('notifications').insert([
+                            .map(async (recipientId) => {
+                                // Notificación en BD
+                                await supabase.from('notifications').insert([
                                     { user_id: recipientId, title, message }
-                                ])
-                            )
+                                ]);
+                                // Notificación PUSH (Plan B)
+                                await notificationService.sendPushToUser(recipientId, title, message);
+                            })
                     );
                 }
             } catch (notifyErr) {
@@ -190,11 +204,14 @@ export const ticketService = {
                         }
 
                         await Promise.all(
-                            recipientIds.map(recipientId =>
-                                supabase.from('notifications').insert([
+                            recipientIds.map(async (recipientId) => {
+                                // Notificación en BD
+                                await supabase.from('notifications').insert([
                                     { user_id: recipientId, title, message }
-                                ])
-                            )
+                                ]);
+                                // Notificación PUSH (Plan B)
+                                await notificationService.sendPushToUser(recipientId, title, message);
+                            })
                         );
                     }
                 }

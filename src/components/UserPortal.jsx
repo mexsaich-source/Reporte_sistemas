@@ -11,6 +11,8 @@ import TicketDetailSlider from './TicketDetailSlider';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
 import { inventoryService } from '../services/inventoryService';
+import { userService } from '../services/userService';
+import { ticketService } from '../services/ticketService';
 import GeneralRequestForm from './GeneralRequestForm';
 import TermsModal from './TermsModal';
 
@@ -318,24 +320,23 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                 finalDeviceType = 'Network';
             }
 
-            // Payload final dinámico
+            // Compilar los datos en la descripción para no romper la base de datos
+            const fullDescription = `[Dispositivo: ${finalDeviceType}]
+${assetTag.trim() ? `[Etiqueta/Serie: ${assetTag.trim()}]\n` : ''}
+${description.trim()}`;
+
+            // Payload final dinámico (Solo columnas válidas de la BD)
             const newTicket = {
-                reported_by: user.id,
-                reporter_name: profile?.full_name || user.email || 'Usuario',
                 title: title.trim(),
-                description: description.trim(),
-                device_type: finalDeviceType,
-                asset_tag: assetTag.trim() || null, // Nulo para Software/Red
+                description: fullDescription,
                 urgency: urgencyMap[urgency] || 'medium',
                 status: 'pending_admin',
-                department: profile?.department || 'General' // Útil para los reportes
+                reported_by: user.id
             };
 
-            const { error: insertError } = await supabase
-                .from('tickets')
-                .insert([newTicket]);
+            const res = await ticketService.create(newTicket);
 
-            if (insertError) throw insertError;
+            if (!res) throw new Error("Ocurrió un error al guardar el reporte.");
 
             if (onSuccess) onSuccess();
             else onCancel();
@@ -605,6 +606,40 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
     );
 };
 
+// --- SUBCOMPONENTE: Lista de Tickets del Usuario ---
+const UserTicketList = ({ tickets, onTicketClick }) => {
+    return (
+        <div className="space-y-4">
+            {tickets.map((ticket) => (
+                <div 
+                    key={ticket.id} 
+                    onClick={() => onTicketClick && onTicketClick(ticket)}
+                    className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-blue-500/50 transition-all cursor-pointer group bg-slate-50/30 dark:bg-slate-800/30 hover:bg-white dark:hover:bg-slate-800"
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold text-xs border border-blue-500/20">
+                                #{ticket.shortId}
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors uppercase tracking-tight text-sm">
+                                    {ticket.issue}
+                                </h4>
+                                <div className="flex items-center gap-3 mt-1">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{ticket.date}</span>
+                                    <span className="text-[10px] text-slate-300">•</span>
+                                    <span className="text-[10px] text-slate-500 font-medium">Técnico: {ticket.tech}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <TicketStatusBadge status={ticket.status} withIcon size="sm" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 // --- COMPONENTE PRINCIPAL: Portal de Usuario ---
 const UserPortal = () => {
     const { user, profile } = useAuth();
@@ -616,6 +651,7 @@ const UserPortal = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [termsType, setTermsType] = useState('terms');
+    const [selectedTicket, setSelectedTicket] = useState(null);
 
     const fetchMyTickets = async () => {
         if (!user) return;
@@ -629,6 +665,10 @@ const UserPortal = () => {
 
             if (error) throw error;
 
+            // Get users to map assigned tech
+            const users = await userService.getAll();
+            const userMap = users.reduce((acc, u) => { acc[u.id] = u; return acc; }, {});
+
             // Compute stats
             let open = 0, pending = 0, resolved = 0;
             const formattedTickets = data.map(t => {
@@ -638,11 +678,15 @@ const UserPortal = () => {
                 if (s === 'assigned' || s === 'in_progress') pending++;
                 if (s === 'resolved') resolved++;
 
+                const techUser = t.assigned_tech ? userMap[t.assigned_tech] : null;
+
                 return {
                     id: t.id,
                     displayId: String(t.id).substring(0, 8).toUpperCase(),
+                    shortId: String(t.id).substring(0, 4),
                     issue: t.title,
-                    tech: t.assigned_tech ? 'Técnico Asignado' : 'Sin Asignar',
+                    tech: techUser ? techUser.full_name : 'Sin Asignar',
+                    reportedBy: profile?.full_name || user.email || 'Desconocido',
                     status: t.status,
                     date: new Date(t.created_at).toLocaleDateString()
                 };
@@ -713,7 +757,10 @@ const UserPortal = () => {
                                         No hay reportes que coincidan con la búsqueda.
                                     </div>
                                 ) : (
-                                    <UserTicketList tickets={filteredMyTickets} />
+                                    <UserTicketList 
+                                        tickets={filteredMyTickets} 
+                                        onTicketClick={(t) => setSelectedTicket({ ...t, fullId: t.id })}
+                                    />
                                 )}
                             </div>
                         </div>
@@ -793,7 +840,10 @@ const UserPortal = () => {
                                         No hay reportes que coincidan con la búsqueda.
                                     </div>
                                 ) : (
-                                    <UserTicketList tickets={filteredMyTickets} />
+                                    <UserTicketList 
+                                        tickets={filteredMyTickets} 
+                                        onTicketClick={(t) => setSelectedTicket({ ...t, fullId: t.id })}
+                                    />
                                 )}
                             </div>
                         </div>
@@ -896,6 +946,17 @@ const UserPortal = () => {
                 isOpen={isTermsOpen}
                 onClose={() => setIsTermsOpen(false)}
                 type={termsType}
+            />
+
+            <TicketDetailSlider
+                ticket={selectedTicket}
+                isOpen={!!selectedTicket}
+                onClose={() => setSelectedTicket(null)}
+                onUpdateTicket={async (id, updates) => {
+                    await ticketService.update(id, updates);
+                    fetchMyTickets();
+                    setSelectedTicket(null);
+                }}
             />
         </div>
     );

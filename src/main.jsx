@@ -5,6 +5,10 @@ import { ThemeProvider } from './context/ThemeContext'
 import AuthProvider from './context/AuthContext'
 import './index.css'
 import App from './App.jsx'
+import { notificationService } from './services/notificationService.js'
+
+// Inicializar Service Worker
+notificationService.registerServiceWorker();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

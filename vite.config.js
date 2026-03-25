@@ -7,6 +7,6 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    allowedHosts: ['yesterday-worth-rough-put.trycloudflare.com'] // <- sin https://
+    allowedHosts: ['exterior-tmp-coleman-quotes.trycloudflare.com'] // <- sin https://
   }
 })

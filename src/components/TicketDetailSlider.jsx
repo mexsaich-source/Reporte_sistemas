@@ -128,7 +128,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     // NUEVA FUNCIÓN: Generador de Recibo Térmico
     // ==========================================
     const handleDownloadReceipt = () => {
-        const printDate = new Date().toLocaleString('es-MX');
+        const printDate = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
         const reporterName = ticket?.reportedBy || "Desconocido";
         const techName = ticket?.tech || "Técnico Asignado";
 
@@ -136,87 +136,118 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             <!DOCTYPE html>
             <html>
                 <head>
-                    <title>Comprobante Ticket #${ticket?.id}</title>
+                    <title>Comprobante Ticket #${ticket?.shortId || ticket?.id?.toString().substring(0, 8)}</title>
                     <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
                         body {
-                            font-family: 'Courier New', Courier, monospace;
-                            width: 300px;
+                            font-family: 'Courier Prime', 'Courier New', monospace;
+                            width: 380px;
                             margin: 0 auto;
-                            padding: 20px;
-                            color: #000;
+                            padding: 30px 20px;
+                            color: #1a1a1a;
                             font-size: 14px;
-                            line-height: 1.4;
+                            line-height: 1.5;
+                            background-color: #fff;
                         }
-                        .header { text-align: center; margin-bottom: 15px; }
-                        .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
-                        .subtitle { font-size: 14px; }
-                        .divider { border-top: 1px dashed #000; margin: 15px 0; }
-                        .row { display: flex; justify-content: space-between; margin: 5px 0; }
-                        .label { font-weight: bold; }
-                        .text-center { text-align: center; }
-                        .content-box { margin: 15px 0; }
-                        .content-box .label { margin-bottom: 5px; display: block; }
-                        .data-text { margin-left: 10px; }
+                        .ticket-container {
+                            border: 2px dashed #d1d5db;
+                            border-radius: 16px;
+                            padding: 24px;
+                            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+                        }
+                        .header { text-align: center; margin-bottom: 24px; }
+                        .logo { font-size: 28px; font-weight: 700; letter-spacing: -1px; margin-bottom: 4px; }
+                        .subtitle { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 2px; }
+                        .divider { border-top: 1px dashed #d1d5db; margin: 20px 0; }
+                        .row { display: flex; justify-content: space-between; margin: 8px 0; align-items: baseline; }
+                        .label { font-weight: 700; color: #4b5563; font-size: 12px; text-transform: uppercase; }
+                        .value { font-weight: 700; font-size: 14px; text-align: right; }
+                        .badge { background: #111827; color: white; padding: 4px 12px; border-radius: 99px; font-size: 12px; }
+                        .content-box { margin: 24px 0; background: #f9fafb; padding: 16px; border-radius: 12px; border: 1px solid #f3f4f6; }
+                        .content-box .label { margin-bottom: 8px; display: block; color: #111827; }
+                        .data-text { font-size: 14px; color: #374151; font-weight: 400; }
+                        .person-row { display: flex; align-items: center; justify-content: space-between; margin: 12px 0; padding-bottom: 12px; border-bottom: 1px solid #f3f4f6; }
+                        .person-row:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+                        .person-title { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+                        .person-name { font-weight: 700; font-size: 14px; }
+                        .footer { text-align: center; margin-top: 32px; font-size: 12px; color: #6b7280; }
+                        .barcode { margin-top: 16px; text-align: center; font-family: 'Libre Barcode 39', cursive; font-size: 48px; }
+                        @media print {
+                            body { width: 100%; padding: 0; background: white; }
+                            .ticket-container { border: none; box-shadow: none; padding: 0; }
+                        }
                     </style>
                 </head>
                 <body>
-                    <div class="header">
-                        <div class="title">IT HELPDESK</div>
-                        <div class="subtitle">Comprobante de Solución</div>
-                    </div>
-                    
-                    <div class="divider"></div>
-                    
-                    <div class="row">
-                        <span class="label">Ticket #:</span>
-                        <span>${ticket?.id}</span>
-                    </div>
-                    <div class="row">
-                        <span class="label">Fecha Solución:</span>
-                        <span>${printDate}</span>
-                    </div>
-                    <div class="row">
-                        <span class="label">Estado:</span>
-                        <span>RESUELTO</span>
-                    </div>
+                    <div class="ticket-container">
+                        <div class="header">
+                            <div class="logo">IT HELPDESK</div>
+                            <div class="subtitle">Comprobante de Servicio</div>
+                        </div>
+                        
+                        <div class="row" style="margin-top: 24px;">
+                            <span class="label">No. Folio:</span>
+                            <span class="badge">#${ticket?.shortId || ticket?.id?.toString().substring(0, 8)}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Fecha Solución:</span>
+                            <span class="value">${printDate}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Estado Actual:</span>
+                            <span class="value" style="color: #059669;">RESUELTO</span>
+                        </div>
 
-                    <div class="divider"></div>
-                    
-                    <div class="content-box">
-                        <span class="label">Petición / Falla:</span>
-                        <div class="data-text">${ticket?.issue || 'Sin descripción'}</div>
-                    </div>
+                        <div class="divider"></div>
+                        
+                        <div class="content-box">
+                            <span class="label">Detalle del Requerimiento:</span>
+                            <div class="data-text">${ticket?.issue || 'Sin descripción'}</div>
+                        </div>
 
-                    <div class="divider"></div>
+                        <div class="divider"></div>
 
-                    <div class="content-box">
-                        <span class="label">Reportado por:</span>
-                        <div class="data-text">${reporterName}</div>
-                    </div>
+                        <div class="person-row">
+                            <div>
+                                <div class="person-title">Reportado por</div>
+                                <div class="person-name">${reporterName}</div>
+                            </div>
+                        </div>
 
-                    <div class="content-box">
-                        <span class="label">Atendido por:</span>
-                        <div class="data-text">${techName}</div>
-                    </div>
+                        <div class="person-row">
+                            <div>
+                                <div class="person-title">Atendido y Solucionado por</div>
+                                <div class="person-name">${techName}</div>
+                            </div>
+                        </div>
 
-                    <div class="divider"></div>
-                    
-                    <div class="text-center" style="margin-top: 20px; font-size: 12px;">
-                        ¡Ticket cerrado!<br>
-                        Gracias por utilizar nuestro sistema.
+                        <div class="divider"></div>
+                        
+                        <div class="footer">
+                            <p style="margin-bottom: 4px; font-weight: 700; color: #111827;">¡Ticket Cerrado!</p>
+                            <p>Este comprobante certifica la atención y solución del requerimiento técnico.</p>
+                            <div class="barcode">*${ticket?.shortId || ticket?.id?.toString().substring(0, 8)}*</div>
+                        </div>
                     </div>
 
                     <script>
                         window.onload = () => { 
-                            window.print(); 
-                            setTimeout(() => window.close(), 500); 
+                            let link = document.createElement('link');
+                            link.href = 'https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap';
+                            link.rel = 'stylesheet';
+                            document.head.appendChild(link);
+                            
+                            setTimeout(() => {
+                                window.print(); 
+                                setTimeout(() => window.close(), 500); 
+                            }, 800);
                         }
                     </script>
                 </body>
             </html>
         `;
 
-        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        const printWindow = window.open('', '_blank', 'width=450,height=800');
         if (printWindow) {
             printWindow.document.write(receiptHTML);
             printWindow.document.close();

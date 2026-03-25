@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabaseClient';
+import { supabase, supabaseAdmin } from '../lib/supabaseClient';
 import { auditService } from './auditService';
 
 export const userService = {
@@ -57,8 +57,8 @@ export const userService = {
                 return { success: false, error: "Este usuario ya tiene un perfil en el Directorio." };
             }
 
-            // 2. Registro en Auth enviando los metadatos
-            const { data, error } = await supabase.auth.signUp({
+            // 2. Registro en Auth usando el cliente secudario sin persistencia
+            const { data, error } = await supabaseAdmin.auth.signUp({
                 email,
                 password,
                 options: {

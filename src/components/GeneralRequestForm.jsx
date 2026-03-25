@@ -38,20 +38,21 @@ const GeneralRequestForm = ({ onCancel, onSuccess }) => {
         setIsSubmitting(true);
 
         try {
+            const fullObservations = `[Departamento: ${formData.department}]\n${formData.observations}`;
+
             const { error } = await supabase
                 .from('general_requests')
                 .insert([{
                     user_id: user.id,
                     first_name: formData.first_name,
                     last_name: formData.last_name,
-                    department: formData.department,
                     subject: formData.subject,
                     reason: formData.reason,
                     is_loan: formData.is_loan,
                     serial_number: formData.is_loan ? formData.serial_number : null,
                     loan_start_date: formData.is_loan ? formData.loan_start_date : null,
                     loan_end_date: formData.is_loan ? formData.loan_end_date : null,
-                    observations: formData.observations,
+                    observations: fullObservations,
                     status: 'pending'
                 }]);
 
