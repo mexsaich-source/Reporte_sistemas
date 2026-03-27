@@ -41,6 +41,7 @@ const Header = ({ userName = "Usuario", userType = "Operativo", onMenuClick, sea
         };
         fetchNotifs();
         
+        // Supabase Real-time (Plan B respaldo)
         const channelName = `header_notifs_${user.id}`;
         const channel = supabase.channel(channelName)
             .on('postgres_changes', { 
@@ -49,7 +50,7 @@ const Header = ({ userName = "Usuario", userType = "Operativo", onMenuClick, sea
                 table: 'notifications', 
                 filter: `user_id=eq.${user.id}` 
             }, payload => {
-                console.log('Nueva notificación recibida en tiempo real:', payload.new);
+                console.log('Nueva notificación recibida en tiempo real (Supabase):', payload.new);
                 const newNotif = payload.new;
                 setNotifications(prev => {
                     const exists = prev.some(n => n.id === newNotif.id);
@@ -57,12 +58,38 @@ const Header = ({ userName = "Usuario", userType = "Operativo", onMenuClick, sea
                     return [newNotif, ...prev].slice(0, 10);
                 });
                 
-                // Show native push notification when app is open
+                // Show native push notification when app is open (Supabase fallback)
                 notificationService.showLocalNotification(newNotif.title, newNotif.message);
             })
             .subscribe((status) => {
                 console.log(`Suscripción de notificaciones (${channelName}) estado:`, status);
             });
+
+        // Firebase Foreground Push (Plan C Principal)
+        import('../lib/firebaseClient').then(({ onMessageListener }) => {
+            const startListening = () => {
+                onMessageListener().then(payload => {
+                    console.log('Push en primer plano (Firebase):', payload);
+                    const title = payload.notification?.title || 'Nuevo aviso';
+                    const body = payload.notification?.body || '';
+                    
+                    // Show local notification using standard API
+                    notificationService.showLocalNotification(title, body);
+                    
+                    // Add purely visual notification item if it's not already from real-time
+                    setNotifications(prev => {
+                        const exists = prev.some(n => n.title === title && n.message === body);
+                        if (exists) return prev;
+                        const fakeId = Math.random();
+                        return [{ id: fakeId, title, message: body, is_read: false, created_at: new Date().toISOString() }, ...prev].slice(0, 10);
+                    });
+                    
+                    // Loop listener to catch next messages
+                    startListening();
+                }).catch(err => console.log('Error Firebase listener:', err));
+            };
+            startListening();
+        });
             
         return () => {
             supabase.removeChannel(channel);

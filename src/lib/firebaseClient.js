@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getMessaging } from "firebase/messaging";
+import { getMessaging, onMessage as firebaseOnMessage } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDYUTD9r-797Dusa31767bbAywhqdocRJY",
@@ -17,5 +17,14 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase Cloud Messaging and get a reference to the service
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
 export const VAPID_KEY = "BPi9AeahyK4TJjFbYgjZSSEA9WDa2EqwwluHaDBuVaU4uPVmY6BsQ2JZwdm5RSo7yiLfT7tE13sMHQk8jRKP6FU";
+
+export const onMessageListener = () =>
+  new Promise((resolve) => {
+    if (messaging) {
+      firebaseOnMessage(messaging, (payload) => {
+        resolve(payload);
+      });
+    }
+  });
 
 export default app;

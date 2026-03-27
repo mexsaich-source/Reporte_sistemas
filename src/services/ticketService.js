@@ -1,7 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
 import { userService } from './userService';
-import { notificationService } from './notificationService';
-
 // Estos son los estados que tu React UI conoce y usa
 export const TICKET_STATUS = {
     PENDING_ADMIN: 'pending_admin',
@@ -85,36 +83,6 @@ export const ticketService = {
             
             if (data && data.status) data.status = toUIStatus(data.status, data.assigned_tech);
 
-            // Notificaciones
-            try {
-                const { data: recipients } = await supabase
-                    .from('profiles')
-                    .select('id, role')
-                    .in('role', ['admin', 'tech', 'técnico']);
-
-                const ticketTitle = data?.title ? String(data.title) : 'Nuevo ticket';
-                const title = `Nuevo ticket #${data?.id ?? ''}`.trim();
-                const message = `Se registró un nuevo reporte: ${ticketTitle}`;
-
-                if (recipients?.length) {
-                    await Promise.all(
-                        recipients
-                            .map(r => r?.id)
-                            .filter(Boolean)
-                            .map(async (recipientId) => {
-                                // Notificación en BD
-                                await supabase.from('notifications').insert([
-                                    { user_id: recipientId, title, message }
-                                ]);
-                                // Notificación PUSH (Plan B)
-                                await notificationService.sendPushToUser(recipientId, title, message);
-                            })
-                    );
-                }
-            } catch (notifyErr) {
-                console.warn('Ticket create notification failed:', notifyErr);
-            }
-
             return data;
         } catch (error) {
             console.error("Error creating ticket:", error);
@@ -190,30 +158,7 @@ export const ticketService = {
                         ]);
                     }
 
-                    const recipientIds = [...recipients].filter(rid => rid && rid !== actorId);
-                    if (recipientIds.length > 0) {
-                        let title = `Ticket #${id}`;
-                        let message = 'Tu ticket fue actualizado.';
 
-                        if (statusChanged) {
-                            if (newStatus === 'assigned') message = 'Tu ticket fue tomado y asignado al técnico.';
-                            else if (newStatus === 'in_progress') message = 'Tu ticket ya está en proceso.';
-                            else if (newStatus === 'resolved') message = 'Tu ticket fue resuelto. ¡Gracias!';
-                        } else {
-                            message = cleanUpdates.assigned_tech ? 'Tu ticket fue asignado a un nuevo técnico.' : 'Tu ticket fue desasignado.';
-                        }
-
-                        await Promise.all(
-                            recipientIds.map(async (recipientId) => {
-                                // Notificación en BD
-                                await supabase.from('notifications').insert([
-                                    { user_id: recipientId, title, message }
-                                ]);
-                                // Notificación PUSH (Plan B)
-                                await notificationService.sendPushToUser(recipientId, title, message);
-                            })
-                        );
-                    }
                 }
             }
 
