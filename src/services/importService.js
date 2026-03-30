@@ -128,8 +128,58 @@ export const importService = {
         const errors = [];
         if (!row.asset_type && !row.Type && !row.Tipo) errors.push('Falta Tipo de Equipo (asset_type)');
         if (!row.model && !row.Model) errors.push('Falta Modelo (model)');
+        if (!row.brand && !row.Marca && !row.marca) errors.push('Falta Marca (brand)');
         if (!row.serial_number && !row.Serial && !row.Serie) errors.push('Falta Número de Serie');
         return errors;
+    },
+
+    /**
+     * Agrupa la previsualización por correo de asignación: un mismo usuario puede tener N filas (N equipos).
+     */
+    summarizeInventoryAssignees(previewRows) {
+        const map = new Map();
+        for (const row of previewRows) {
+            const email = (row._assignee_email || '').toLowerCase();
+            if (!email) continue;
+            if (!map.has(email)) map.set(email, { email, count: 0, matched: !!row.assigned_to, name: row._assignee_name || null });
+            const e = map.get(email);
+            e.count += 1;
+            e.matched = e.matched || !!row.assigned_to;
+            if (row._assignee_name) e.name = row._assignee_name;
+        }
+        return [...map.values()].sort((a, b) => b.count - a.count);
+    },
+
+    buildInventoryPayload(row, allUsers, fileName) {
+        const rawId = row.asset_id || row.id || row.ID;
+        const finalId = rawId ? String(rawId) : `AST-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`;
+
+        let assignedUserId = null;
+        let status = row.status || 'available';
+        const assignedEmail = (row.assigned_to_email || row['Correo Asignado (Opcional)'] || row.Asignado_A || '').toString().trim().toLowerCase();
+        if (assignedEmail) {
+            const foundUser = allUsers.find((u) => u.email.toLowerCase() === assignedEmail);
+            if (foundUser) {
+                assignedUserId = foundUser.id;
+                if (!row.status) status = 'in_use';
+            }
+        }
+
+        return {
+            id: finalId,
+            type: row.asset_type || row.Type || row.Tipo || 'Equipment',
+            model: row.model || row.Model || 'Desconocido',
+            status,
+            assigned_to: assignedUserId,
+            specs: {
+                serial_number: String(row.serial_number || row.Serial || row.Serie || '').trim(),
+                brand: row.brand || row.Marca || 'Desconocida',
+                category: row.asset_type || row.Type || 'Hardware',
+                model: row.model || row.Model || '',
+                inventory_tag: row.inventory_tag || row.Placa || '',
+                details: `Importado de ${fileName}`
+            }
+        };
     },
 
     /**
@@ -143,6 +193,8 @@ export const importService = {
             const { data: usersData } = await supabase.from('profiles').select('id, email');
             allUsers = usersData || [];
         }
+
+        const inventoryCreates = [];
 
         for (const row of data) {
             if (row._action === 'skip') { duplicateCount++; continue; }
@@ -171,46 +223,14 @@ export const importService = {
                     }
 
                 } else if (type === 'inventory') {
-                    const rawId = row.asset_id || row.id || row.ID;
-                    const finalId = rawId ? String(rawId) : `AST-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`;
-
-                    // LÓGICA DE ASIGNACIÓN AUTOMÁTICA MEJORADA
-                    let assignedUserId = null;
-                    let status = row.status || 'available';
-
-                    const assignedEmail = (row.assigned_to_email || row['Correo Asignado (Opcional)'] || row.Asignado_A || '').toString().trim().toLowerCase();
-                    if (assignedEmail) {
-                        const foundUser = allUsers.find(u => u.email.toLowerCase() === assignedEmail);
-                        if (foundUser) {
-                            assignedUserId = foundUser.id;
-                            if (!row.status) status = 'in_use'; // Si tiene dueño, se marca en uso automáticamente
-                        }
-                    }
-
-                    const payload = {
-                        id: finalId,
-                        type: row.asset_type || row.Type || row.Tipo || 'Equipment',
-                        model: row.model || row.Model || 'Desconocido',
-                        status: status,
-                        assigned_to: assignedUserId,
-                        specs: {
-                            serial_number: String(row.serial_number || row.Serial || row.Serie || '').trim(),
-                            brand: row.brand || row.Marca || 'Desconocida',
-                            category: row.asset_type || row.Type || 'Hardware',
-                            model: row.model || row.Model || '',
-                            inventory_tag: row.inventory_tag || row.Placa || '',
-                            details: `Importado de ${fileName}`
-                        }
-                    };
+                    const payload = this.buildInventoryPayload(row, allUsers, fileName);
 
                     if (row._action === 'update' && row._existingId) {
                         const { error } = await supabase.from('assets').update(payload).eq('id', row._existingId);
                         if (error) throw error;
                         updateCount++;
                     } else {
-                        const { error } = await supabase.from('assets').insert([payload]);
-                        if (error) throw error;
-                        newCount++;
+                        inventoryCreates.push(payload);
                     }
                 }
             } catch (err) {
@@ -218,6 +238,27 @@ export const importService = {
                 errorCount++;
             }
         }
+
+        const CHUNK = 50;
+        for (let i = 0; i < inventoryCreates.length; i += CHUNK) {
+            const chunk = inventoryCreates.slice(i, i + CHUNK);
+            const { error } = await supabase.from('assets').insert(chunk);
+            if (error) {
+                for (const payload of chunk) {
+                    try {
+                        const { error: oneErr } = await supabase.from('assets').insert([payload]);
+                        if (oneErr) throw oneErr;
+                        newCount++;
+                    } catch (e) {
+                        console.error('Error importando asset:', e);
+                        errorCount++;
+                    }
+                }
+            } else {
+                newCount += chunk.length;
+            }
+        }
+
         return { newCount, updateCount, duplicateCount, errorCount };
     }
 };

@@ -1,21 +1,39 @@
 import React from 'react';
-import { X, Clock, MessageSquare, Paperclip, Send, Printer } from 'lucide-react';
+import { X, Clock, MessageSquare, Send, Printer, ImagePlus, Loader2 } from 'lucide-react';
 import { TicketStatusBadge } from './TicketsModule';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
+import { uploadTicketChatImage } from '../services/ticketChatStorage';
 
 const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateTicket }) => {
     const { profile, user } = useAuth();
     const isTechOrAdmin = profile?.role === 'admin' || profile?.role === 'tech' || profile?.role === 'técnico';
 
     const [messages, setMessages] = React.useState([]);
+    const [messagesLoading, setMessagesLoading] = React.useState(true);
     const [newMessage, setNewMessage] = React.useState('');
     const [isSending, setIsSending] = React.useState(false);
+    const [uploadingImage, setUploadingImage] = React.useState(false);
     const messagesEndRef = React.useRef(null);
+    const fileInputRef = React.useRef(null);
 
     const ticketId = ticket?.id || ticket?.fullId;
     const isClosed = ticket?.status === 'resolved' || ticket?.status === 'closed';
     const isAdmin = profile?.role === 'admin';
+
+    const toLocalDatetimeInput = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    const [scheduleDraft, setScheduleDraft] = React.useState('');
+
+    React.useEffect(() => {
+        setScheduleDraft(toLocalDatetimeInput(ticket?.scheduled_for));
+    }, [ticket?.fullId, ticket?.scheduled_for, ticket?.id]);
 
     const systemTimes = React.useMemo(() => {
         const assigned = messages.find(m => (m?.message || '').startsWith('[STATUS_ASSIGNED]'))?.created_at || null;
@@ -48,6 +66,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                 .select(`
                     id,
                     message,
+                    attachment_url,
                     created_at,
                     sender_id,
                     profiles:sender_id (full_name, role)
@@ -59,32 +78,71 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             setMessages(data || []);
         } catch (error) {
             console.error('Error fetching messages:', error);
+        } finally {
+            setMessagesLoading(false);
         }
-    }, [ticketId, setMessages]);
+    }, [ticketId]);
+
+    const mergeInsertedMessage = React.useCallback(async (row) => {
+        if (!row?.id) {
+            fetchMessages();
+            return;
+        }
+        const { data, error } = await supabase
+            .from('ticket_messages')
+            .select(`
+                id,
+                message,
+                attachment_url,
+                created_at,
+                sender_id,
+                profiles:sender_id (full_name, role)
+            `)
+            .eq('id', row.id)
+            .single();
+
+        if (error || !data) {
+            fetchMessages();
+            return;
+        }
+        setMessages((prev) => {
+            if (prev.some((m) => m.id === data.id)) return prev;
+            return [...prev, data].sort(
+                (a, b) => new Date(a.created_at) - new Date(b.created_at)
+            );
+        });
+    }, [fetchMessages]);
 
     React.useEffect(() => {
         if (isOpen && ticketId) {
+            setMessages([]);
+            setMessagesLoading(true);
             fetchMessages();
-            // Subscribe to real-time changes
             const channel = supabase
-                .channel(`messages_${ticketId}`)
-                .on('postgres_changes', {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'ticket_messages',
-                    filter: `ticket_id=eq.${ticketId}`
-                }, () => {
-                    fetchMessages();
-                })
-                .subscribe();
+                .channel(`messages_${ticketId}_${Date.now()}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'ticket_messages',
+                        filter: `ticket_id=eq.${ticketId}`
+                    },
+                    (payload) => mergeInsertedMessage(payload.new)
+                )
+                .subscribe((status) => {
+                    if (import.meta.env.DEV && status === 'CHANNEL_ERROR') {
+                        console.warn('Realtime ticket_messages: CHANNEL_ERROR (revisa publicación y RLS).');
+                    }
+                });
 
             return () => {
                 supabase.removeChannel(channel);
             };
-        } else {
-            setMessages([]);
         }
-    }, [isOpen, ticketId, fetchMessages]);
+        setMessages([]);
+        setMessagesLoading(true);
+    }, [isOpen, ticketId, fetchMessages, mergeInsertedMessage]);
 
     React.useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -94,16 +152,19 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
         if (!newMessage.trim() || !ticketId || isClosed) return;
         setIsSending(true);
         try {
-            const { error } = await supabase
+            const { data: inserted, error } = await supabase
                 .from('ticket_messages')
                 .insert([{
                     ticket_id: ticketId,
                     sender_id: user.id,
                     message: newMessage.trim()
-                }]);
+                }])
+                .select('id')
+                .single();
 
             if (error) throw error;
             setNewMessage('');
+            await mergeInsertedMessage(inserted);
 
             const { data: ticketData } = await supabase.from('tickets').select('reported_by, assigned_tech').eq('id', ticketId).single();
             if (ticketData) {
@@ -116,11 +177,62 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                     }]);
                 }
             }
-            await fetchMessages();
         } catch (error) {
             console.error('Error sending message:', error);
         } finally {
             setIsSending(false);
+        }
+    };
+
+    const handleChatImageSelect = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || !ticketId || isClosed || !user?.id) return;
+        if (!file.type.startsWith('image/')) {
+            alert('Solo se permiten imágenes.');
+            return;
+        }
+        if (file.size > 4 * 1024 * 1024) {
+            alert('La imagen no debe superar 4 MB.');
+            return;
+        }
+        setUploadingImage(true);
+        try {
+            const { url, error: upErr } = await uploadTicketChatImage(ticketId, file);
+            if (upErr || !url) throw upErr || new Error('No se pudo subir la imagen.');
+
+            const caption = newMessage.trim() || '(Imagen adjunta)';
+            const { data: inserted, error } = await supabase
+                .from('ticket_messages')
+                .insert([{
+                    ticket_id: ticketId,
+                    sender_id: user.id,
+                    message: caption,
+                    attachment_url: url,
+                }])
+                .select('id')
+                .single();
+
+            if (error) throw error;
+            setNewMessage('');
+            await mergeInsertedMessage(inserted);
+
+            const { data: ticketData } = await supabase.from('tickets').select('reported_by, assigned_tech').eq('id', ticketId).single();
+            if (ticketData) {
+                const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
+                if (recipientId) {
+                    await supabase.from('notifications').insert([{
+                        user_id: recipientId,
+                        title: `Nuevo adjunto en Ticket #${ticketId}`,
+                        message: `${profile?.full_name || 'Alguien'} compartió una imagen en el chat.`,
+                    }]);
+                }
+            }
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'Error al subir la imagen. Revisa el bucket Storage y políticas RLS.');
+        } finally {
+            setUploadingImage(false);
         }
     };
 
@@ -260,11 +372,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     return (
         <>
             <div
-                className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-40 transition-opacity animate-in fade-in"
+                className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[500] transition-opacity animate-in fade-in"
                 onClick={onClose}
             ></div>
 
-            <div className={`fixed top-0 right-0 h-full w-full sm:w-[500px] bg-white dark:bg-slate-900 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300`}>
+            <div className={`fixed top-0 right-0 h-full w-full sm:w-[500px] bg-white dark:bg-slate-900 shadow-2xl z-[510] flex flex-col animate-in slide-in-from-right duration-300`}>
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
                     <div>
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Detalle de Ticket</span>
@@ -290,6 +402,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl">
                                 Resuelto: {systemTimes.resolved ? new Date(systemTimes.resolved).toLocaleString() : '—'}
                             </div>
+                            {ticket?.scheduled_for && (
+                                <div className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-800 px-3 py-2 rounded-xl">
+                                    Atención: {new Date(ticket.scheduled_for).toLocaleString()}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -325,6 +442,44 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                 </div>
                             )}
 
+                            {isTechOrAdmin && !isClosed && (
+                                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                    <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest ml-1">
+                                        Agendar fecha de atención
+                                    </label>
+                                    <input
+                                        type="datetime-local"
+                                        value={scheduleDraft}
+                                        onChange={(e) => setScheduleDraft(e.target.value)}
+                                        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const iso = scheduleDraft
+                                                    ? new Date(scheduleDraft).toISOString()
+                                                    : null;
+                                                onUpdateTicket(ticket.fullId, { scheduled_for: iso }, user.id);
+                                            }}
+                                            className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-black uppercase text-[9px] tracking-widest hover:bg-indigo-700 transition-all"
+                                        >
+                                            Guardar fecha
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setScheduleDraft('');
+                                                onUpdateTicket(ticket.fullId, { scheduled_for: null }, user.id);
+                                            }}
+                                            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        >
+                                            Quitar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             {isTechOrAdmin && ticket?.assigned_tech && (
                                 <div className="space-y-2">
                                     <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest ml-1">Estado del Ticket</label>
@@ -355,8 +510,14 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <MessageSquare size={14} className="text-blue-500" /> Historial de chat
                         </h4>
 
-                        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                            {messages.length === 0 ? (
+                        <div className="flex-1 overflow-y-auto space-y-4 pr-2 min-h-[120px] transition-opacity duration-300">
+                            {messagesLoading ? (
+                                <div className="space-y-3 py-4 animate-pulse" aria-busy="true" aria-label="Cargando mensajes">
+                                    <div className="h-14 rounded-2xl bg-slate-200/80 dark:bg-slate-700/60 ml-8" />
+                                    <div className="h-14 rounded-2xl bg-slate-100 dark:bg-slate-800/80 mr-8 w-4/5" />
+                                    <div className="h-14 rounded-2xl bg-slate-200/80 dark:bg-slate-700/60 ml-12 w-3/5" />
+                                </div>
+                            ) : messages.length === 0 ? (
                                 <p className="text-center text-xs text-slate-400 font-bold uppercase tracking-widest py-8">No hay mensajes aún.</p>
                             ) : (
                                 messages.map(msg => {
@@ -381,6 +542,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                     if (isMine) {
                                         return (
                                             <div key={msg.id} className="bg-blue-600 text-white border border-blue-500 p-4 rounded-2xl shadow-sm rounded-tr-none ml-8 relative before:absolute before:content-[''] before:right-[-6px] before:top-4 before:w-3 before:h-3 before:bg-blue-600 before:border-r before:border-t before:border-blue-500 before:rotate-45 transition-colors">
+                                                {msg.attachment_url && (
+                                                    <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="block mb-2">
+                                                        <img src={msg.attachment_url} alt="" className="rounded-xl max-h-52 max-w-full object-contain border border-white/20 bg-black/10" />
+                                                    </a>
+                                                )}
                                                 <p className="text-white text-sm whitespace-pre-wrap">{msg.message}</p>
                                                 <span className="text-[10px] text-blue-200 font-bold mt-2 block w-full text-right">{time} - Tú</span>
                                             </div>
@@ -388,6 +554,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                     } else {
                                         return (
                                             <div key={msg.id} className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl shadow-sm rounded-tl-none mr-8 relative before:absolute before:content-[''] before:left-[-6px] before:top-4 before:w-3 before:h-3 before:bg-slate-100 dark:before:bg-slate-800 before:border-l before:border-b before:border-slate-200 dark:before:border-slate-700 before:rotate-45 transition-colors">
+                                                {msg.attachment_url && (
+                                                    <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="block mb-2">
+                                                        <img src={msg.attachment_url} alt="" className="rounded-xl max-h-52 max-w-full object-contain border border-slate-200/80 dark:border-slate-600 bg-white/50 dark:bg-black/20" />
+                                                    </a>
+                                                )}
                                                 <p className="text-slate-800 dark:text-slate-200 text-sm whitespace-pre-wrap">{msg.message}</p>
                                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-2 block w-full">{time} - {senderName}</span>
                                             </div>
@@ -415,8 +586,15 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                         </div>
                     ) : (
                         <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-1.5 focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-500 dark:focus-within:border-blue-500 transition-all">
-                            <button className="text-slate-400 p-2.5 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all" disabled={isSending}>
-                                <Paperclip size={18} />
+                            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleChatImageSelect} />
+                            <button
+                                type="button"
+                                className="text-slate-400 p-2.5 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-xl transition-all disabled:opacity-40"
+                                disabled={isSending || uploadingImage}
+                                title="Adjuntar imagen"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                {uploadingImage ? <Loader2 size={18} className="animate-spin text-blue-500" /> : <ImagePlus size={18} />}
                             </button>
                             <input
                                 type="text"
@@ -424,12 +602,13 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                                disabled={isSending}
+                                disabled={isSending || uploadingImage}
                                 className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 dark:text-slate-200 font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 px-2"
                             />
                             <button
+                                type="button"
                                 onClick={handleSendMessage}
-                                disabled={isSending || !newMessage.trim()}
+                                disabled={isSending || uploadingImage || !newMessage.trim()}
                                 className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 hover:shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isSending ? <div className="w-4 h-4 border-2 border-white/50 border-t-transparent rounded-full animate-spin"></div> : <Send size={16} />}

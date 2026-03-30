@@ -12,8 +12,10 @@ import {
   Zap,
   Search,
   Calendar,
-  Flame
+  Flame,
+  Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/authStore';
 import { userService } from '../services/userService';
 import { activityService, ACTIVITY_STATUS } from '../services/activityService';
@@ -67,7 +69,7 @@ const ActivityStatusBadge = ({ status }) => {
   );
 };
 
-const ActivitiesSection = ({ viewerRole, viewerId }) => {
+const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
   const isAdmin = viewerRole === 'admin';
   const isTech = viewerRole === 'tech' || viewerRole === 'técnico';
 
@@ -78,8 +80,7 @@ const ActivitiesSection = ({ viewerRole, viewerId }) => {
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
 
-  // --- ESTADOS NUEVOS: Buscador y Modal ---
-  const [searchTerm, setSearchTerm] = useState('');
+  // --- ESTADOS NUEVOS: Modal ---
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [createLoading, setCreateLoading] = useState(false);
@@ -167,7 +168,24 @@ const ActivitiesSection = ({ viewerRole, viewerId }) => {
   const visibleActivities = useMemo(() => {
     let base = isAdmin ? exportBaseActivities : activities;
 
-    // Filtro por Estado (Admin)
+    // NUEVO: Filtro por Buscador (Expandido)
+    if (searchTerm.trim() !== '') {
+      const term = searchTerm.toLowerCase();
+      base = base.filter(a => {
+        const techName = techUsers.find(u => u.id === a.assigned_tech)?.full_name || '';
+        const statusText = a.status === 'pending' ? 'pendiente' : 
+                          a.status === 'assigned' ? 'asignada' : 
+                          a.status === 'in_progress' ? 'en proceso' : 
+                          a.status === 'resolved' ? 'resuelta' : '';
+        
+        return (a.title && a.title.toLowerCase().includes(term)) ||
+               (a.description && a.description.toLowerCase().includes(term)) ||
+               (techName.toLowerCase().includes(term)) ||
+               (statusText.includes(term));
+      });
+    }
+
+    // Filtro por Estado (Admin) - Se aplica DESPUÉS de la búsqueda o en conjunto
     if (isAdmin) {
       if (adminStatusView === 'pendientes') {
         base = base.filter(a => ['pending', 'assigned', 'in_progress'].includes((a.status || '').toLowerCase()));
@@ -177,20 +195,13 @@ const ActivitiesSection = ({ viewerRole, viewerId }) => {
         base = base.filter(a => (a.status || '').toLowerCase() === 'resolved');
       } else if (adminStatusView === 'errores') {
         base = base.filter(a => (a.status || '').toLowerCase() === 'in_progress' && isErrorLike(a));
+      } else if (adminStatusView === 'todas') {
+        /* sin filtro adicional por estado */
       }
     }
 
-    // NUEVO: Filtro por Buscador
-    if (searchTerm.trim() !== '') {
-      const term = searchTerm.toLowerCase();
-      base = base.filter(a =>
-        (a.title && a.title.toLowerCase().includes(term)) ||
-        (a.description && a.description.toLowerCase().includes(term))
-      );
-    }
-
     return base;
-  }, [activities, isAdmin, exportBaseActivities, adminStatusView, isErrorLike, searchTerm]);
+  }, [activities, isAdmin, exportBaseActivities, adminStatusView, isErrorLike, searchTerm, techUsers]);
 
   const techCounts = useMemo(() => {
     if (!isAdmin) return [];
@@ -244,28 +255,26 @@ const ActivitiesSection = ({ viewerRole, viewerId }) => {
 
   const clearTechFilters = () => setAdminTechIds([]);
 
-  const downloadCSV = (rows, filename) => {
-    const headers = ['id', 'title', 'status', 'priority', 'assigned_tech', 'due_date', 'created_at', 'description'];
-    const escape = (v) => {
-      const s = v === null || v === undefined ? '' : String(v);
-      const needsQuotes = s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r');
-      const safe = s.replace(/"/g, '""');
-      return needsQuotes ? `"${safe}"` : safe;
-    };
-    const content = [
-      headers.join(','),
-      ...rows.map(r => headers.map(h => escape(r?.[h])).join(','))
-    ].join('\n');
-
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const exportVisibleToExcel = () => {
+    const rows = visibleActivities.map((a) => ({
+      id: a.id,
+      titulo: a.title,
+      estado: a.status,
+      prioridad: a.priority,
+      tecnico: techUsers.find((t) => t.id === a.assigned_tech)?.full_name || '',
+      fecha_limite: a.due_date || '',
+      creado_en: a.created_at,
+      descripcion: (a.description || '').slice(0, 2000)
+    }));
+    if (!rows.length) {
+      alert('No hay filas para exportar con los filtros actuales.');
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Actividades');
+    const name = `actividades_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, name);
   };
 
   const refreshLogs = async (activityId) => {
@@ -360,9 +369,19 @@ const ActivitiesSection = ({ viewerRole, viewerId }) => {
                   <Clock size={16} />
                 </button>
                 {isAdmin && (
-                  <button onClick={() => setIsModalOpen(true)} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-md shadow-blue-500/20 transition-all" title="Nueva Actividad">
-                    <Plus size={16} />
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={exportVisibleToExcel}
+                      className="p-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 shadow-md shadow-emerald-500/20 transition-all"
+                      title="Exportar vista actual a Excel"
+                    >
+                      <Download size={16} />
+                    </button>
+                    <button onClick={() => setIsModalOpen(true)} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-md shadow-blue-500/20 transition-all" title="Nueva Actividad">
+                      <Plus size={16} />
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -712,7 +731,7 @@ const ActivitiesSection = ({ viewerRole, viewerId }) => {
   );
 };
 
-const ActivitiesView = () => {
+const ActivitiesView = ({ searchTerm = '' }) => {
   const { profile, user } = useAuth();
   const role = (profile?.role || '').toLowerCase();
   const viewerId = user?.id;
@@ -721,7 +740,7 @@ const ActivitiesView = () => {
 
   return (
     <div className="w-full">
-      <ActivitiesSection viewerRole={role} viewerId={viewerId} />
+      <ActivitiesSection viewerRole={role} viewerId={viewerId} searchTerm={searchTerm} />
     </div>
   );
 };

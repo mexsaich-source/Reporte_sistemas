@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 import { SignJWT, importPKCS8 } from "https://deno.land/x/jose@v4.14.4/index.ts";
 
-// Función para obtener token Bearer de Google usando JWT en Deno
+// Obtener token Bearer de Google usando JWT (para FCM v1 API)
 async function getFirebaseAccessToken(serviceAccount: any) {
   const privateKey = await importPKCS8(serviceAccount.private_key, "RS256");
   const jwt = await new SignJWT({
@@ -27,72 +27,112 @@ async function getFirebaseAccessToken(serviceAccount: any) {
 
 serve(async (req) => {
   try {
-    // 1. Obtener payload del Webhook de Supabase
+    // 1. Payload del Webhook de Supabase (dispara cuando se inserta en 'notifications')
     const payload = await req.json();
-    const notificationRecord = payload.record; // La fila insertada en 'notifications'
+    const notificationRecord = payload.record;
 
     if (!notificationRecord || !notificationRecord.user_id) {
-        return new Response(JSON.stringify({ error: "No record found" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "No record found" }), { status: 400 });
     }
 
-    // 2. Conectar a Supabase usando llaves internas (Edge Functions env)
+    // 2. Conectar a Supabase con Service Role
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 3. Buscar el fcm_token del usuario asociado a la notificación
-    const { data: profile, error: dbError } = await supabase
+    // 3. Buscar TODOS los tokens FCM del usuario (multi-dispositivo)
+    let { data: tokenRows, error: dbError } = await supabase
+      .from('fcm_tokens')
+      .select('token')
+      .eq('user_id', notificationRecord.user_id);
+
+    if (dbError) {
+      console.error("Error leyendo fcm_tokens:", dbError);
+    }
+
+    const tokensFromTable = (tokenRows || []).map((r: { token: string }) => r.token).filter(Boolean);
+    let targetTokens = [...new Set(tokensFromTable)];
+
+    if (targetTokens.length === 0) {
+      const { data: prof } = await supabase
         .from('profiles')
         .select('fcm_token')
         .eq('id', notificationRecord.user_id)
-        .single();
-    
-    if (dbError || !profile || !profile.fcm_token) {
-        console.log(`Usuario no tiene FCM token. Omitiendo push.`);
-        return new Response("No target fcm_token", { status: 200 });
+        .maybeSingle();
+      if (prof?.fcm_token) {
+        targetTokens = [prof.fcm_token];
+        console.log(`Usuario ${notificationRecord.user_id}: usando fcm_token de profiles (respaldo).`);
+      }
     }
 
-    // 4. Leer Credenciales de Firebase desde los Secretos de Supabase
+    if (targetTokens.length === 0) {
+      console.log(`Usuario ${notificationRecord.user_id} no tiene tokens FCM. Omitiendo push.`);
+      return new Response("No FCM tokens found", { status: 200 });
+    }
+
+    const tokenRowsForSend = targetTokens.map((token) => ({ token }));
+    console.log(`Enviando push a ${targetTokens.length} dispositivo(s) para el usuario ${notificationRecord.user_id}`);
+
+    // 4. Credenciales Firebase desde Secretos de Supabase
     const firebaseConfigStr = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
     if (!firebaseConfigStr) {
-        console.error("FIREBASE_SERVICE_ACCOUNT nulo en env");
-        return new Response("Missing Firebase Service object", { status: 500 });
+      console.error("FIREBASE_SERVICE_ACCOUNT no configurado");
+      return new Response("Missing Firebase Service Account", { status: 500 });
     }
     const serviceAccount = JSON.parse(firebaseConfigStr);
 
-    // 5. Cargar token de OAuth y enviar
+    // 5. Obtener Access Token OAuth de Google
     const accessToken = await getFirebaseAccessToken(serviceAccount);
     const fcmUrl = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
 
-    const fcmMessage = {
-        message: {
-            token: profile.fcm_token,
+    // 6. Enviar push a CADA dispositivo en paralelo
+    const results = await Promise.allSettled(
+      tokenRowsForSend.map(({ token }: { token: string }) => {
+        const fcmMessage = {
+          message: {
+            token,
             notification: {
-                title: notificationRecord.title,
-                body: notificationRecord.message
+              title: notificationRecord.title || 'IT Helpdesk',
+              body: notificationRecord.message || 'Nueva alerta recibida',
             },
-            data: {
-                url: "/"
-            }
-        }
-    };
+            webpush: {
+              notification: {
+                icon: '/logo.svg',
+                badge: '/logo.svg',
+              },
+              fcm_options: {
+                link: '/'
+              }
+            },
+            data: { url: "/" }
+          }
+        };
 
-    const pushResponse = await fetch(fcmUrl, {
-        method: "POST",
-        headers: {
+        return fetch(fcmUrl, {
+          method: "POST",
+          headers: {
             "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json"
-        },
-        body: JSON.stringify(fcmMessage)
+          },
+          body: JSON.stringify(fcmMessage)
+        }).then(r => r.json());
+      })
+    );
+
+    const summary = results.map((r, i) => ({
+      token: tokenRowsForSend[i].token.substring(0, 20) + '...',
+      status: r.status,
+      result: r.status === 'fulfilled' ? (r as PromiseFulfilledResult<any>).value : (r as PromiseRejectedResult).reason
+    }));
+
+    console.log("Resumen FCM:", JSON.stringify(summary));
+
+    return new Response(JSON.stringify({ sent: targetTokens.length, summary }), {
+      headers: { "Content-Type": "application/json" }
     });
 
-    const pushResult = await pushResponse.json();
-    console.log("Push enviado con éxito:", pushResult);
-
-    return new Response(JSON.stringify(pushResult), { headers: { "Content-Type": "application/json" } });
-
   } catch (err) {
-    console.error("Error global en el script push:", err);
+    console.error("Error en send-fcm-push:", err);
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
   }
 });

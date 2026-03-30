@@ -14,17 +14,28 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
+function getMessagingSafe() {
+    if (typeof window === 'undefined') return null;
+    try {
+        return getMessaging(app);
+    } catch {
+        return null;
+    }
+}
+
 // Initialize Firebase Cloud Messaging and get a reference to the service
-export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
+export const messaging = getMessagingSafe();
 export const VAPID_KEY = "BPi9AeahyK4TJjFbYgjZSSEA9WDa2EqwwluHaDBuVaU4uPVmY6BsQ2JZwdm5RSo7yiLfT7tE13sMHQk8jRKP6FU";
 
-export const onMessageListener = () =>
-  new Promise((resolve) => {
+// Listener para mensajes en primer plano
+export const onMessageListener = (callback) => {
     if (messaging) {
-      firebaseOnMessage(messaging, (payload) => {
-        resolve(payload);
-      });
+        // Retorna la función para des-suscribirse (unsub)
+        return firebaseOnMessage(messaging, (payload) => {
+            callback(payload);
+        });
     }
-  });
+    return () => {}; // Noop
+};
 
 export default app;

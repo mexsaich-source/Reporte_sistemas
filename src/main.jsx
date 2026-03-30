@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter as Router } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext'
 import AuthProvider from './context/AuthContext'
+import { ToastProvider } from './context/ToastContext'
 import './index.css'
 import App from './App.jsx'
 import { notificationService } from './services/notificationService.js'
@@ -15,7 +16,9 @@ createRoot(document.getElementById('root')).render(
     <Router>
       <AuthProvider>
         <ThemeProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </ThemeProvider>
       </AuthProvider>
     </Router>

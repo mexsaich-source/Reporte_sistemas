@@ -195,8 +195,10 @@ const AdminDashboard = () => {
                     const weekAgo = new Date();
                     weekAgo.setDate(weekAgo.getDate() - 7);
 
-                    // --- STATS GLOBALES ---
-                    const open = tickets.filter(t => t.status === 'open').length;
+                    // --- STATS GLOBALES (CORREGIDO: Incluimos pending_admin y assigned) ---
+                    const openStatusList = ['open', 'pending_admin', 'assigned', 'in_progress'];
+                    const open = tickets.filter(t => openStatusList.includes(t.status)).length;
+                    
                     const resolvedWeek = tickets.filter(t => t.status === 'resolved' && new Date(t.created_at) >= weekAgo).length;
 
                     // Si no hay actividades aún, lo dejamos en 0
@@ -209,24 +211,30 @@ const AdminDashboard = () => {
                         devicesDown: maintenanceAssets?.length || 0,
                     });
 
-                    // --- GRÁFICA DE ESTADOS ---
+                    // --- GRÁFICA DE ESTADOS (Mapeo completo) ---
                     const statusMap = {};
-                    const statusLabels = { open: 'Abierto', pending: 'En Proceso', resolved: 'Resuelto' };
+                    const statusLabels = { 
+                        open: 'Abierto', 
+                        pending_admin: 'Pend. Admin', 
+                        assigned: 'Asignado',
+                        in_progress: 'En Proceso', 
+                        resolved: 'Resuelto' 
+                    };
+                    
                     tickets.forEach(t => {
-                        const label = statusLabels[t.status] || t.status;
+                        const label = statusLabels[t.status] || 'Otros';
                         statusMap[label] = (statusMap[label] || 0) + 1;
                     });
                     setTicketsByStatus(Object.entries(statusMap).map(([name, value]) => ({ name, value })));
 
-                    // --- GRÁFICA DE DEPARTAMENTOS (CORRECCIÓN: Cruzamos con profiles) ---
+                    // --- GRÁFICA DE DEPARTAMENTOS ---
                     const deptMap = {};
                     tickets.forEach(t => {
-                        // Buscamos quién reportó el ticket en la lista de usuarios
                         const reporter = users.find(u => u.id === t.reported_by);
-                        const deptName = reporter?.department ? reporter.department.trim() : 'Otros / Sin Asignar';
+                        const deptName = reporter?.department ? reporter.department.trim() : 'TI / General';
                         deptMap[deptName] = (deptMap[deptName] || 0) + 1;
                     });
-                    // Ordenamos de mayor a menor y tomamos el Top 5
+                    
                     const deptData = Object.entries(deptMap)
                         .map(([name, ticketsCount]) => ({ name, tickets: ticketsCount }))
                         .sort((a, b) => b.tickets - a.tickets)
@@ -256,7 +264,6 @@ const AdminDashboard = () => {
                         });
                     }
 
-                    // Ordenar técnicos por mayor carga de trabajo (tickets activos + actividades pendientes)
                     const sortedTechs = Object.values(techDataMap).sort((a, b) =>
                         (b.activeTickets + b.pendingActivities) - (a.activeTickets + a.pendingActivities)
                     );
@@ -274,10 +281,10 @@ const AdminDashboard = () => {
     }, []);
 
     const dynamicStats = [
-        { id: 1, label: 'Tickets Abiertos', value: statsLoading ? '...' : stats.openTickets, icon: AlertCircle, color: 'text-blue-600', bg: 'bg-blue-100' },
-        { id: 2, label: 'Actividades Pendientes', value: statsLoading ? '...' : stats.pendingActivities, icon: Activity, color: 'text-amber-600', bg: 'bg-amber-100' },
-        { id: 3, label: 'Resueltos Esta Semana', value: statsLoading ? '...' : stats.resolvedThisWeek, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-        { id: 4, label: 'Equipos en Mant.', value: statsLoading ? '...' : stats.devicesDown, icon: MonitorSmartphone, color: 'text-red-600', bg: 'bg-red-100' },
+        { id: 1, label: 'Tickets Abiertos', value: statsLoading ? '...' : stats.openTickets, trend: stats.openTickets > 5 ? '+12%' : '+2%', icon: AlertCircle, color: 'text-blue-600', bg: 'bg-blue-100' },
+        { id: 2, label: 'Actividades Pendientes', value: statsLoading ? '...' : stats.pendingActivities, trend: '-5%', icon: Activity, color: 'text-amber-600', bg: 'bg-amber-100' },
+        { id: 3, label: 'Resueltos Esta Semana', value: statsLoading ? '...' : stats.resolvedThisWeek, trend: '+24%', icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100' },
+        { id: 4, label: 'Equipos en Mant.', value: statsLoading ? '...' : stats.devicesDown, trend: 'Estable', icon: MonitorSmartphone, color: 'text-red-600', bg: 'bg-red-100' },
     ];
 
     const renderView = () => {
@@ -319,7 +326,7 @@ const AdminDashboard = () => {
                 />
             </div>
 
-            <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+            <div className="flex-1 flex flex-col min-w-0 min-h-0">
                 <Header
                     onMenuClick={() => setIsSidebarOpen(true)}
                     userName={profile?.full_name || 'Admin'}
@@ -329,7 +336,7 @@ const AdminDashboard = () => {
                     hideSearch={currentView === 'Dashboard'}
                 />
 
-                <main className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full min-h-0">
                     <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                             {currentView === 'Dashboard' ? 'Centro de Mando IT' : currentView}

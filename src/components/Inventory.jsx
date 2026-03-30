@@ -270,11 +270,10 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
 };
 
 // --- MAIN VIEW ---
-const InventoryView = () => {
+const InventoryView = ({ searchTerm = '' }) => {
     const [activeTab, setActiveTab] = useState('inventory');
     const [inventoryList, setInventoryList] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('Todos');
     const [filterStatus, setFilterStatus] = useState('Todos');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);

@@ -140,7 +140,8 @@ const TicketsModule = ({ searchTerm = '' }) => {
                 tech: t.tech_profile?.full_name || 'Unassigned',
                 assigned_tech: t.assigned_tech,
                 status: t.status,
-                date: new Date(t.created_at).toLocaleDateString()
+                date: new Date(t.created_at).toLocaleDateString(),
+                scheduled_for: t.scheduled_for || null,
             }));
 
             setTickets(formatted);
@@ -152,8 +153,8 @@ const TicketsModule = ({ searchTerm = '' }) => {
     };
 
     const filteredTickets = React.useMemo(() => {
-        if (!searchTerm) return tickets;
-        const s = searchTerm.toLowerCase();
+        const s = (searchTerm || '').toLowerCase().trim();
+        if (!s) return tickets;
         return tickets.filter(t => 
             (t.shortId && t.shortId.toLowerCase().includes(s)) ||
             (t.issue && t.issue.toLowerCase().includes(s)) ||
@@ -180,12 +181,16 @@ const TicketsModule = ({ searchTerm = '' }) => {
             // Si el slider está abierto, actualizamos su info visual temporalmente
             if (selectedTicket && selectedTicket.fullId === ticketId) {
                 // Pequeño parche visual para que no se cierre el modal, pero se refresque localmente
-                setSelectedTicket(prev => ({ 
-                    ...prev, 
-                    tech: updates.assigned_tech 
-                        ? techUsers.find(u => u.id === updates.assigned_tech)?.full_name 
+                setSelectedTicket(prev => ({
+                    ...prev,
+                    tech: updates.assigned_tech
+                        ? techUsers.find(u => u.id === updates.assigned_tech)?.full_name
                         : prev.tech,
-                    status: updates.status || prev.status
+                    status: updates.status || prev.status,
+                    assigned_tech:
+                        updates.assigned_tech !== undefined ? updates.assigned_tech : prev.assigned_tech,
+                    scheduled_for:
+                        updates.scheduled_for !== undefined ? updates.scheduled_for : prev.scheduled_for,
                 }));
             }
         } else {

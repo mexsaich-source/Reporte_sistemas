@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
     FilePlus, History, Calendar as CalendarIcon, LogOut, Search, Bell, LayoutDashboard,
     Ticket as TicketIcon, CheckCircle, Clock, AlertCircle, ChevronRight, User,
-    CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash, Menu, FileText
+    CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash, Menu, FileText,
+    Cpu, Cable, Keyboard, MousePointer2, ChevronDown, Sparkles, Wifi, Briefcase
 } from 'lucide-react';
 import Header from './Header';
 import StatCard from './StatCard';
@@ -10,7 +11,6 @@ import { TicketStatusBadge } from './TicketsModule';
 import TicketDetailSlider from './TicketDetailSlider';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
-import { inventoryService } from '../services/inventoryService';
 import { userService } from '../services/userService';
 import { ticketService } from '../services/ticketService';
 import GeneralRequestForm from './GeneralRequestForm';
@@ -23,77 +23,97 @@ const UserAgenda = () => {
     const [loading, setLoading] = useState(true);
     const [currentDate, setCurrentDate] = useState(new Date());
 
-    const fetchEvents = async () => {
+    const fetchEvents = React.useCallback(async () => {
         if (!user) return;
         setLoading(true);
         try {
-            // Fetch tickets
-            const { data: ticketsData } = await supabase
-                .from('tickets')
-                .select('*')
-                .eq('reported_by', user.id)
-                .order('created_at', { ascending: false });
+            const [{ data: ticketsData }, { data: genReqs }] = await Promise.all([
+                supabase
+                    .from('tickets')
+                    .select('id,title,status,created_at,scheduled_for,reported_by')
+                    .eq('reported_by', user.id)
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('general_requests')
+                    .select('id,subject,status,is_loan,loan_start_date,loan_end_date,created_at')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false }),
+            ]);
 
-            // Fetch loans from assets
-            const data = await inventoryService.getAll();
-            const loanEvents = data.filter(item =>
-                (item.requestedById === user.id || item.loanUser === (user.email || user.id)) &&
-                ['request_pending', 'loaned', 'delivered', 'received', 'returned', 'denied'].includes(item.status)
-            );
+            const scheduled = [];
+            for (const t of ticketsData || []) {
+                if (t.scheduled_for && (t.status || '').toLowerCase() !== 'resolved') {
+                    const rd = new Date(t.scheduled_for);
+                    scheduled.push({
+                        id: `sched_${t.id}`,
+                        title: t.title,
+                        time: rd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        date: rd.toLocaleDateString(),
+                        rawDate: rd,
+                        markerKind: 'scheduled',
+                        type: 'Atención programada',
+                        status: 'pending',
+                        fullItem: t,
+                    });
+                }
+            }
 
-            const formattedTickets = (ticketsData || []).map(t => ({
-                id: `ticket_${t.id}`,
-                title: t.title,
-                time: new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                date: new Date(t.created_at).toLocaleDateString(),
-                rawDate: new Date(t.created_at),
-                type: 'Ticket - ' + t.status,
-                status: t.status === 'resolved' ? 'completed' : 'pending',
-                fullItem: t
-            }));
+            const loanFromGeneral = [];
+            for (const g of genReqs || []) {
+                const st = (g.status || '').toLowerCase();
+                if (g.is_loan && g.loan_end_date && (st === 'delivered' || st === 'approved')) {
+                    const end = new Date(`${g.loan_end_date}T12:00:00`);
+                    const start = g.loan_start_date ? new Date(`${g.loan_start_date}T12:00:00`) : null;
+                    loanFromGeneral.push({
+                        id: `loan_req_${g.id}`,
+                        title: `Préstamo: ${g.subject || 'Equipo'}`,
+                        time: `Hasta ${end.toLocaleDateString()}`,
+                        date: end.toLocaleDateString(),
+                        rawDate: end,
+                        markerKind: 'loan_range',
+                        loanStart: start,
+                        loanEnd: end,
+                        type: 'Préstamo (petición)',
+                        itemStatus: g.status,
+                        status: end < new Date() ? 'completed' : 'pending',
+                        fullItem: g,
+                    });
+                }
+            }
 
-            const formattedLoans = (loanEvents || []).map(l => ({
-                id: `loan_${l.id}`,
-                title: `${l.type} - ${l.brand} ${l.model}`,
-                time: l.loanDate ? 'Todo el día' : 'Pendiente',
-                date: l.loanDate || new Date().toLocaleDateString(),
-                rawDate: l.loanDate ? new Date(l.loanDate) : new Date(),
-                type: 'Préstamo',
-                itemStatus: l.status,
-                status: l.status === 'received' ? 'completed' : 'pending',
-                fullItem: l
-            }));
-
-            const allEvents = [...formattedTickets, ...formattedLoans];
+            const allEvents = [...scheduled, ...loanFromGeneral];
             setEvents(allEvents.sort((a, b) => b.rawDate - a.rawDate));
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
 
-    useEffect(() => { fetchEvents(); }, [user]);
+    useEffect(() => {
+        fetchEvents();
+    }, [fetchEvents]);
 
-    const handleAction = async (item, action) => {
-        if (!item.fullItem?.id) return;
-        let nextStatus = '';
-        if (action === 'receive') nextStatus = 'received';
-        if (action === 'return') nextStatus = 'returned';
+    useEffect(() => {
+        if (!user?.id) return;
+        const ch = supabase
+            .channel(`user_agenda_${user.id}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'tickets', filter: `reported_by=eq.${user.id}` },
+                () => fetchEvents()
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'general_requests', filter: `user_id=eq.${user.id}` },
+                () => fetchEvents()
+            )
+            .subscribe();
+        return () => supabase.removeChannel(ch);
+    }, [user?.id, fetchEvents]);
 
-        if (nextStatus) {
-            const updates = { status: nextStatus };
-            if (nextStatus === 'received') updates.receivedAt = new Date().toISOString();
-            if (nextStatus === 'returned') updates.returnedAt = new Date().toISOString();
-
-            await inventoryService.update(item.fullItem.id, updates);
-            fetchEvents();
-        }
-    };
-
-    // Calendar logic
-    const daysInMonth = (month, year) => new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = (month, year) => new Date(year, month, 1).getDay();
+    const daysInMonth = (mo, yr) => new Date(yr, mo + 1, 0).getDate();
+    const firstDayOfMonth = (mo, yr) => new Date(yr, mo, 1).getDay();
 
     const month = currentDate.getMonth();
     const year = currentDate.getFullYear();
@@ -107,10 +127,20 @@ const UserAgenda = () => {
         setCurrentDate(d);
     };
 
+    const sameCalDay = (a, b) =>
+        a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+
     const hasEvent = (day) => {
-        return events.some(e => {
-            const d = e.rawDate;
-            return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
+        const cell = new Date(year, month, day);
+        cell.setHours(12, 0, 0, 0);
+        if (events.some((e) => e.markerKind === 'scheduled' && sameCalDay(e.rawDate, cell))) return true;
+        return events.some((e) => {
+            if (e.markerKind !== 'loan_range' || !e.loanEnd) return false;
+            const s = e.loanStart ? new Date(e.loanStart) : new Date(e.loanEnd);
+            s.setHours(0, 0, 0, 0);
+            const en = new Date(e.loanEnd);
+            en.setHours(23, 59, 59, 999);
+            return cell >= s && cell <= en;
         });
     };
 
@@ -173,7 +203,7 @@ const UserAgenda = () => {
                                 <div>
                                     <h4 className="text-base font-black text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors uppercase tracking-tight">{event.title}</h4>
                                     <div className="flex flex-wrap items-center gap-4 mt-2">
-                                        <span className={`text-[10px] font-black px-3 py-1 rounded-xl uppercase tracking-widest ${event.itemStatus === 'delivered' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>{event.type} {event.itemStatus && `(${event.itemStatus})`}</span>
+                                        <span className={`text-[10px] font-black px-3 py-1 rounded-xl uppercase tracking-widest ${event.markerKind === 'scheduled' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200'}`}>{event.type}{event.itemStatus ? ` (${event.itemStatus})` : ''}</span>
                                         <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest">
                                             <CalendarIcon size={12} /> {event.date}
                                         </div>
@@ -182,12 +212,6 @@ const UserAgenda = () => {
                             </div>
 
                             <div className="flex items-center gap-3">
-                                {event.itemStatus === 'delivered' && (
-                                    <button onClick={() => handleAction(event, 'receive')} className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-black transition-all">Confirmar Recibido</button>
-                                )}
-                                {event.itemStatus === 'received' && (
-                                    <button onClick={() => handleAction(event, 'return')} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 transition-all">Devolver Equipo</button>
-                                )}
                                 <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-300 dark:text-slate-600 group-hover:text-blue-500 transition-all">
                                     <ChevronRight size={18} />
                                 </div>
@@ -200,89 +224,197 @@ const UserAgenda = () => {
     );
 };
 
+const MyGeneralRequestsPanel = () => {
+    const { user } = useAuth();
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchRows = React.useCallback(async () => {
+        if (!user?.id) return;
+        setLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('general_requests')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(12);
+            if (error) throw error;
+            setRows(data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    }, [user?.id]);
+
+    React.useEffect(() => {
+        fetchRows();
+    }, [fetchRows]);
+
+    React.useEffect(() => {
+        if (!user?.id) return;
+        const ch = supabase
+            .channel(`my_general_req_${user.id}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'general_requests', filter: `user_id=eq.${user.id}` },
+                () => fetchRows()
+            )
+            .subscribe();
+        return () => supabase.removeChannel(ch);
+    }, [user?.id, fetchRows]);
+
+    const statusLabel = (s) => {
+        if (s === 'delivered') return 'Entregada';
+        if (s === 'rejected') return 'Denegada';
+        if (s === 'approved') return 'Aprobada';
+        return 'Pendiente';
+    };
+
+    const statusClass = (s) => {
+        if (s === 'delivered') return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+        if (s === 'rejected') return 'bg-rose-500/10 text-rose-600 border-rose-500/20';
+        if (s === 'approved') return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
+        return 'bg-slate-500/10 text-slate-600 border-slate-500/20';
+    };
+
+    if (!user) return null;
+
+    return (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800 shadow-xl overflow-hidden transition-colors">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/30 dark:bg-slate-800/30">
+                <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Mis peticiones generales</h3>
+                </div>
+                <button type="button" onClick={fetchRows} className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline">
+                    Actualizar
+                </button>
+            </div>
+            <div className="p-4 space-y-3">
+                {loading ? (
+                    <div className="p-6 text-center text-slate-500 text-sm">Cargando…</div>
+                ) : rows.length === 0 ? (
+                    <p className="p-6 text-center text-slate-500 text-sm">Aún no has enviado peticiones generales.</p>
+                ) : (
+                    rows.map((r) => (
+                        <div
+                            key={r.id}
+                            className="rounded-2xl border border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/40"
+                        >
+                            <div className="flex flex-wrap justify-between gap-2 items-start">
+                                <p className="font-black text-slate-900 dark:text-white text-sm">{r.subject}</p>
+                                <span
+                                    className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${statusClass(r.status)}`}
+                                >
+                                    {statusLabel(r.status)}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-1">{new Date(r.created_at).toLocaleString()}</p>
+                            {r.status === 'rejected' && r.reject_reason && (
+                                <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-900/40">
+                                    <p className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 mb-1">
+                                        Motivo de denegación
+                                    </p>
+                                    <p className="text-sm text-rose-800 dark:text-rose-200 font-medium whitespace-pre-wrap">
+                                        {r.reject_reason}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- SUBCOMPONENTE: Formulario de Nuevo Ticket ---
 const NewTicketForm = ({ onCancel, onSuccess }) => {
-    const { user, profile } = useAuth(); // Perfil para el reporter_name y departamento
+    const { user } = useAuth();
 
-    // --- State para los equipos del usuario (Mis Equipos Asignados) ---
     const [myAssets, setMyAssets] = useState([]);
     const [loadingAssets, setLoadingAssets] = useState(true);
+    const [showAltCategories, setShowAltCategories] = useState(false);
 
-    // --- State para el flujo dinámico ---
-    const [selectedCategoryId, setSelectedCategoryId] = useState(null); // ID de equipo (UUID) o 'category_otro_equipo', 'category_software', 'category_red'
-    const [selectedGenericDeviceType, setSelectedGenericDeviceType] = useState('Laptop'); // Solo si elige 'category_otro_equipo'
+    const [selectedCategoryId, setSelectedCategoryId] = useState(null);
+    const [selectedGenericDeviceType, setSelectedGenericDeviceType] = useState('Laptop');
 
-    // Form state (Final data)
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [urgency, setUrgency] = useState('Media');
-    const [assetTag, setAssetTag] = useState(''); // Autocompletado si selecciona equipo, opcional/oculto en otros
+    const [assetTag, setAssetTag] = useState('');
 
-    // UI state
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Constantes genéricas (solo para 'category_otro_equipo')
     const genericDeviceTypes = [
-        { id: 'Laptop', icon: Laptop },
-        { id: 'Monitor', icon: Monitor },
-        { id: 'Desktop', icon: Settings },
-        { id: 'Phone', icon: Smartphone },
+        { id: 'Laptop', label: 'Laptop', icon: Laptop },
+        { id: 'Monitor', label: 'Monitor', icon: Monitor },
+        { id: 'Workstation', label: 'Workstation', icon: Cpu },
+        { id: 'Phone', label: 'Teléfono', icon: Smartphone },
     ];
 
-    // Cargar los equipos asignados al usuario al abrir el formulario
     useEffect(() => {
+        let cancelled = false;
         const fetchMyAssets = async () => {
             if (!user?.id) return;
+            setLoadingAssets(true);
             try {
-                const { data, error } = await supabase
+                const { data, error: qErr } = await supabase
                     .from('assets')
-                    .select('*')
-                    .eq('assigned_to', user.id);
+                    .select('id, type, model, status, specs, assigned_to')
+                    .eq('assigned_to', user.id)
+                    .order('created_at', { ascending: false });
 
-                if (error) throw error;
-                setMyAssets(data || []);
+                if (qErr) throw qErr;
+                const normalized = (data || []).map((a) => {
+                    const s = a.specs || {};
+                    const typeLabel = (a.type || s.category || s.asset_type || 'Equipo').toString();
+                    return {
+                        id: a.id,
+                        model: a.model || s.model || '—',
+                        brand: (s.brand || '').trim(),
+                        serial_number: String(s.serial_number || s.serial || '').trim(),
+                        category: typeLabel,
+                        status: a.status,
+                    };
+                });
+                if (!cancelled) setMyAssets(normalized);
             } catch (err) {
-                console.error("Error al cargar equipos del usuario:", err);
+                console.error('Error al cargar equipos del usuario:', err);
+                if (!cancelled) setMyAssets([]);
             } finally {
-                setLoadingAssets(false);
+                if (!cancelled) setLoadingAssets(false);
             }
         };
-
         fetchMyAssets();
+        return () => { cancelled = true; };
     }, [user]);
 
-    // --- Lógica del Flujo Dinámico (Árbol de Decisión) ---
     const handleCategorySelection = (selection) => {
-        setSelectedGenericDeviceType('Laptop'); // Resetear genérico por si acaso
-
-        // Es un equipo del usuario?
+        setSelectedGenericDeviceType('Laptop');
         if (typeof selection === 'object' && selection.id) {
-            setSelectedCategoryId(selection.id); // Guardamos el ID del equipo (UUID)
-            setAssetTag(selection.serial_number || selection.id || ''); // Autocompletar Tag
+            setSelectedCategoryId(selection.id);
+            setAssetTag(selection.serial_number || String(selection.id));
             return;
         }
-
-        // Es una categoría fija?
-        setSelectedCategoryId(selection); // 'category_otro_equipo', 'category_software', 'category_red'
-
-        if (selection === 'category_otro_equipo') {
-            setAssetTag(''); // Usuario debe ponerlo a mano u opcional
-        } else {
-            setAssetTag(''); // Software/Red no necesitan Tag
-        }
+        setSelectedCategoryId(selection);
+        if (selection === 'category_otro_equipo') setAssetTag('');
+        else setAssetTag('');
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         if (!selectedCategoryId) {
-            setError("Por favor, selecciona qué está fallando.");
+            setError('Selecciona uno de tus equipos o despliega “Otro tipo de incidencia”.');
             return;
         }
 
         if (!title.trim() || !description.trim()) {
-            setError("El título y la descripción son obligatorios.");
+            setError('El título y la descripción son obligatorios.');
             return;
         }
 
@@ -291,221 +423,242 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
 
         try {
             if (user?.id === 'demo-user') {
-                throw new Error("No puedes crear tickets reales en modo Demo.");
+                throw new Error('No puedes crear tickets reales en modo Demo.');
             }
 
             const urgencyMap = {
-                'Baja': 'low',
-                'Media': 'medium',
-                'Alta': 'high',
-                'Crítica': 'critical'
+                Baja: 'low',
+                Media: 'medium',
+                Alta: 'high',
+                Crítica: 'critical',
             };
 
-            // Determinar el device_type final según la categoría
             let finalDeviceType = 'Hardware';
-
-            // Caso 1: Usuario eligió uno de "Mis Equipos"
-            if (myAssets.some(a => a.id === selectedCategoryId)) {
-                const myAsset = myAssets.find(a => a.id === selectedCategoryId);
-                finalDeviceType = myAsset.category || 'Hardware';
-
-                // Caso 2: Usuario eligió "Otro Equipo"
+            const assetRow = myAssets.find((a) => a.id === selectedCategoryId);
+            if (assetRow) {
+                finalDeviceType = assetRow.category || 'Hardware';
             } else if (selectedCategoryId === 'category_otro_equipo') {
                 finalDeviceType = selectedGenericDeviceType;
-
-                // Caso 3: Usuario eligió Software/Red
             } else if (selectedCategoryId === 'category_software') {
                 finalDeviceType = 'Software';
             } else if (selectedCategoryId === 'category_red') {
                 finalDeviceType = 'Network';
             }
 
-            // Compilar los datos en la descripción para no romper la base de datos
-            const fullDescription = `[Dispositivo: ${finalDeviceType}]
-${assetTag.trim() ? `[Etiqueta/Serie: ${assetTag.trim()}]\n` : ''}
-${description.trim()}`;
+            const fullDescription = `[Dispositivo: ${finalDeviceType}]\n${assetTag.trim() ? `[Etiqueta/Serie: ${assetTag.trim()}]\n` : ''}${description.trim()}`;
 
-            // Payload final dinámico (Solo columnas válidas de la BD)
             const newTicket = {
                 title: title.trim(),
                 description: fullDescription,
                 urgency: urgencyMap[urgency] || 'medium',
                 status: 'pending_admin',
-                reported_by: user.id
+                reported_by: user.id,
             };
+
+            if (assetRow) {
+                newTicket.asset_id = String(assetRow.id);
+                if (assetRow.serial_number) newTicket.asset_serial_number = assetRow.serial_number;
+            }
 
             const res = await ticketService.create(newTicket);
 
-            if (!res) throw new Error("Ocurrió un error al guardar el reporte.");
+            if (!res) throw new Error('Ocurrió un error al guardar el reporte.');
 
             if (onSuccess) onSuccess();
             else onCancel();
-
         } catch (err) {
             console.error(err);
-            setError(err.message || "Ocurrió un error al guardar el reporte.");
+            setError(err.message || 'Ocurrió un error al guardar el reporte.');
         } finally {
             setLoading(false);
         }
     };
 
-    // Auxiliar: Determinar ícono de equipo de usuario
     const getAssetIcon = (category) => {
         const cat = (category || '').toLowerCase();
-        if (cat.includes('laptop')) return <Laptop size={24} />;
-        if (cat.includes('monitor')) return <Monitor size={24} />;
-        if (cat.includes('teléfono') || cat.includes('celular') || cat.includes('phone')) return <Smartphone size={24} />;
-        return <Desktop size={24} />; // Icono por defecto (Escritorio/Ajustes)
+        if (cat.includes('monitor')) return <Monitor className="w-6 h-6" strokeWidth={2} />;
+        if (cat.includes('laptop')) return <Laptop className="w-6 h-6" strokeWidth={2} />;
+        if (cat.includes('teléfono') || cat.includes('celular') || cat.includes('phone')) return <Smartphone className="w-6 h-6" strokeWidth={2} />;
+        if (cat.includes('dock')) return <Cable className="w-6 h-6" strokeWidth={2} />;
+        if (cat.includes('teclado')) return <Keyboard className="w-6 h-6" strokeWidth={2} />;
+        if (cat.includes('mouse')) return <MousePointer2 className="w-6 h-6" strokeWidth={2} />;
+        if (cat.includes('workstation') || cat.includes('desktop') || cat.includes('pc')) return <Cpu className="w-6 h-6" strokeWidth={2} />;
+        return <Cpu className="w-6 h-6" strokeWidth={2} />;
     };
 
-    // Variables de control de renderizado (El "Cerebro" del formulario)
-    const isAssignedAssetSelected = myAssets.some(a => a.id === selectedCategoryId);
+    const isAssignedAssetSelected = myAssets.some((a) => a.id === selectedCategoryId);
     const showGenericIcons = selectedCategoryId === 'category_otro_equipo';
-    const showAssetTagInput = (selectedCategoryId === 'category_otro_equipo' || isAssignedAssetSelected);
+    const showAssetTagInput = selectedCategoryId === 'category_otro_equipo' || isAssignedAssetSelected;
 
     return (
-        <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-800 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 transition-colors">
-            <div className="p-8 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/30 flex justify-between items-center">
+        <div className="rounded-[2.5rem] border border-white/40 dark:border-slate-700/60 bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(15,23,42,0.18)] dark:shadow-black/50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 transition-all">
+            <div className="p-8 border-b border-slate-200/50 dark:border-slate-800/80 bg-gradient-to-r from-slate-50/90 via-white/40 to-blue-50/30 dark:from-slate-900/90 dark:via-slate-900/50 dark:to-blue-950/20 flex justify-between items-center">
                 <div className="flex items-center gap-4">
-                    <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-lg shadow-blue-500/20">
-                        <AlertCircle size={24} strokeWidth={2.5} />
+                    <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-blue-500/30 ring-2 ring-white/30 dark:ring-slate-800/50">
+                        <Sparkles size={24} strokeWidth={2.5} />
                     </div>
                     <div>
                         <h3 className="font-black text-slate-950 dark:text-white text-xl tracking-tight">Reportar Falla Técnica</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Llenado inteligente y dinámico.</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Elige el equipo que tienes asignado en inventario.</p>
                     </div>
                 </div>
                 <button
+                    type="button"
                     onClick={onCancel}
-                    className="p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all"
+                    className="p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-800 rounded-2xl transition-all duration-200"
                 >
                     <X size={24} />
                 </button>
             </div>
 
-            <div className="p-10">
+            <div className="p-8 sm:p-10">
                 <form onSubmit={handleSubmit} className="space-y-8 max-w-2xl mx-auto">
                     {error && (
-                        <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold border border-red-100 flex items-center gap-2">
+                        <div className="bg-red-500/10 text-red-700 dark:text-red-300 p-4 rounded-2xl text-sm font-bold border border-red-200/60 dark:border-red-900/40 flex items-center gap-2 animate-in fade-in duration-200">
                             <AlertCircle size={16} />
                             <span>{error}</span>
                         </div>
                     )}
 
-                    {/* --- 1. ¿Qué está fallando? (Selección Adaptativa) --- */}
-                    <div className="space-y-6">
-                        <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">1. ¿Qué está fallando?</label>
+                    <div className="space-y-5">
+                        <div className="flex items-center gap-2 ml-1">
+                            <div className="h-1 w-8 rounded-full bg-blue-600" />
+                            <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">1. Tu equipo en inventario</label>
+                        </div>
 
-                        {/* A) Mis Equipos Asignados */}
-                        {myAssets.length > 0 && (
-                            <div className="space-y-4">
-                                <span className="text-xs font-black text-slate-900 dark:text-white ml-1">Mis Equipos Asignados (Hardware)</span>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {myAssets.map((asset) => (
-                                        <button
-                                            key={asset.id}
-                                            type="button"
-                                            onClick={() => handleCategorySelection(asset)}
-                                            className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === asset.id
-                                                ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
-                                                : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                                }`}
-                                        >
-                                            <div className={`p-3 rounded-2xl ${selectedCategoryId === asset.id ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                                {getAssetIcon(asset.category)}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-black truncate">{asset.brand} {asset.model}</p>
-                                                <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">S/N: {asset.serial_number || 'N/A'}</p>
-                                            </div>
-                                            {selectedCategoryId === asset.id && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
-                                        </button>
-                                    ))}
-                                </div>
+                        {loadingAssets ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" aria-busy="true" aria-label="Cargando equipos asignados">
+                                {[1, 2, 3, 4].map((i) => (
+                                    <div
+                                        key={i}
+                                        className="h-[5.5rem] rounded-3xl bg-gradient-to-br from-slate-100/90 to-slate-200/30 dark:from-slate-800/80 dark:to-slate-900/40 animate-pulse border border-white/50 dark:border-slate-700/40"
+                                    />
+                                ))}
+                            </div>
+                        ) : myAssets.length === 0 ? (
+                            <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-8 text-center">
+                                <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">No hay equipos asignados a tu usuario en inventario.</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Si deberías ver equipos aquí, contacta a TI. Mientras tanto puedes abrir otras categorías.</p>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAltCategories(true)}
+                                    className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                    Otro tipo de incidencia
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {myAssets.map((asset) => (
+                                    <button
+                                        key={asset.id}
+                                        type="button"
+                                        onClick={() => handleCategorySelection(asset)}
+                                        className={`group flex items-center text-left gap-4 p-5 rounded-3xl border-2 transition-all duration-300 ease-out ${selectedCategoryId === asset.id
+                                            ? 'border-blue-500 bg-blue-500/10 dark:bg-blue-500/15 text-blue-900 dark:text-blue-100 shadow-lg shadow-blue-500/10 scale-[1.01]'
+                                            : 'border-slate-200/80 dark:border-slate-700/80 bg-white/50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:border-blue-300/80 dark:hover:border-blue-600/50 hover:shadow-md'
+                                            }`}
+                                    >
+                                        <div className={`p-3.5 rounded-2xl transition-colors duration-300 ${selectedCategoryId === asset.id ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-700/80 text-slate-500 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>
+                                            {getAssetIcon(asset.category)}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{asset.category}</p>
+                                            <p className="text-sm font-black truncate text-slate-900 dark:text-white">
+                                                {asset.brand ? `${asset.brand} · ` : ''}{asset.model}
+                                            </p>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 truncate mt-1">
+                                                S/N: {asset.serial_number || 'N/A'}
+                                            </p>
+                                        </div>
+                                        {selectedCategoryId === asset.id && <CheckCircle2 size={20} className="text-blue-600 dark:text-blue-400 shrink-0" />}
+                                    </button>
+                                ))}
                             </div>
                         )}
 
-                        {/* B) Otras Categorías Fijas */}
-                        <div className="space-y-4">
-                            <span className="text-xs font-black text-slate-900 dark:text-white ml-1">Otras Categorías / Servicios</span>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                {/* Otro Equipo */}
-                                <button
-                                    type="button"
-                                    onClick={() => handleCategorySelection('category_otro_equipo')}
-                                    className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_otro_equipo'
-                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
-                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                        }`}
-                                >
-                                    <div className={`p-3 rounded-2xl ${selectedCategoryId === 'category_otro_equipo' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                        <Monitor size={24} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-black truncate">Otro Equipo</p>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">Impresora, Proyector</p>
-                                    </div>
-                                    {selectedCategoryId === 'category_otro_equipo' && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
-                                </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowAltCategories((v) => !v)}
+                            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700 bg-white/40 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all duration-200"
+                        >
+                            <ChevronDown size={16} className={`transition-transform duration-200 ${showAltCategories ? 'rotate-180' : ''}`} />
+                            {showAltCategories ? 'Ocultar otras incidencias' : 'Otro tipo de incidencia (software, red, equipo no listado)'}
+                        </button>
 
-                                {/* Software */}
-                                <button
-                                    type="button"
-                                    onClick={() => handleCategorySelection('category_software')}
-                                    className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_software'
-                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
-                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                        }`}
-                                >
-                                    <div className={`p-3 rounded-2xl ${selectedCategoryId === 'category_software' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                        <Settings size={24} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-black truncate">Software/Apps</p>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">Windows, Office, SAP</p>
-                                    </div>
-                                    {selectedCategoryId === 'category_software' && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
-                                </button>
-
-                                {/* Red */}
-                                <button
-                                    type="button"
-                                    onClick={() => handleCategorySelection('category_red')}
-                                    className={`flex items-center text-left gap-4 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_red'
-                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-lg shadow-blue-500/5'
-                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                        }`}
-                                >
-                                    <div className={`p-3 rounded-2xl ${selectedCategoryId === 'category_red' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                        <Smartphone size={24} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-black truncate">Red e Internet</p>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">WiFi, VPN, Correo</p>
-                                    </div>
-                                    {selectedCategoryId === 'category_red' && <CheckCircle2 size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />}
-                                </button>
+                        {showAltCategories && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 rounded-3xl border border-slate-200/60 dark:border-slate-700/80 bg-slate-50/40 dark:bg-slate-800/30 p-5 backdrop-blur-sm">
+                                <span className="text-xs font-black text-slate-800 dark:text-slate-200 ml-1 block">Software, red u otro hardware</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCategorySelection('category_otro_equipo')}
+                                        className={`flex items-center text-left gap-3 p-4 rounded-2xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_otro_equipo'
+                                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 shadow-md'
+                                            : 'border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-600'
+                                            }`}
+                                    >
+                                        <div className={`p-2.5 rounded-xl ${selectedCategoryId === 'category_otro_equipo' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                            <Monitor size={22} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-black truncate">Otro equipo</p>
+                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">No está en tu lista</p>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCategorySelection('category_software')}
+                                        className={`flex items-center text-left gap-3 p-4 rounded-2xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_software'
+                                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 shadow-md'
+                                            : 'border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-600'
+                                            }`}
+                                    >
+                                        <div className={`p-2.5 rounded-xl ${selectedCategoryId === 'category_software' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                            <Settings size={22} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-black truncate">Software</p>
+                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Apps y licencias</p>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCategorySelection('category_red')}
+                                        className={`flex items-center text-left gap-3 p-4 rounded-2xl border-2 transition-all duration-300 ${selectedCategoryId === 'category_red'
+                                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-500/10 shadow-md'
+                                            : 'border-slate-100 dark:border-slate-800 bg-white/70 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-600'
+                                            }`}
+                                    >
+                                        <div className={`p-2.5 rounded-xl ${selectedCategoryId === 'category_red' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                            <Wifi size={22} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-black truncate">Red / Internet</p>
+                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">VPN, correo, WiFi</p>
+                                        </div>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
 
-                    {/* NUEVO: Mostrar iconos genéricos SOLO si eligió "Otro Equipo" (Hardware genérico) */}
                     {showGenericIcons && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 bg-slate-50/50 dark:bg-slate-900/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800">
-                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Tipo de Dispositivo Genérico</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 rounded-3xl border border-slate-200/60 dark:border-slate-700 bg-white/50 dark:bg-slate-800/30 p-6 backdrop-blur-sm">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Tipo de dispositivo</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 {genericDeviceTypes.map((type) => (
                                     <button
                                         key={type.id}
                                         type="button"
                                         onClick={() => setSelectedGenericDeviceType(type.id)}
-                                        className={`flex flex-col items-center gap-3 p-4 rounded-3xl border-2 transition-all duration-300 ${selectedGenericDeviceType === type.id
-                                            ? 'border-slate-400 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                                            : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 hover:border-slate-200 dark:hover:border-slate-700'
+                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-300 ${selectedGenericDeviceType === type.id
+                                            ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-500/15 text-blue-800 dark:text-blue-200'
+                                            : 'border-slate-100 dark:border-slate-800 bg-white/60 dark:bg-slate-900/40 text-slate-500 hover:border-slate-300'
                                             }`}
                                     >
-                                        <type.icon size={24} strokeWidth={selectedGenericDeviceType === type.id ? 2.5 : 2} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">{type.id}</span>
+                                        <type.icon size={22} strokeWidth={selectedGenericDeviceType === type.id ? 2.5 : 2} />
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight">{type.label}</span>
                                     </button>
                                 ))}
                             </div>
@@ -653,6 +806,14 @@ const UserPortal = () => {
     const [termsType, setTermsType] = useState('terms');
     const [selectedTicket, setSelectedTicket] = useState(null);
 
+    const toUIStatus = (status, assignedTech) => {
+        const s = (status || '').toLowerCase();
+        if (s === 'open') return 'pending_admin';
+        if (s === 'pending') return assignedTech ? 'in_progress' : 'assigned';
+        if (s === 'resolved') return 'resolved';
+        return status;
+    };
+
     const fetchMyTickets = async () => {
         if (!user) return;
         setLoadingData(true);
@@ -665,37 +826,42 @@ const UserPortal = () => {
 
             if (error) throw error;
 
-            // Get users to map assigned tech
             const users = await userService.getAll();
-            const userMap = users.reduce((acc, u) => { acc[u.id] = u; return acc; }, {});
+            const userMap = users.reduce((acc, u) => {
+                acc[u.id] = u;
+                return acc;
+            }, {});
 
-            // Compute stats
-            let open = 0, pending = 0, resolved = 0;
-            const formattedTickets = data.map(t => {
-                const s = (t.status || '').toLowerCase();
-                // Map to UI buckets: 'open' is now treated as 'pending_admin' for the user
-                if (s === 'open' || s === 'pending_admin') open++;
-                if (s === 'assigned' || s === 'in_progress') pending++;
-                if (s === 'resolved') resolved++;
+            let open = 0;
+            let pending = 0;
+            let resolved = 0;
+            const formattedTickets = data.map((t) => {
+                const uiStatus = toUIStatus(t.status, t.assigned_tech);
+                if (uiStatus === 'pending_admin') open += 1;
+                if (uiStatus === 'assigned' || uiStatus === 'in_progress') pending += 1;
+                if (uiStatus === 'resolved') resolved += 1;
 
                 const techUser = t.assigned_tech ? userMap[t.assigned_tech] : null;
 
                 return {
                     id: t.id,
+                    fullId: t.id,
                     displayId: String(t.id).substring(0, 8).toUpperCase(),
                     shortId: String(t.id).substring(0, 4),
                     issue: t.title,
                     tech: techUser ? techUser.full_name : 'Sin Asignar',
                     reportedBy: profile?.full_name || user.email || 'Desconocido',
-                    status: t.status,
-                    date: new Date(t.created_at).toLocaleDateString()
+                    status: uiStatus,
+                    assigned_tech: t.assigned_tech,
+                    scheduled_for: t.scheduled_for || null,
+                    date: new Date(t.created_at).toLocaleDateString(),
                 };
             });
 
             setStats({ open, pending, resolved });
             setMyTickets(formattedTickets);
-        } catch (error) {
-            console.error("Error fetching tickets:", error);
+        } catch (err) {
+            console.error('Error fetching tickets:', err);
         } finally {
             setLoadingData(false);
         }
@@ -821,6 +987,8 @@ const UserPortal = () => {
                             </div>
                         </div>
 
+                        <MyGeneralRequestsPanel />
+
                         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden transition-colors">
                             <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/30 flex justify-between items-center">
                                 <div className="flex items-center gap-3">
@@ -925,7 +1093,7 @@ const UserPortal = () => {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 min-h-0">
                 <Header
                     onMenuClick={() => setIsSidebarOpen(true)}
                     userName={profile?.full_name || user?.email || "Usuario"}
@@ -934,7 +1102,7 @@ const UserPortal = () => {
                     onSearchChange={setSearchTerm}
                 />
 
-                <main className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full">
 
                     <div className="relative">
                         {renderView()}
@@ -952,10 +1120,21 @@ const UserPortal = () => {
                 ticket={selectedTicket}
                 isOpen={!!selectedTicket}
                 onClose={() => setSelectedTicket(null)}
-                onUpdateTicket={async (id, updates) => {
-                    await ticketService.update(id, updates);
-                    fetchMyTickets();
-                    setSelectedTicket(null);
+                onUpdateTicket={async (ticketId, updates) => {
+                    const data = await ticketService.update(ticketId, updates, user?.id);
+                    await fetchMyTickets();
+                    if (selectedTicket && String(selectedTicket.id) === String(ticketId)) {
+                        setSelectedTicket((prev) => ({
+                            ...prev,
+                            ...(updates.scheduled_for !== undefined && {
+                                scheduled_for: data?.scheduled_for ?? updates.scheduled_for,
+                            }),
+                            ...(updates.status !== undefined && { status: data?.status ?? updates.status }),
+                            ...(updates.assigned_tech !== undefined && {
+                                assigned_tech: data?.assigned_tech ?? updates.assigned_tech,
+                            }),
+                        }));
+                    }
                 }}
             />
         </div>

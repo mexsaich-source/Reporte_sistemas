@@ -46,6 +46,7 @@ const GeneralRequestForm = ({ onCancel, onSuccess }) => {
                     user_id: user.id,
                     first_name: formData.first_name,
                     last_name: formData.last_name,
+                    department: formData.department,
                     subject: formData.subject,
                     reason: formData.reason,
                     is_loan: formData.is_loan,

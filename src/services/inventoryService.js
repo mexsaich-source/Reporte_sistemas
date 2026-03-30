@@ -60,7 +60,8 @@ export const inventoryService = {
                 id: finalId,
                 type: item.type || 'General',
                 model: item.model || '',
-                status: item.status || 'available', 
+                status: item.status || 'available',
+                assigned_to: item.assignedTo ?? item.assigned_to ?? null,
                 condition: item.condition || 'good',
                 specs: {
                     asset_type: item.type,

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { userService } from './userService';
+import { deleteAllTicketChatFiles } from './ticketChatStorage';
 // Estos son los estados que tu React UI conoce y usa
 export const TICKET_STATUS = {
     PENDING_ADMIN: 'pending_admin',
@@ -41,7 +42,8 @@ export const ticketService = {
                     urgency,
                     created_at,
                     reported_by,
-                    assigned_tech
+                    assigned_tech,
+                    scheduled_for
                 `)
                 .order('created_at', { ascending: false });
 
@@ -111,6 +113,11 @@ export const ticketService = {
                 throw prevErr;
             }
 
+            const closingNow = cleanUpdates.status === 'resolved' && prev.status !== 'resolved';
+            if (closingNow) {
+                cleanUpdates.closed_at = new Date().toISOString();
+            }
+
             const { data, error } = await supabase
                 .from('tickets')
                 .update(cleanUpdates)
@@ -160,6 +167,12 @@ export const ticketService = {
 
 
                 }
+            }
+
+            if (closingNow) {
+                deleteAllTicketChatFiles(id).catch((e) => {
+                    if (import.meta.env.DEV) console.warn('No se pudieron borrar adjuntos del chat:', e);
+                });
             }
 
             return data;

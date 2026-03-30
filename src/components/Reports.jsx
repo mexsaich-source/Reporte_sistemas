@@ -10,15 +10,10 @@ import {
 
 const PIE_COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#10b981'];
 
-const ReportsView = () => {
+const ReportsView = ({ searchTerm = '' }) => {
     const [tickets, setTickets] = useState([]);
     const [assets, setAssets] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [failureAnalytics, setFailureAnalytics] = useState({
-        byType: [],
-        byUrgency: [],
-        resolutionTrend: []
-    });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -31,9 +26,6 @@ const ReportsView = () => {
                 
                 setTickets(ticketsData);
                 setAssets(assetsData);
-                
-                // Process Failure Analytics
-                analyzeData(ticketsData, assetsData);
             } catch (err) {
                 console.error("Error loading reports data:", err);
             } finally {
@@ -43,10 +35,22 @@ const ReportsView = () => {
         fetchData();
     }, []);
 
-    const analyzeData = (ticketsData, assetsData) => {
+    const filteredTickets = React.useMemo(() => {
+        if (!searchTerm) return tickets;
+        const s = searchTerm.toLowerCase();
+        return tickets.filter(t => 
+            (t.id && String(t.id).toLowerCase().includes(s)) ||
+            (t.title && t.title.toLowerCase().includes(s)) ||
+            (t.status && t.status.toLowerCase().includes(s)) ||
+            (t.urgency && t.urgency.toLowerCase().includes(s)) ||
+            (t.device_type && t.device_type.toLowerCase().includes(s))
+        );
+    }, [tickets, searchTerm]);
+
+    const failureAnalytics = React.useMemo(() => {
         // 1. Failures by Device Type
         const typeCount = {};
-        ticketsData.forEach(t => {
+        filteredTickets.forEach(t => {
             const matchedType = t.device_type || 'General';
             typeCount[matchedType] = (typeCount[matchedType] || 0) + 1;
         });
@@ -55,14 +59,14 @@ const ReportsView = () => {
 
         // 2. Tickets by Urgency
         const urgencyCount = {};
-        ticketsData.forEach(t => {
+        filteredTickets.forEach(t => {
             const u = t.urgency || 'medium';
             const label = u.charAt(0).toUpperCase() + u.slice(1);
             urgencyCount[label] = (urgencyCount[label] || 0) + 1;
         });
         const byUrgency = Object.entries(urgencyCount).map(([name, value]) => ({ name, value }));
 
-        // 3. Resolution Trend (Real usage of ticket dates)
+        // 3. Resolution Trend
         const last5Days = Array.from({length: 5}, (_, i) => {
             const d = new Date();
             d.setDate(d.getDate() - (4 - i));
@@ -70,18 +74,18 @@ const ReportsView = () => {
         });
 
         const trendData = last5Days.map(day => {
-            const count = ticketsData.filter(t => 
+            const count = filteredTickets.filter(t => 
                 new Date(t.created_at).toLocaleDateString([], { weekday: 'short' }) === day
             ).length;
             return { name: day, tickets: count };
         });
 
-        setFailureAnalytics({
+        return {
             byType,
             byUrgency,
             resolutionTrend: trendData
-        });
-    };
+        };
+    }, [filteredTickets]);
 
     const generateCSV = () => {
         // SECURITY FIX #9: Prevenir CSV Injection
@@ -125,10 +129,10 @@ const ReportsView = () => {
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Métricas */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard label="Total Tickets" value={tickets.length} icon={AlertTriangle} color="text-rose-600" bg="bg-rose-100" />
+                <StatCard label="Total Tickets" value={filteredTickets.length} icon={AlertTriangle} color="text-rose-600" bg="bg-rose-100" />
                 <StatCard label="Equipos en Inventario" value={assets.length} icon={Hammer} color="text-blue-600" bg="bg-blue-100" />
-                <StatCard label="Tickets Resueltos" value={tickets.filter(t => t.status === 'resolved').length} icon={CheckCircle2} color="text-emerald-600" bg="bg-emerald-100" />
-                <StatCard label="Tasa de Falla" value={`${((tickets.length / (assets.length || 1)) * 10).toFixed(1)}%`} icon={TrendingUp} color="text-amber-600" bg="bg-amber-100" />
+                <StatCard label="Tickets Resueltos" value={filteredTickets.filter(t => t.status === 'resolved').length} icon={CheckCircle2} color="text-emerald-600" bg="bg-emerald-100" />
+                <StatCard label="Tasa de Falla" value={`${((filteredTickets.length / (assets.length || 1)) * 10).toFixed(1)}%`} icon={TrendingUp} color="text-amber-600" bg="bg-amber-100" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

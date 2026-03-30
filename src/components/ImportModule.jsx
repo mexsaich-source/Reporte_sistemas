@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     Upload, FileSpreadsheet, CheckCircle2, AlertTriangle,
     XCircle, Info, Download, Trash2, ArrowRight, Save, Clock, History, X, User
@@ -96,6 +96,11 @@ const ImportModule = () => {
         }
         setPreviewData(newData);
     };
+
+    const assigneeSummary = useMemo(() => {
+        if (importType !== 'inventory' || !previewData.length) return [];
+        return importService.summarizeInventoryAssignees(previewData);
+    }, [importType, previewData]);
 
     const handleProcessImport = async () => {
         if (!previewData.length) return;
@@ -229,15 +234,33 @@ const ImportModule = () => {
 
                         <div className="xl:col-span-2 space-y-4">
                             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border shadow-xl shadow-slate-200/40 overflow-hidden flex flex-col min-h-[500px]">
-                                <div className="p-6 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center shrink-0">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-                                        <h3 className="font-bold text-slate-900 text-base uppercase tracking-widest">Previsualización de Datos</h3>
+                                <div className="p-6 border-b border-slate-100 bg-slate-50/30 flex flex-col gap-3 shrink-0">
+                                    <div className="flex justify-between items-center gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                                            <h3 className="font-bold text-slate-900 text-base uppercase tracking-widest">Previsualización de Datos</h3>
+                                        </div>
+                                        {previewData.length > 0 && (
+                                            <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100">
+                                                {previewData.length} Registros
+                                            </span>
+                                        )}
                                     </div>
-                                    {previewData.length > 0 && (
-                                        <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100">
-                                            {previewData.length} Registros
-                                        </span>
+                                    {assigneeSummary.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {assigneeSummary.slice(0, 8).map((s) => (
+                                                <span
+                                                    key={s.email}
+                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded-xl border ${s.matched ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-amber-50 text-amber-900 border-amber-100'}`}
+                                                    title={s.matched ? 'Usuario encontrado en la base' : 'Correo sin usuario en la base'}
+                                                >
+                                                    {s.name || s.email} · {s.count} equipo{s.count > 1 ? 's' : ''}
+                                                </span>
+                                            ))}
+                                            {assigneeSummary.length > 8 && (
+                                                <span className="text-[10px] font-black text-slate-400 self-center">+{assigneeSummary.length - 8} usuarios</span>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
 

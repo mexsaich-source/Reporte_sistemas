@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { AuthContext } from './authStore';
+import { notificationService } from '../services/notificationService';
 
 /**
  * AuthProvider component that only handles the state management logic.
@@ -66,6 +67,9 @@ export default function AuthProvider({ children }) {
                 setProfile(data);
                 profileRef.current = data;
                 setAuthError(null);
+                if (typeof window !== 'undefined' && userId) {
+                    notificationService.syncPushForUser(userId).catch(() => {});
+                }
             }
         } catch (err) {
             console.error('DEBUG: Fetch error or timeout:', err.message);

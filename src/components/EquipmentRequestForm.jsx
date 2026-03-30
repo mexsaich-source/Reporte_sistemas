@@ -34,6 +34,18 @@ const EquipmentRequestForm = ({ onCancel, onSuccess }) => {
                 }]);
 
             if (error) throw error;
+
+            const { data: admins } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'admin');
+
+            const title = 'Nueva solicitud de equipo';
+            const message = `${profile?.full_name || user.email || 'Usuario'} solicitó: ${formData.equipment_type}. Revisa Solicitudes → Equipo.`;
+            for (const a of admins || []) {
+                await supabase.from('notifications').insert([{ user_id: a.id, title, message }]);
+            }
+
             onSuccess();
         } catch (error) {
             console.error('Error creating request:', error);
