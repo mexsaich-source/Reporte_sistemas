@@ -7,6 +7,6 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    allowedHosts: ['drive-nec-shot-largely.trycloudflare.com'] // <- sin https://
+    allowedHosts: ['popularity-jpg-distributors-himself.trycloudflare.com'] // <- sin https://
   }
 })

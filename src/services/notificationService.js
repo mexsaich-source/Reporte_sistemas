@@ -19,6 +19,36 @@ function getOrCreateDeviceId() {
     }
 }
 
+/**
+ * Detecta la plataforma del navegador
+ * @returns {'web' | 'ios' | 'android'}
+ */
+function detectPlatform() {
+    const ua = window.navigator.userAgent.toLowerCase();
+    
+    if (ua.includes('iphone') || ua.includes('ipad')) {
+        return 'ios';
+    }
+    if (ua.includes('android')) {
+        return 'android';
+    }
+    return 'web';
+}
+
+/**
+ * Genera información descriptiva del dispositivo
+ * @returns {string}
+ */
+function generateDeviceInfo() {
+    const ua = window.navigator.userAgent;
+    const platform = window.navigator.platform || 'Unknown';
+    const deviceId = getOrCreateDeviceId();
+    const isMobile = ua.includes('Mobile') || ua.includes('Android') || ua.includes('iPhone');
+    const deviceType = isMobile ? 'Mobile' : 'Desktop';
+    
+    return `${platform} | ${deviceType} | id:${deviceId.slice(0, 8)}`;
+}
+
 export const notificationService = {
     /**
      * Flujo completo: permiso + SW actualizado + token FCM + upsert en Supabase.
@@ -77,30 +107,35 @@ export const notificationService = {
                 return;
             }
 
-            const userAgent = window.navigator.userAgent;
-            const platform = window.navigator.platform || 'Desconocido';
-            const deviceId = getOrCreateDeviceId();
-            const deviceInfo = `${platform} | ${userAgent.includes('Mobile') ? 'Móvil' : 'PC'} | id:${deviceId.slice(0, 8)}…`;
+            // Nueva estructura con platform automático
+            const platform = detectPlatform();
+            const deviceInfo = generateDeviceInfo();
 
             const row = {
                 user_id: userId,
                 token: currentToken,
                 device_info: deviceInfo,
-                last_seen_at: new Date().toISOString()
+                platform: platform,
+                is_active: true
+                // NO incluir created_at ni last_seen_at - SQL los maneja con defaults y triggers
             };
 
-            const { error } = await supabase
+            const { error, data } = await supabase
                 .from('fcm_tokens')
-                .upsert(row, { onConflict: 'user_id,token' });
+                .upsert(row, { onConflict: 'user_id,token' })
+                .select();
 
             if (error) {
                 console.error('Error guardando token multi-dispositivo:', error);
-                await supabase.from('profiles').update({ fcm_token: currentToken }).eq('id', userId);
                 return;
             }
 
-            await supabase.from('profiles').update({ fcm_token: currentToken }).eq('id', userId);
-            console.log('Dispositivo registrado para notificaciones (fcm_tokens + perfil).');
+            console.log(`✅ Dispositivo registrado (${platform}):`, {
+                token: currentToken.substring(0, 20) + '...',
+                device: deviceInfo,
+                userId: userId.substring(0, 8) + '...'
+            });
+
         } catch (err) {
             console.error('Error al recuperar el token de FCM:', err);
         }
@@ -123,20 +158,44 @@ export const notificationService = {
         return null;
     },
 
-    // Limpia tokens que no se han visto en más de 60 días
+    // Marca tokens como inactivos en lugar de borrar (soft delete)
+    // Se ejecuta al hacer logout
+    async deactivateTokensForLogout() {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { error } = await supabase
+                .from('fcm_tokens')
+                .update({ is_active: false })
+                .eq('user_id', user.id);
+
+            if (error) {
+                console.warn('Error deactivating tokens:', error);
+            } else {
+                console.log('✅ Todos los tokens marcados como inactivos (logout).');
+            }
+        } catch (err) {
+            console.warn('Deactivate tokens error:', err.message);
+        }
+    },
+
+    // Limpia tokens inactivos con más de 90 días (puede ejecutarse periódicamente)
     async cleanupOldTokens(userId) {
         if (!userId) return;
         try {
-            const limitDate = new Date();
-            limitDate.setDate(limitDate.getDate() - 60);
-            
             const { error } = await supabase
                 .from('fcm_tokens')
                 .delete()
                 .eq('user_id', userId)
-                .lt('last_seen_at', limitDate.toISOString());
-            
-            if (error) console.error("Error limpiando tokens obsoletos:", error);
+                .eq('is_active', false)
+                .lt('last_seen_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
+
+            if (error) {
+                console.error("Error limpiando tokens obsoletos:", error);
+            } else {
+                console.log('✅ Tokens obsoletos limpiados.');
+            }
         } catch (err) {
             console.warn("Cleanup ignored:", err.message);
         }
@@ -186,6 +245,28 @@ export const notificationService = {
                 
         } catch (error) {
             console.error("Error limpiando notificaciones base:", error);
+        }
+    },
+
+    // Obtiene todos los tokens activos de un usuario (para enviarles notificaciones)
+    async getActiveTokensForUser(userId) {
+        if (!userId) return [];
+        try {
+            const { data, error } = await supabase
+                .from('fcm_tokens')
+                .select('token, platform, device_info')
+                .eq('user_id', userId)
+                .eq('is_active', true);
+
+            if (error) {
+                console.error('Error obteniendo tokens activos:', error);
+                return [];
+            }
+
+            return data || [];
+        } catch (err) {
+            console.warn('Get active tokens error:', err.message);
+            return [];
         }
     }
 };
