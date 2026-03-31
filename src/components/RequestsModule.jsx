@@ -4,6 +4,7 @@ import { Check, X, AlertCircle, Package } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 import { inventoryService } from '../services/inventoryService';
 import { ticketService } from '../services/ticketService';
+import { workNotificationService } from '../services/workNotificationService';
 
 const RequestsModule = ({ searchTerm = '' }) => {
     const [tab, setTab] = useState('general');
@@ -17,6 +18,9 @@ const RequestsModule = ({ searchTerm = '' }) => {
 
     const [rejectModal, setRejectModal] = useState({ open: false, type: null, row: null });
     const [rejectReason, setRejectReason] = useState('');
+
+    const [approveLoanModal, setApproveLoanModal] = useState({ open: false, row: null });
+    const [loanForm, setLoanForm] = useState({ loan_start_date: '', loan_end_date: '' });
 
     const [approveEquipModal, setApproveEquipModal] = useState({ open: false, row: null });
     const [equipForm, setEquipForm] = useState({ brand: '', model: '', serial: '' });
@@ -116,7 +120,75 @@ const RequestsModule = ({ searchTerm = '' }) => {
 
     const notifyUser = async (userId, title, message) => {
         if (!userId) return;
-        await supabase.from('notifications').insert([{ user_id: userId, title, message }]);
+        await workNotificationService.createNotification(userId, title, message);
+    };
+
+    const openApproveLoan = (row) => {
+        const today = new Date().toISOString().slice(0, 10);
+        setLoanForm({
+            loan_start_date: row?.loan_start_date || today,
+            loan_end_date: row?.loan_end_date || ''
+        });
+        setApproveLoanModal({ open: true, row });
+    };
+
+    const confirmBorrowLoan = async () => {
+        const row = approveLoanModal.row;
+        if (!row?.id) return;
+        if (!loanForm.loan_end_date) {
+            alert('La fecha de devolucion es obligatoria para prestamos.');
+            return;
+        }
+
+        try {
+            const patch = {
+                status: 'borrowed',
+                loan_start_date: loanForm.loan_start_date || new Date().toISOString().slice(0, 10),
+                loan_end_date: loanForm.loan_end_date,
+                reject_reason: null
+            };
+
+            const { error } = await supabase
+                .from('general_requests')
+                .update(patch)
+                .eq('id', row.id);
+
+            if (error) throw error;
+
+            await notifyUser(
+                row.user_id,
+                'Prestamo aprobado',
+                `Tu solicitud "${row.subject || 'Prestamo'}" fue aprobada como prestada. Fecha limite de devolucion: ${loanForm.loan_end_date}.`
+            );
+
+            setApproveLoanModal({ open: false, row: null });
+            await loadAll();
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'No se pudo aprobar el prestamo.');
+        }
+    };
+
+    const markLoanAsReturned = async (row) => {
+        if (!row?.id) return;
+        try {
+            const { error } = await supabase
+                .from('general_requests')
+                .update({ status: 'returned' })
+                .eq('id', row.id);
+            if (error) throw error;
+
+            await notifyUser(
+                row.user_id,
+                'Prestamo devuelto',
+                `Se confirmo la devolucion de tu solicitud "${row.subject || 'Prestamo'}".`
+            );
+
+            await loadAll();
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'No se pudo marcar como devuelto.');
+        }
     };
 
     const handleGeneralStatus = async (id, newStatus, reasonText = '') => {
@@ -182,6 +254,11 @@ const RequestsModule = ({ searchTerm = '' }) => {
         try {
             const { data: full, error: fe } = await supabase.from('general_requests').select('*').eq('id', id).single();
             if (fe || !full) throw fe || new Error('No se encontró la solicitud.');
+
+            if (full.is_loan) {
+                openApproveLoan(full);
+                return;
+            }
 
             const { error: ue } = await supabase.from('general_requests').update({ status: 'delivered' }).eq('id', id);
             if (ue) throw ue;
@@ -289,6 +366,12 @@ const RequestsModule = ({ searchTerm = '' }) => {
                 return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
             case 'rejected':
                 return 'bg-rose-500/10 text-rose-600 border-rose-500/20';
+            case 'borrowed':
+                return 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20';
+            case 'returned':
+                return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+            case 'overdue':
+                return 'bg-orange-500/10 text-orange-600 border-orange-500/20';
             case 'delivered':
                 return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
             default:
@@ -302,6 +385,12 @@ const RequestsModule = ({ searchTerm = '' }) => {
                 return 'Aprobado';
             case 'rejected':
                 return kind === 'general' ? 'Denegada' : 'Rechazada';
+            case 'borrowed':
+                return 'Prestado';
+            case 'returned':
+                return 'Devuelto';
+            case 'overdue':
+                return 'Vencido';
             case 'delivered':
                 return 'Entregado';
             default:
@@ -387,6 +476,16 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                             </td>
                                             <td className="p-6 max-w-xs">
                                                 <p className="font-bold text-slate-700 dark:text-slate-200 line-clamp-2">{req.subject}</p>
+                                                {req.is_loan && (
+                                                    <p className="text-[10px] text-indigo-600 mt-1 font-bold uppercase tracking-widest">
+                                                        Prestamo
+                                                    </p>
+                                                )}
+                                                {req.loan_end_date && (
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                                                        Devolver: {new Date(req.loan_end_date).toLocaleDateString()}
+                                                    </p>
+                                                )}
                                                 {req.reject_reason && (
                                                     <p className="text-[10px] text-rose-600 mt-1">Rechazo: {req.reject_reason}</p>
                                                 )}
@@ -409,7 +508,7 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                                                 type="button"
                                                                 onClick={() => handleGeneralAcceptDeliver(req.id)}
                                                                 className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl"
-                                                                title="Aceptar: entregado + ticket de asignación"
+                                                                title={req.is_loan ? 'Aprobar como prestamo' : 'Aceptar: entregado + ticket de asignación'}
                                                             >
                                                                 <Check size={18} />
                                                             </button>
@@ -422,6 +521,16 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                                                 <X size={18} />
                                                             </button>
                                                         </>
+                                                    )}
+                                                    {(req.status === 'borrowed' || req.status === 'overdue') && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => markLoanAsReturned(req)}
+                                                            className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 rounded-xl border border-emerald-200 hover:bg-emerald-100"
+                                                            title="Marcar como devuelto"
+                                                        >
+                                                            Marcar devuelto
+                                                        </button>
                                                     )}
                                                 </div>
                                             </td>
@@ -479,7 +588,7 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                                 <span className="font-black text-blue-600 dark:text-blue-400">
                                                     {req.equipment_type}
                                                 </span>
-                                                <p className="text-[10px] text-slate-500 mt-1">Urgencia: {req.urgency}</p>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Urgencia: {req.urgency}</p>
                                             </td>
                                             <td className="p-6 max-w-xs text-slate-600 dark:text-slate-300 text-xs line-clamp-3">
                                                 {req.reason}
@@ -572,6 +681,55 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                 className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-rose-600 text-white"
                             >
                                 Confirmar rechazo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {approveLoanModal.open && approveLoanModal.row && (
+                <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+                        <h4 className="font-black text-lg text-slate-900 dark:text-white">Aprobar prestamo</h4>
+                        <p className="text-xs text-slate-500">
+                            Define periodo del prestamo para activar recordatorios de devolucion.
+                        </p>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Fecha de salida</label>
+                                <input
+                                    type="date"
+                                    value={loanForm.loan_start_date}
+                                    onChange={(e) => setLoanForm((prev) => ({ ...prev, loan_start_date: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Fecha limite de devolucion</label>
+                                <input
+                                    type="date"
+                                    value={loanForm.loan_end_date}
+                                    onChange={(e) => setLoanForm((prev) => ({ ...prev, loan_end_date: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setApproveLoanModal({ open: false, row: null })}
+                                className="px-4 py-2 rounded-xl text-xs font-black uppercase text-slate-500"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmBorrowLoan}
+                                className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-indigo-600 text-white"
+                            >
+                                Confirmar prestamo
                             </button>
                         </div>
                     </div>

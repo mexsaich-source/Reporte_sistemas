@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient';
 import { userService } from './userService';
 import { deleteAllTicketChatFiles } from './ticketChatStorage';
+import { workNotificationService } from './workNotificationService';
 // Estos son los estados que tu React UI conoce y usa
 export const TICKET_STATUS = {
     PENDING_ADMIN: 'pending_admin',
@@ -85,6 +86,35 @@ export const ticketService = {
             
             if (data && data.status) data.status = toUIStatus(data.status, data.assigned_tech);
 
+            if (data?.assigned_tech) {
+                await workNotificationService.createNotification(
+                    data.assigned_tech,
+                    'Nuevo ticket asignado',
+                    `Se te asigno el ticket "${data.title || `#${data.id}`}".`
+                );
+            } else {
+                // Si aun no hay tecnico asignado, avisar a admins para toma del ticket.
+                const { data: admins } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('role', 'admin');
+
+                const recipients = (admins || [])
+                    .map((a) => a?.id)
+                    .filter(Boolean)
+                    .filter((id) => id !== data.reported_by);
+
+                await Promise.all(
+                    recipients.map((adminId) =>
+                        workNotificationService.createNotification(
+                            adminId,
+                            'Nuevo ticket por revisar',
+                            `Se creo el ticket "${data.title || `#${data.id}`}" y requiere asignacion.`
+                        )
+                    )
+                );
+            }
+
             return data;
         } catch (error) {
             console.error("Error creating ticket:", error);
@@ -104,7 +134,7 @@ export const ticketService = {
 
             const { data: prev, error: prevErr } = await supabase
                 .from('tickets')
-                .select('status, reported_by, assigned_tech')
+                .select('status, title, reported_by, assigned_tech, scheduled_for')
                 .eq('id', id)
                 .single();
 
@@ -133,10 +163,37 @@ export const ticketService = {
             if (data && data.status) data.status = toUIStatus(data.status, data.assigned_tech);
             if (prev && prev.status) prev.status = toUIStatus(prev.status, prev.assigned_tech);
 
+            const assignedTechChanged = ('assigned_tech' in updates) && updates.assigned_tech !== prev.assigned_tech;
+            const scheduleChanged = ('scheduled_for' in updates) && updates.scheduled_for !== prev.scheduled_for;
+            const resolvedNow = data?.status === 'resolved' && prev?.status !== 'resolved';
+
+            if (assignedTechChanged && data?.assigned_tech) {
+                await workNotificationService.createNotification(
+                    data.assigned_tech,
+                    'Ticket asignado',
+                    `Se te asigno el ticket "${data.title || `#${data.id}`}".`
+                );
+            }
+
+            if (scheduleChanged && data?.assigned_tech && data?.scheduled_for) {
+                await workNotificationService.createNotification(
+                    data.assigned_tech,
+                    'Ticket agendado',
+                    `El ticket "${data.title || `#${data.id}`}" fue agendado para ${new Date(data.scheduled_for).toLocaleString()}.`
+                );
+            }
+
+            if (resolvedNow && data?.reported_by) {
+                await workNotificationService.createNotification(
+                    data.reported_by,
+                    'Ticket resuelto',
+                    `Tu ticket "${data.title || `#${data.id}`}" fue marcado como resuelto.`
+                );
+            }
+
             if (data && prev && actorId) {
                 const uiStatusUpdate = updates.status || data.status;
                 const statusChanged = uiStatusUpdate && uiStatusUpdate !== prev.status;
-                const assignedTechChanged = updates.hasOwnProperty('assigned_tech') && updates.assigned_tech !== prev.assigned_tech;
 
                 if (statusChanged || assignedTechChanged) {
                     const recipients = new Set();

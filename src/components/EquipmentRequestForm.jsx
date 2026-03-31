@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/authStore';
+import { workNotificationService } from '../services/workNotificationService';
 import { 
     Plus, Search, Filter, Clock, CheckCircle, AlertCircle, 
     MoreHorizontal, Smartphone, Laptop, Monitor, Mail, 
@@ -43,7 +44,7 @@ const EquipmentRequestForm = ({ onCancel, onSuccess }) => {
             const title = 'Nueva solicitud de equipo';
             const message = `${profile?.full_name || user.email || 'Usuario'} solicitó: ${formData.equipment_type}. Revisa Solicitudes → Equipo.`;
             for (const a of admins || []) {
-                await supabase.from('notifications').insert([{ user_id: a.id, title, message }]);
+                await workNotificationService.createNotification(a.id, title, message);
             }
 
             onSuccess();

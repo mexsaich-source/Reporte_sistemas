@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/authStore';
+import { workNotificationService } from '../services/workNotificationService';
 import { 
     Send, Laptop, Calendar, FileText, User as UserIcon, Tag, Building, Briefcase
 } from 'lucide-react';
@@ -75,10 +76,8 @@ const GeneralRequestForm = ({ onCancel, onSuccess }) => {
                         recipients
                             .map(r => r?.id)
                             .filter(Boolean)
-                            .map(recipientId =>
-                                supabase.from('notifications').insert([
-                                    { user_id: recipientId, title, message }
-                                ])
+                            .map((recipientId) =>
+                                workNotificationService.createNotification(recipientId, title, message)
                             )
                     );
                 }

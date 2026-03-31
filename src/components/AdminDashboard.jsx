@@ -13,6 +13,7 @@ import UsersView from './UsersList';
 import ImportModule from './ImportModule';
 import RequestsModule from './RequestsModule';
 import { userService } from '../services/userService';
+import { workNotificationService } from '../services/workNotificationService';
 import { AlertCircle, Clock, CheckCircle, MonitorSmartphone, ShieldCheck, Wrench, Activity } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -25,7 +26,7 @@ const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
 // --- SECCIÓN DE GRÁFICAS ---
 const ChartSection = ({ ticketsByDept, ticketsByStatus }) => (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none flex flex-col h-[400px]">
+        <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none flex flex-col min-h-[450px]">
             <div className="flex items-center gap-3 mb-6">
                 <div className="p-2.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
                     <BarChart3 size={20} strokeWidth={2.5} />
@@ -35,8 +36,8 @@ const ChartSection = ({ ticketsByDept, ticketsByStatus }) => (
                     <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">Áreas con más reportes</p>
                 </div>
             </div>
-            <div className="w-full flex-1">
-                <ResponsiveContainer width="100%" height="100%">
+            <div className="w-full flex-1 min-h-[350px]">
+                <ResponsiveContainer width="100%" height="100%" minHeight={350}>
                     <BarChart data={ticketsByDept.length > 0 ? ticketsByDept : [{ name: 'Sin datos', tickets: 0 }]} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 600 }} dy={10} />
@@ -48,7 +49,7 @@ const ChartSection = ({ ticketsByDept, ticketsByStatus }) => (
             </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none flex flex-col h-[400px]">
+        <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none flex flex-col min-h-[450px]">
             <div className="flex items-center gap-3 mb-6">
                 <div className="p-2.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
                     <PieChartIcon size={20} strokeWidth={2.5} />
@@ -58,8 +59,8 @@ const ChartSection = ({ ticketsByDept, ticketsByStatus }) => (
                     <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">Estatus global de tickets</p>
                 </div>
             </div>
-            <div className="w-full flex-1">
-                <ResponsiveContainer width="100%" height="100%">
+            <div className="w-full flex-1 min-h-[350px]">
+                <ResponsiveContainer width="100%" height="100%" minHeight={350}>
                     <PieChart>
                         <Pie
                             data={ticketsByStatus.length > 0 ? ticketsByStatus : [{ name: 'Sin tickets', value: 1 }]}
@@ -198,7 +199,7 @@ const AdminDashboard = () => {
                     // --- STATS GLOBALES (CORREGIDO: Incluimos pending_admin y assigned) ---
                     const openStatusList = ['open', 'pending_admin', 'assigned', 'in_progress'];
                     const open = tickets.filter(t => openStatusList.includes(t.status)).length;
-                    
+
                     const resolvedWeek = tickets.filter(t => t.status === 'resolved' && new Date(t.created_at) >= weekAgo).length;
 
                     // Si no hay actividades aún, lo dejamos en 0
@@ -213,14 +214,14 @@ const AdminDashboard = () => {
 
                     // --- GRÁFICA DE ESTADOS (Mapeo completo) ---
                     const statusMap = {};
-                    const statusLabels = { 
-                        open: 'Abierto', 
-                        pending_admin: 'Pend. Admin', 
+                    const statusLabels = {
+                        open: 'Abierto',
+                        pending_admin: 'Pend. Admin',
                         assigned: 'Asignado',
-                        in_progress: 'En Proceso', 
-                        resolved: 'Resuelto' 
+                        in_progress: 'En Proceso',
+                        resolved: 'Resuelto'
                     };
-                    
+
                     tickets.forEach(t => {
                         const label = statusLabels[t.status] || 'Otros';
                         statusMap[label] = (statusMap[label] || 0) + 1;
@@ -234,7 +235,7 @@ const AdminDashboard = () => {
                         const deptName = reporter?.department ? reporter.department.trim() : 'TI / General';
                         deptMap[deptName] = (deptMap[deptName] || 0) + 1;
                     });
-                    
+
                     const deptData = Object.entries(deptMap)
                         .map(([name, ticketsCount]) => ({ name, tickets: ticketsCount }))
                         .sort((a, b) => b.tickets - a.tickets)
@@ -279,6 +280,17 @@ const AdminDashboard = () => {
 
         loadDashboardData();
     }, []);
+
+    useEffect(() => {
+        if (profile?.role !== 'admin') return undefined;
+
+        workNotificationService.runDueReminders();
+        const timer = setInterval(() => {
+            workNotificationService.runDueReminders();
+        }, 5 * 60 * 1000);
+
+        return () => clearInterval(timer);
+    }, [profile?.role]);
 
     const dynamicStats = [
         { id: 1, label: 'Tickets Abiertos', value: statsLoading ? '...' : stats.openTickets, trend: stats.openTickets > 5 ? '+12%' : '+2%', icon: AlertCircle, color: 'text-blue-600', bg: 'bg-blue-100' },
@@ -341,9 +353,11 @@ const AdminDashboard = () => {
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                             {currentView === 'Dashboard' ? 'Centro de Mando IT' : currentView}
                         </h1>
+
                         <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm">
-                            {currentView === 'Dashboard' ? 'Métricas en tiempo real y carga operativa.' : `Gestionando la sección de ${currentView}.`}
+                            {currentView === 'Dashboard' ? 'Métricas en tiempo real y carga operativa.' : `sección de ${currentView}.`}
                         </p>
+
                     </div>
 
                     {renderView()}

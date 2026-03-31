@@ -2,6 +2,12 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 import { SignJWT, importPKCS8 } from "https://deno.land/x/jose@v4.14.4/index.ts";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 // Obtener token Bearer de Google usando JWT (para FCM v1 API)
 async function getFirebaseAccessToken(serviceAccount: any) {
   const privateKey = await importPKCS8(serviceAccount.private_key, "RS256");
@@ -26,6 +32,10 @@ async function getFirebaseAccessToken(serviceAccount: any) {
 }
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
     // 1. Payload del Webhook de Supabase (dispara cuando se inserta en 'notifications')
     const payload = await req.json();
@@ -44,7 +54,8 @@ serve(async (req) => {
     let { data: tokenRows, error: dbError } = await supabase
       .from('fcm_tokens')
       .select('token')
-      .eq('user_id', notificationRecord.user_id);
+      .eq('user_id', notificationRecord.user_id)
+      .eq('is_active', true);
 
     if (dbError) {
       console.error("Error leyendo fcm_tokens:", dbError);
@@ -119,6 +130,36 @@ serve(async (req) => {
       })
     );
 
+    // Desactiva tokens obsoletos o invalidos para mejorar entregabilidad futura.
+    const invalidTokenMarkers = [
+      'UNREGISTERED',
+      'registration-token-not-registered',
+      'invalid-registration-token',
+      'INVALID_ARGUMENT'
+    ];
+
+    const invalidTokens: string[] = [];
+    results.forEach((r, i) => {
+      if (r.status !== 'fulfilled') return;
+      const payload = (r as PromiseFulfilledResult<any>).value;
+      const code = String(payload?.error?.status || payload?.error?.message || '');
+      if (invalidTokenMarkers.some((m) => code.includes(m))) {
+        invalidTokens.push(tokenRowsForSend[i].token);
+      }
+    });
+
+    if (invalidTokens.length > 0) {
+      const { error: deactivateErr } = await supabase
+        .from('fcm_tokens')
+        .update({ is_active: false })
+        .in('token', invalidTokens)
+        .eq('user_id', notificationRecord.user_id);
+
+      if (deactivateErr) {
+        console.error('Error desactivando tokens invalidos:', deactivateErr);
+      }
+    }
+
     const summary = results.map((r, i) => ({
       token: tokenRowsForSend[i].token.substring(0, 20) + '...',
       status: r.status,
@@ -128,11 +169,14 @@ serve(async (req) => {
     console.log("Resumen FCM:", JSON.stringify(summary));
 
     return new Response(JSON.stringify({ sent: targetTokens.length, summary }), {
-      headers: { "Content-Type": "application/json" }
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (err) {
     console.error("Error en send-fcm-push:", err);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
   }
 });

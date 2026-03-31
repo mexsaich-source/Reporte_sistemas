@@ -600,6 +600,29 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
                       {statusOptions.map(s => (<option key={s} value={s}>{s === ACTIVITY_STATUS.pending ? 'Pendiente' : s === ACTIVITY_STATUS.assigned ? 'Asignada' : s === ACTIVITY_STATUS.in_progress ? 'En Proceso' : 'Resuelta'}</option>))}
                     </select>
                   </div>
+
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Calendar size={12} /> Reasignar Fecha Límite
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          value={selectedActivity.due_date?.split('T')[0] || ''}
+                          onChange={(e) => handleUpdate({ due_date: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                          onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500"
+                        />
+                        <Calendar size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+                      {selectedActivity.due_date && (
+                        <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-1">
+                          ⏰ Vence: {new Date(selectedActivity.due_date).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Bitácora */}

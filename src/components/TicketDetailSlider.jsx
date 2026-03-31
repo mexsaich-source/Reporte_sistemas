@@ -396,10 +396,10 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                         </div>
 
                         <div className="flex flex-wrap gap-3 pt-2">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl">
                                 Asignado: {systemTimes.assigned ? new Date(systemTimes.assigned).toLocaleString() : '—'}
                             </div>
-                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl">
                                 Resuelto: {systemTimes.resolved ? new Date(systemTimes.resolved).toLocaleString() : '—'}
                             </div>
                             {ticket?.scheduled_for && (
@@ -472,7 +472,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                                 setScheduleDraft('');
                                                 onUpdateTicket(ticket.fullId, { scheduled_for: null }, user.id);
                                             }}
-                                            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-[9px] font-black uppercase text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
                                         >
                                             Quitar
                                         </button>
