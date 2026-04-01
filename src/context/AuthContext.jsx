@@ -190,6 +190,12 @@ export default function AuthProvider({ children }) {
         });
     };
 
+    const updateProfile = async () => {
+        if (userRef.current) {
+            await fetchProfile(userRef.current.id, true);
+        }
+    };
+
     const contextValue = useMemo(() => ({
         user,
         profile,
@@ -198,7 +204,8 @@ export default function AuthProvider({ children }) {
         register,
         logout,
         authError,
-        setAuthError
+        setAuthError,
+        updateProfile
     }), [user, profile, loading, authError]);
 
     return (

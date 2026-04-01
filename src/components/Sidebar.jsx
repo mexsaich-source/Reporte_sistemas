@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 
-const Sidebar = ({ activeItem, onSelectItem }) => {
+const Sidebar = ({ activeItem, onSelectItem, onSettingsClick }) => {
     // 1. Obtenemos el perfil del contexto
     const { profile } = useAuth();
 
@@ -84,7 +84,10 @@ const Sidebar = ({ activeItem, onSelectItem }) => {
 
             {/* Footer / Profile */}
             <div className="p-6">
-                <div className="bg-slate-900 rounded-3xl p-4 flex items-center justify-between border border-slate-800/50 cursor-pointer hover:bg-slate-800 transition-colors group">
+                <div 
+                    onClick={() => onSettingsClick && onSettingsClick()}
+                    className="bg-slate-900 rounded-3xl p-4 flex items-center justify-between border border-slate-800/50 cursor-pointer hover:bg-slate-800 hover:border-blue-500/50 transition-all duration-300 group"
+                >
                     <div className="flex items-center gap-3">
                         <div className="relative">
                             <img

@@ -82,7 +82,7 @@ BEGIN
   -- Para fase actual, permitir solo a tecnico/admin crear notificaciones
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid()
+    WHERE profiles.id = auth.uid()
       AND lower(coalesce(role, '')) IN ('admin', 'tech', 'técnico')
   ) THEN
     -- Si el usuario no es admin/tech, solo puede crear notificación para sí mismo

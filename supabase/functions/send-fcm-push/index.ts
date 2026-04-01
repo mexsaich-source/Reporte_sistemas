@@ -42,7 +42,10 @@ serve(async (req) => {
     const notificationRecord = payload.record;
 
     if (!notificationRecord || !notificationRecord.user_id) {
-      return new Response(JSON.stringify({ error: "No record found" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "No record found" }), { 
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
     // 2. Conectar a Supabase con Service Role
@@ -78,7 +81,10 @@ serve(async (req) => {
 
     if (targetTokens.length === 0) {
       console.log(`Usuario ${notificationRecord.user_id} no tiene tokens FCM. Omitiendo push.`);
-      return new Response("No FCM tokens found", { status: 200 });
+      return new Response(JSON.stringify({ message: "No FCM tokens found" }), { 
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
     const tokenRowsForSend = targetTokens.map((token) => ({ token }));
@@ -88,7 +94,10 @@ serve(async (req) => {
     const firebaseConfigStr = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
     if (!firebaseConfigStr) {
       console.error("FIREBASE_SERVICE_ACCOUNT no configurado");
-      return new Response("Missing Firebase Service Account", { status: 500 });
+      return new Response(JSON.stringify({ error: "Missing Firebase Service Account" }), { 
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
     const serviceAccount = JSON.parse(firebaseConfigStr);
 

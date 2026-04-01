@@ -44,6 +44,50 @@ export const userService = {
         }
     },
 
+    async updateWhatsAppCredentials(id, phone, actorId = null) {
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ 
+                    whatsapp_phone: phone,
+                    // whatsapp_apikey is obsolete
+                })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            if (actorId) {
+                await auditService.log(actorId, 'UPDATE_WHATSAPP_CREDENTIALS', 'profiles', id, {
+                    phone: phone
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error("Error updating whatsapp credentials:", error);
+            return false;
+        }
+    },
+
+    async sendTestWhatsApp(userId, whatsappPhone) {
+        try {
+            const { data, error } = await supabase.functions.invoke('notify-omnicanal', {
+                body: {
+                    user_id: userId,
+                    type: 'test',
+                    whatsapp_phone: whatsappPhone,
+                    message: 'Prueba de conexión'
+                }
+            });
+
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error("Error sending test whatsapp:", error);
+            return { success: false, error: error.message };
+        }
+    },
+
     async register(email, password, fullName, role = 'user', department = 'General') {
         try {
             // 1. Verificar si el perfil ya existe para evitar duplicados

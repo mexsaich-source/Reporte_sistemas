@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail, Trash2 } from 'lucide-react';
+import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail, Trash2, Smartphone } from 'lucide-react';
 import { userService } from '../services/userService';
 import { useAuth } from '../context/authStore';
 import StatCard from './StatCard';
@@ -105,8 +105,54 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                     </div>
 
                     {isAdmin && profile.id !== user?.id && (
-                        <div className="space-y-4 pt-6 mt-6 border-t border-slate-200 dark:border-slate-700">
+                        <div className="space-y-6 pt-6 mt-6 border-t border-slate-200 dark:border-slate-700">
                             <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-4">Acciones de Administrador</h4>
+
+                            {/* Configuración WhatsApp */}
+                            <div className="bg-blue-50/50 dark:bg-blue-900/10 p-5 rounded-2xl border border-blue-100/50 dark:border-blue-800/50 space-y-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Smartphone size={14} className="text-blue-500" />
+                                    <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Configuración WhatsApp (CallMeBot)</span>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Teléfono (ej: 521...)</label>
+                                        <input 
+                                            type="text"
+                                            placeholder="Número con código de país"
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500 transition-all"
+                                            defaultValue={user?.whatsapp_phone || ''}
+                                            id={`phone_${user?.id}`}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">CallMeBot API Key</label>
+                                        <input 
+                                            type="password"
+                                            placeholder="Tu API Key"
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500 transition-all"
+                                            defaultValue={user?.whatsapp_apikey || ''}
+                                            id={`apikey_${user?.id}`}
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={async () => {
+                                            const phone = document.getElementById(`phone_${user?.id}`).value;
+                                            const apikey = document.getElementById(`apikey_${user?.id}`).value;
+                                            const success = await userService.updateWhatsAppCredentials(user.id, phone, apikey, profile.id);
+                                            if (success) {
+                                                alert('Configuración de WhatsApp guardada correctamente.');
+                                            } else {
+                                                alert('Error al guardar la configuración.');
+                                            }
+                                        }}
+                                        className="w-full py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-blue-500/20"
+                                    >
+                                        Guardar WhatsApp
+                                    </button>
+                                </div>
+                            </div>
 
                             <div className="flex flex-col gap-2">
                                 <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Modificar Rol</label>

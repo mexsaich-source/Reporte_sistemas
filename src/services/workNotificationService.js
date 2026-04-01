@@ -47,6 +47,21 @@ async function createNotification(userId, title, message, type = 'info', actionU
         console.warn('⚠️ Push fallback exception:', pushErr?.message || pushErr);
       });
 
+    // 🌟 Disparar Alerta Omnicanal (WhatsApp y Email) en paralelo sin bloquear
+    supabase.functions
+      .invoke('notify-omnicanal', {
+        body: {
+          user_id: userId,
+          title,
+          message,
+          type
+        }
+      })
+      .then(({ error: omniErr }) => {
+        if (omniErr) console.warn('⚠️ Omnicanal fallback warning:', omniErr.message || omniErr);
+      })
+      .catch((err) => console.warn('⚠️ Omnicanal request error:', err?.message || err));
+
     console.log('✅ Notificación creada:', {
       id: notificationId,
       user_id: userId,

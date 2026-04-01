@@ -12,6 +12,7 @@ import ReportsView from './Reports';
 import UsersView from './UsersList';
 import ImportModule from './ImportModule';
 import RequestsModule from './RequestsModule';
+import ProfileSettingsModal from './ProfileSettingsModal';
 import { userService } from '../services/userService';
 import { workNotificationService } from '../services/workNotificationService';
 import { AlertCircle, Clock, CheckCircle, MonitorSmartphone, ShieldCheck, Wrench, Activity } from 'lucide-react';
@@ -158,6 +159,7 @@ const AdminDashboard = () => {
     const [ticketsByStatus, setTicketsByStatus] = useState([]);
     const [techStats, setTechStats] = useState([]);
     const [statsLoading, setStatsLoading] = useState(true);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     useEffect(() => {
         const loadDashboardData = async () => {
@@ -335,6 +337,7 @@ const AdminDashboard = () => {
                 <Sidebar
                     activeItem={currentView}
                     onSelectItem={(item) => { setCurrentView(item); setIsSidebarOpen(false); setSearchTerm(''); }}
+                    onSettingsClick={() => setIsSettingsOpen(true)}
                 />
             </div>
 
@@ -363,6 +366,11 @@ const AdminDashboard = () => {
                     {renderView()}
                 </main>
             </div>
+
+            <ProfileSettingsModal 
+                isOpen={isSettingsOpen} 
+                onClose={() => setIsSettingsOpen(false)} 
+            />
         </div>
     );
 };

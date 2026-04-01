@@ -8,13 +8,14 @@ import {
 import Header from './Header';
 import StatCard from './StatCard';
 import { TicketStatusBadge } from './TicketsModule';
+import GeneralRequestForm from './GeneralRequestForm';
+import TermsModal from './TermsModal';
+import ProfileSettingsModal from './ProfileSettingsModal';
 import TicketDetailSlider from './TicketDetailSlider';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
 import { userService } from '../services/userService';
 import { ticketService } from '../services/ticketService';
-import GeneralRequestForm from './GeneralRequestForm';
-import TermsModal from './TermsModal';
 
 // --- SUBCOMPONENTE: Agenda de Usuario ---
 const UserAgenda = () => {
@@ -805,6 +806,7 @@ const UserPortal = () => {
     const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [termsType, setTermsType] = useState('terms');
     const [selectedTicket, setSelectedTicket] = useState(null);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const toUIStatus = (status, assignedTech) => {
         const s = (status || '').toLowerCase();
@@ -1072,10 +1074,20 @@ const UserPortal = () => {
 
                     <div className="relative p-6 mt-auto">
                         <div className="bg-white/5 rounded-3xl p-4 border border-white/5 backdrop-blur-sm">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase mb-3">Tu Soporte</p>
+                            {(profile?.role === 'admin' || profile?.role === 'tech') && (
+                                <div className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-white/5 p-2 rounded-xl transition-all" onClick={() => setIsSettingsOpen(true)}>
+                                    <div className="bg-blue-500/20 p-2 rounded-xl">
+                                        <Settings size={18} className="text-blue-400" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-white">Configuración</span>
+                                        <span className="text-[10px] text-slate-400">Alertas de WhatsApp</span>
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="bg-blue-500/20 p-2 rounded-xl">
-                                    <AlertCircle size={18} className="text-blue-400" />
+                                <div className="bg-slate-500/20 p-2 rounded-xl">
+                                    <AlertCircle size={18} className="text-slate-400" />
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-xs font-bold text-white">¿Ayuda?</span>
@@ -1136,6 +1148,11 @@ const UserPortal = () => {
                         }));
                     }
                 }}
+            />
+
+            <ProfileSettingsModal 
+                isOpen={isSettingsOpen} 
+                onClose={() => setIsSettingsOpen(false)} 
             />
         </div>
     );
