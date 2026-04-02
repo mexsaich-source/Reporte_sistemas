@@ -44,27 +44,61 @@ export const userService = {
         }
     },
 
-    async updateWhatsAppCredentials(id, phone, actorId = null) {
+    async updateAdminUserInfo(id, profileData, actorId = null) {
         try {
+            const { telegram_chat_id, role, department, location, assigned_equipment } = profileData;
+            
+            // 1. Obtener rol previo
+            const { data: prev } = await supabase.from('profiles').select('role, email').eq('id', id).single();
+
+            // 2. Actualizar la tabla profiles
             const { error } = await supabase
                 .from('profiles')
                 .update({ 
-                    whatsapp_phone: phone,
-                    // whatsapp_apikey is obsolete
+                    whatsapp_phone: telegram_chat_id, // Usamos la misma columna DB por reusabilidad, pero es para Telegram
+                    role: role,
+                    department: department,
+                    location: location,
+                    assigned_equipment: assigned_equipment
                 })
                 .eq('id', id);
 
             if (error) throw error;
 
+            // 3. Log
             if (actorId) {
-                await auditService.log(actorId, 'UPDATE_TELEGRAM_CREDENTIALS', 'profiles', id, {
-                    telegram_chat_id: phone
+                await auditService.log(actorId, 'UPDATE_USER_ADMIN', 'profiles', id, {
+                    updated_email: prev?.email,
+                    changes: profileData
                 });
             }
 
             return true;
         } catch (error) {
-            console.error("Error updating whatsapp credentials:", error);
+            console.error("Error updating admin info:", error);
+            return false;
+        }
+    },
+
+    async toggleUserStatus(id, currentStatus, actorId = null) {
+        try {
+            const newStatus = !currentStatus;
+            const { error } = await supabase
+                .from('profiles')
+                .update({ status: newStatus })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            if (actorId) {
+                await auditService.log(actorId, 'TOGGLE_USER_STATUS', 'profiles', id, {
+                    newStatus: newStatus ? 'active' : 'suspended'
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error("Error toggling user status:", error);
             return false;
         }
     },

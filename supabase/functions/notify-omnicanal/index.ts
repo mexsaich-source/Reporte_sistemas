@@ -18,7 +18,7 @@ serve(async (req) => {
     const { user_id, title, message, ticket_id, type } = payload;
 
     if (!user_id || !message) {
-      return new Response(JSON.stringify({ error: "Faltan datos obligatorios (user_id, message)" }), { 
+      return new Response(JSON.stringify({ error: "Faltan datos obligatorios (user_id, message)" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -32,13 +32,20 @@ serve(async (req) => {
     // 2. Obtener datos de contacto del usuario
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('email, whatsapp_phone')
+      .select('email, whatsapp_phone, status')
       .eq('id', user_id)
       .single();
 
     if (profileErr || !profile) {
-      return new Response(JSON.stringify({ error: "Usuario no encontrado" }), { 
+      return new Response(JSON.stringify({ error: "Usuario no encontrado" }), {
         status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    if (profile.status === false && type !== 'test') {
+      return new Response(JSON.stringify({ success: true, reason: "Usuario está suspendido (status=false). Notificación abortada." }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
@@ -55,15 +62,15 @@ serve(async (req) => {
 
     // 3. Telegram (Bot API)
     if (whatsapp_phone) {
-      const tgText = type === 'test' 
+      const tgText = type === 'test'
         ? `*[IT Helpdesk]*\n🔔 *PRUEBA DE CONEXIÓN*\n¡Felicidades! Tu bot de Telegram está recibiendo alertas correctamente.`
         : `*${title || 'Nueva Notificación'}*\n\n${message}${ticket_id ? `\n\nTicket ID: #${ticket_id}` : ''}`;
-      
+
       const tgToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
 
       if (tgToken) {
         const url = `https://api.telegram.org/bot${tgToken}/sendMessage`;
-        
+
         const payloadTG = {
           chat_id: whatsapp_phone,
           text: tgText,
@@ -75,12 +82,12 @@ serve(async (req) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadTG)
         })
-        .then(async (res) => {
-          const json = await res.json();
-          return { channel: "telegram", status: res.ok ? "sent" : "failed", response: json };
-        })
-        .catch(err => ({ channel: "telegram", status: "error", error: err.message }));
-        
+          .then(async (res) => {
+            const json = await res.json();
+            return { channel: "telegram", status: res.ok ? "sent" : "failed", response: json };
+          })
+          .catch(err => ({ channel: "telegram", status: "error", error: err.message }));
+
         promises.push(tgPromise);
       }
     }
@@ -109,7 +116,7 @@ serve(async (req) => {
       const emailPromise = (async () => {
         try {
           console.log(`[DEBUG] Iniciando conexión SMTP (Nodemailer) a ${smtpHost}:465...`);
-          
+
           const transporter = nodemailer.createTransport({
             host: smtpHost,
             port: 465,
@@ -134,9 +141,9 @@ serve(async (req) => {
           return { channel: "email", status: "sent" };
         } catch (err: any) {
           console.error(`[DEBUG] Fallo en Email:`, err.message || err);
-          return { 
-            channel: "email", 
-            status: "error", 
+          return {
+            channel: "email",
+            status: "error",
             error: err.message || "Error de conexión SMTP desconocido",
             detail: String(err)
           };

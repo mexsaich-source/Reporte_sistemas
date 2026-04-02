@@ -79,107 +79,147 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                         </div>
                     </div>
 
-                    {/* Información Rápida */}
-                    <div className="grid grid-cols-1 gap-3">
-                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800/80 hover:border-slate-200 dark:hover:border-slate-600 transition-colors shadow-inner">
-                            <div className="bg-white dark:bg-slate-700 p-2 rounded-xl shadow-sm"><Mail size={16} className="text-slate-400 dark:text-slate-500" /></div>
+                    {/* Información Rápida - Visible para todos (incluyendo Técnicos) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-inner">
+                            <div className="bg-white dark:bg-slate-700 p-2 rounded-xl shadow-sm"><Mail size={16} className="text-slate-400" /></div>
                             <div>
-                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Correo Electrónico</span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-200">{user?.email}</span>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Correo</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block max-w-[150px]">{user?.email}</span>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800/80 hover:border-slate-200 dark:hover:border-slate-600 transition-colors shadow-inner">
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-inner">
                             <div className="bg-white dark:bg-slate-700 p-2 rounded-xl shadow-sm"><Users size={16} className="text-indigo-400" /></div>
                             <div>
-                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Departamento</span>
-                                <span className="font-bold text-indigo-700 dark:text-indigo-400">{user?.department || 'Sin asignar'}</span>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Área</span>
+                                <span className="font-bold text-indigo-700 dark:text-indigo-400">{user?.department || 'General'}</span>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800/80 hover:border-slate-200 dark:hover:border-slate-600 transition-colors shadow-inner">
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-inner">
+                            <div className="bg-white dark:bg-slate-700 p-2 rounded-xl shadow-sm"><Smartphone size={16} className="text-blue-400" /></div>
+                            <div>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Localización</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-200">{user?.location || 'Por asignar'}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-inner">
                             <div className="bg-white dark:bg-slate-700 p-2 rounded-xl shadow-sm"><Activity size={16} className="text-emerald-400" /></div>
                             <div>
-                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Miembro desde</span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-200">{new Date(user?.created_at).toLocaleDateString()}</span>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Equipos</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block max-w-[150px]">{user?.assigned_equipment || 'Ninguno'}</span>
                             </div>
                         </div>
                     </div>
 
-                    {isAdmin && profile.id !== user?.id && (
+                    {isAdmin && (
                         <div className="space-y-6 pt-6 mt-6 border-t border-slate-200 dark:border-slate-700">
-                            <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px] mb-4">Acciones de Administrador</h4>
-
-                            {/* Configuración WhatsApp */}
-                            <div className="bg-blue-50/50 dark:bg-blue-900/10 p-5 rounded-2xl border border-blue-100/50 dark:border-blue-800/50 space-y-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Smartphone size={14} className="text-blue-500" />
-                                    <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Configuración WhatsApp (CallMeBot)</span>
-                                </div>
-                                
-                                <div className="space-y-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Teléfono (ej: 521...)</label>
-                                        <input 
-                                            type="text"
-                                            placeholder="Número con código de país"
-                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500 transition-all"
-                                            defaultValue={user?.whatsapp_phone || ''}
-                                            id={`phone_${user?.id}`}
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">CallMeBot API Key</label>
-                                        <input 
-                                            type="password"
-                                            placeholder="Tu API Key"
-                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500 transition-all"
-                                            defaultValue={user?.whatsapp_apikey || ''}
-                                            id={`apikey_${user?.id}`}
-                                        />
-                                    </div>
+                            <div className="flex items-center justify-between">
+                                <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px]">Gestión Administrativa</h4>
+                                {profile.id !== user?.id && (
                                     <button 
                                         onClick={async () => {
-                                            const phone = document.getElementById(`phone_${user?.id}`).value;
-                                            const apikey = document.getElementById(`apikey_${user?.id}`).value;
-                                            const success = await userService.updateWhatsAppCredentials(user.id, phone, apikey, profile.id);
-                                            if (success) {
-                                                alert('Configuración de WhatsApp guardada correctamente.');
-                                            } else {
-                                                alert('Error al guardar la configuración.');
-                                            }
+                                            const success = await userService.toggleUserStatus(user.id, user.status, profile.id);
+                                            if (success) onClose(); 
                                         }}
-                                        className="w-full py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-blue-500/20"
+                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${user?.status 
+                                            ? 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-600 hover:text-white' 
+                                            : 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-600 hover:text-white'}`}
                                     >
-                                        Guardar WhatsApp
+                                        {user?.status ? 'Suspender Acceso' : 'Reactivar Acceso'}
                                     </button>
+                                )}
+                            </div>
+
+                            {/* Formulario de Edición Admin */}
+                            <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700 space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 text-blue-500">Telegram Chat ID</label>
+                                        <input 
+                                            type="text"
+                                            id={`telegram_${user?.id}`}
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
+                                            defaultValue={user?.whatsapp_phone || ''}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Área / Depto</label>
+                                        <input 
+                                            type="text"
+                                            id={`dept_${user?.id}`}
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
+                                            defaultValue={user?.department || ''}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="flex flex-col gap-2">
-                                <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px] tracking-widest">Modificar Rol</label>
-                                <select 
-                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 transition-all"
-                                    value={user?.role || 'user'}
-                                    onChange={(e) => onUpdateRole(user.id, e.target.value)}
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Localización Física</label>
+                                    <input 
+                                        type="text"
+                                        id={`loc_${user?.id}`}
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
+                                        defaultValue={user?.location || ''}
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Máquinas / Equipos Asignados</label>
+                                    <textarea 
+                                        id={`equip_${user?.id}`}
+                                        rows="2"
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
+                                        defaultValue={user?.assigned_equipment || ''}
+                                    />
+                                </div>
+
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest">Rol del Sistema</label>
+                                    <select 
+                                        id={`role_${user?.id}`}
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white"
+                                        defaultValue={user?.role || 'user'}
+                                    >
+                                        <option value="user">Usuario (Lectura)</option>
+                                        <option value="tech">Técnico (Soporte)</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                </div>
+
+                                <button 
+                                    onClick={async () => {
+                                        const profileData = {
+                                            telegram_chat_id: document.getElementById(`telegram_${user?.id}`).value,
+                                            department: document.getElementById(`dept_${user?.id}`).value,
+                                            location: document.getElementById(`loc_${user?.id}`).value,
+                                            assigned_equipment: document.getElementById(`equip_${user?.id}`).value,
+                                            role: document.getElementById(`role_${user?.id}`).value
+                                        };
+                                        const success = await userService.updateAdminUserInfo(user.id, profileData, profile.id);
+                                        if (success) {
+                                            alert('Perfil actualizado correctamente.');
+                                            onClose();
+                                        }
+                                    }}
+                                    className="w-full py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-blue-500/20"
                                 >
-                                    <option value="user">Usuario (Lectura)</option>
-                                    <option value="tech">Técnico (Soporte)</option>
-                                    <option value="admin">Administrador</option>
-                                </select>
+                                    Actualizar Datos del Empleado
+                                </button>
                             </div>
 
-                            <div className="pt-4">
+                            {profile.id !== user?.id && (
                                 <button
                                     onClick={() => {
-                                        if(window.confirm(`¿Estás seguro que deseas inhabilitar al usuario ${user?.full_name}?`)) {
+                                        if(window.confirm(`¿BORRADO TOTAL? Eliminarás a ${user?.full_name} de Auth y Base de Datos.`)) {
                                             onDeleteUser(user?.email);
                                         }
                                     }}
-                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-red-600 bg-red-50 hover:bg-red-600 hover:text-white transition-all shadow-sm group"
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-600 bg-red-50 hover:bg-red-600 hover:text-white transition-all border border-red-100"
                                 >
-                                    <Trash2 size={16} className="transition-transform group-hover:scale-110" />
-                                    Revocar Acceso / Eliminar Perfil
+                                    <Trash2 size={14} />
+                                    Eliminar Perfil de Raíz
                                 </button>
-                            </div>
+                            )}
                         </div>
                     )}
                 </div>
