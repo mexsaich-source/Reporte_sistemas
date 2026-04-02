@@ -58,7 +58,7 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
 
     const handleTestWhatsApp = async () => {
         if (!formData.whatsapp_phone) {
-            setErrorMsg('Debes ingresar un número de WhatsApp.');
+            setErrorMsg('Debes ingresar tu Chat ID de Telegram.');
             return;
         }
         
@@ -72,10 +72,24 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
                 formData.whatsapp_phone
             );
             
-            if (result.success) {
-                setSuccessMsg('¡Mensaje de prueba solicitado con éxito!');
+            if (result.success && result.data && result.data.results) {
+                const tgRes = result.data.results.find(r => r.channel === 'telegram');
+                const emailRes = result.data.results.find(r => r.channel === 'email');
+                
+                let detailMsg = '';
+                if (tgRes?.status === 'sent' && emailRes?.status === 'sent') {
+                    setSuccessMsg('¡Telegram y Email enviados con éxito! 🚀✨');
+                } else {
+                    if (tgRes?.status === 'sent') detailMsg += '✅ Telegram OK. ';
+                    else detailMsg += `❌ Telegram Falló: ${tgRes?.error || tgRes?.reason || 'Error desconocido'}. `;
+                    
+                    if (emailRes?.status === 'sent') detailMsg += '✅ Email OK.';
+                    else detailMsg += `❌ Email Falló: ${emailRes?.error || 'Falla de conexión (SMTP)'}.`;
+                    
+                    setErrorMsg(detailMsg);
+                }
             } else {
-                throw new Error(result.error || 'Error al enviar prueba');
+                throw new Error(result.error || 'El servidor no respondió con resultados válidos.');
             }
         } catch (err) {
             console.error('Test WhatsApp error:', err);
@@ -120,24 +134,25 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
                     )}
 
                     <div className="space-y-4">
-                        {/* WhatsApp Phone */}
+                        {/* Telegram Chat ID */}
                         <div>
-                            <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Número de WhatsApp</label>
+                            <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Telegram Chat ID</label>
                             <div className="relative group">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
                                     <MessageSquare size={18} />
                                 </span>
                                 <input
                                     type="text"
-                                    placeholder="+521XXXXXXXXXX"
-                                    className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                                    placeholder="Ej: 6962000993"
+                                    className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-mono"
                                     value={formData.whatsapp_phone}
                                     onChange={(e) => setFormData({...formData, whatsapp_phone: e.target.value})}
                                 />
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-2 ml-1 leading-relaxed italic">Usa el formato internacional con +, Ej: +5212228514120</p>
+                            <p className="text-[10px] text-slate-400 mt-2 ml-1 leading-relaxed italic">
+                                Obtén tu ID escribiendo <b>/start</b> al bot <b>@userinfobot</b> en Telegram.
+                            </p>
                         </div>
-
                     </div>
 
                     <div className="pt-2 flex flex-col gap-3">
@@ -148,7 +163,7 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
                             className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-[0.98] disabled:opacity-50"
                         >
                             {testing ? <Loader2 className="animate-spin" size={16} /> : <MessageSquare size={16} />}
-                            {testing ? 'Probando...' : 'Probar WhatsApp'}
+                            {testing ? 'Probando...' : 'Probar Telegram'}
                         </button>
 
                         <button

@@ -57,8 +57,8 @@ export const userService = {
             if (error) throw error;
 
             if (actorId) {
-                await auditService.log(actorId, 'UPDATE_WHATSAPP_CREDENTIALS', 'profiles', id, {
-                    phone: phone
+                await auditService.log(actorId, 'UPDATE_TELEGRAM_CREDENTIALS', 'profiles', id, {
+                    telegram_chat_id: phone
                 });
             }
 
@@ -83,7 +83,7 @@ export const userService = {
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
-            console.error("Error sending test whatsapp:", error);
+            console.error("Error sending test telegram:", error);
             return { success: false, error: error.message };
         }
     },
