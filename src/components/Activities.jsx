@@ -173,15 +173,15 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
       const term = searchTerm.toLowerCase();
       base = base.filter(a => {
         const techName = techUsers.find(u => u.id === a.assigned_tech)?.full_name || '';
-        const statusText = a.status === 'pending' ? 'pendiente' : 
-                          a.status === 'assigned' ? 'asignada' : 
-                          a.status === 'in_progress' ? 'en proceso' : 
-                          a.status === 'resolved' ? 'resuelta' : '';
-        
+        const statusText = a.status === 'pending' ? 'pendiente' :
+          a.status === 'assigned' ? 'asignada' :
+            a.status === 'in_progress' ? 'en proceso' :
+              a.status === 'resolved' ? 'resuelta' : '';
+
         return (a.title && a.title.toLowerCase().includes(term)) ||
-               (a.description && a.description.toLowerCase().includes(term)) ||
-               (techName.toLowerCase().includes(term)) ||
-               (statusText.includes(term));
+          (a.description && a.description.toLowerCase().includes(term)) ||
+          (techName.toLowerCase().includes(term)) ||
+          (statusText.includes(term));
       });
     }
 
@@ -697,11 +697,11 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Título</div>
-                  <input value={form.title} onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))} placeholder="Ej. Reparar impresora..." className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" required />
+                  <input value={form.title} onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))} placeholder="Ej. Reparar impresora..." className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-bold focus:black focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" required />
                 </div>
                 <div className="space-y-2">
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prioridad</div>
-                  <select value={form.priority} onChange={(e) => setForm(prev => ({ ...prev, priority: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all">
+                  <select value={form.priority} onChange={(e) => setForm(prev => ({ ...prev, priority: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-bold focus:black focus:ring-4 focus:ring-blue-500/10 outline-none transition-all">
                     <option value="low">Baja</option>
                     <option value="medium">Media</option>
                     <option value="high">Alta (Urgente)</option>
@@ -711,13 +711,13 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
 
               <div className="space-y-2">
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descripción detallada</div>
-                <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))} rows={3} placeholder="Describe el problema o tarea..." className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-medium focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
+                <textarea value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))} rows={3} placeholder="Describe el problema o tarea..." className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-medium focus:black focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Asignar a técnico</div>
-                  <select value={form.assigned_tech} onChange={(e) => setForm(prev => ({ ...prev, assigned_tech: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" required>
+                  <select value={form.assigned_tech} onChange={(e) => setForm(prev => ({ ...prev, assigned_tech: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-2xl text-sm font-bold focus:black focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" required>
                     <option value="">Selecciona...</option>
                     {techUsers.map(t => (<option key={t.id} value={t.id}>{t.full_name}</option>))}
                   </select>

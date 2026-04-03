@@ -12,6 +12,7 @@ import ReportsView from './Reports';
 import UsersView from './UsersList';
 import ImportModule from './ImportModule';
 import RequestsModule from './RequestsModule';
+import MaintenanceModule from './MaintenanceModule';
 import ProfileSettingsModal from './ProfileSettingsModal';
 import { userService } from '../services/userService';
 import { workNotificationService } from '../services/workNotificationService';
@@ -149,8 +150,12 @@ const TechPerformanceTable = ({ techStats }) => (
 // --- DASHBOARD PRINCIPAL ---
 const AdminDashboard = () => {
     const { profile } = useAuth();
+    const role = (profile?.role || '').toLowerCase().trim();
+    const department = (profile?.department || '').toLowerCase().trim();
+    const isMaint = department.includes('mantenimiento') || department.includes('ingenieria') || department.includes('ingeniería');
+    const isIT = ['admin', 'tech', 'técnico'].includes(role) && !isMaint;
 
-    const [currentView, setCurrentView] = useState('Dashboard');
+    const [currentView, setCurrentView] = useState(isMaint ? 'Maintenance' : 'Dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -163,6 +168,10 @@ const AdminDashboard = () => {
 
     useEffect(() => {
         const loadDashboardData = async () => {
+            if (!isIT) {
+                setStatsLoading(false);
+                return;
+            }
             setStatsLoading(true);
             try {
                 // 1. Cargar TODOS los usuarios para cruzar los departamentos
@@ -302,6 +311,19 @@ const AdminDashboard = () => {
     ];
 
     const renderView = () => {
+        // Bloqueo de acceso: Redirigir si intenta entrar a áreas no permitidas
+        const isBoss = isMaint && ['admin', 'jefe_mantenimiento'].includes(role);
+        const restrictedViews = ['Tickets', 'Inventory', 'Activities', 'Reports', 'Import', 'Requests'];
+        
+        // Si es de mantenimiento pero NO es jefe, también bloqueamos 'Users'
+        if (isMaint && !isBoss && currentView === 'Users') {
+            return <MaintenanceModule />;
+        }
+
+        if (!isIT && restrictedViews.includes(currentView)) {
+            return <MaintenanceModule />;
+        }
+
         switch (currentView) {
             case 'Tickets': return <TicketsModule searchTerm={searchTerm} />;
             case 'Inventory': return <InventoryView searchTerm={searchTerm} />;
@@ -310,17 +332,24 @@ const AdminDashboard = () => {
             case 'Users': return <UsersView searchTerm={searchTerm} />;
             case 'Import': return <ImportModule />;
             case 'Requests': return <RequestsModule searchTerm={searchTerm} />;
+            case 'Maintenance': return <MaintenanceModule />;
             case 'Dashboard':
             default:
                 return (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {dynamicStats.map((stat) => (
-                                <StatCard key={stat.id} {...stat} />
-                            ))}
-                        </div>
-                        <ChartSection ticketsByDept={ticketsByDept} ticketsByStatus={ticketsByStatus} />
-                        <TechPerformanceTable techStats={techStats} />
+                        {isIT ? (
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    {dynamicStats.map((stat) => (
+                                        <StatCard key={stat.id} {...stat} />
+                                    ))}
+                                </div>
+                                <ChartSection ticketsByDept={ticketsByDept} ticketsByStatus={ticketsByStatus} />
+                                <TechPerformanceTable techStats={techStats} />
+                            </>
+                        ) : (
+                            <MaintenanceModule />
+                        )}
                     </div>
                 );
         }
@@ -344,21 +373,23 @@ const AdminDashboard = () => {
             <div className="flex-1 flex flex-col min-w-0 min-h-0">
                 <Header
                     onMenuClick={() => setIsSidebarOpen(true)}
-                    userName={profile?.full_name || 'Admin'}
-                    userType={profile?.role || 'Personal IT'}
-                    searchTerm={currentView === 'Dashboard' ? '' : searchTerm}
+                    userName={profile?.full_name || 'Usuario'}
+                    userType={profile?.role || (isMaint ? 'Mantenimiento' : 'Cargando...')}
+                    searchTerm={(currentView === 'Dashboard' || currentView === 'Maintenance') ? '' : searchTerm}
                     onSearchChange={setSearchTerm}
-                    hideSearch={currentView === 'Dashboard'}
+                    hideSearch={currentView === 'Dashboard' || currentView === 'Maintenance'}
                 />
 
                 <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full min-h-0">
                     <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                            {currentView === 'Dashboard' ? 'Centro de Mando IT' : currentView}
+                            {currentView === 'Dashboard' ? (isIT ? 'Centro de Mando IT' : 'Portal de Mantenimiento') : 
+                             currentView === 'Maintenance' ? 'Gestión de Mantenimiento' : currentView}
                         </h1>
 
                         <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm">
-                            {currentView === 'Dashboard' ? 'Métricas en tiempo real y carga operativa.' : `sección de ${currentView}.`}
+                            {currentView === 'Dashboard' ? (isIT ? 'Métricas en tiempo real y carga operativa.' : 'Bienvenido jefe, gestione sus órdenes de trabajo.') : 
+                             currentView === 'Maintenance' ? 'Control de ingeniería y reparaciones.' : `sección de ${currentView}.`}
                         </p>
 
                     </div>

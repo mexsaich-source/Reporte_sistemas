@@ -1,3 +1,38 @@
 @import "tailwindcss";
 
 @variant dark (&:where(.dark, .dark *));
+
+/* PRINT STYLES */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #print-area, #print-area * {
+    visibility: visible !important;
+  }
+  #print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    padding: 20px !important;
+    margin: 0 !important;
+  }
+  .not-printable {
+    display: none !important;
+  }
+  /* Reset layout for print */
+  body {
+    background: white !important;
+  }
+  .dark {
+    color-scheme: light !important;
+  }
+  /* Force display of background colors */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

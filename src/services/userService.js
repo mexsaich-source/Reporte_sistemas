@@ -51,13 +51,20 @@ export const userService = {
             // 1. Obtener rol previo
             const { data: prev } = await supabase.from('profiles').select('role, email').eq('id', id).single();
 
-            // 2. Actualizar la tabla profiles
+            // 2. Seguridad de Área: Si el actor es de Mantenimiento, forzamos el departamento
+            let finalDept = department;
+            const { data: actor } = await supabase.from('profiles').select('department').eq('id', actorId).single();
+            if (actor?.department === 'Mantenimiento') {
+                finalDept = 'Mantenimiento';
+            }
+
+            // 3. Actualizar la tabla profiles
             const { error } = await supabase
                 .from('profiles')
                 .update({ 
-                    whatsapp_phone: telegram_chat_id, // Usamos la misma columna DB por reusabilidad, pero es para Telegram
+                    whatsapp_phone: telegram_chat_id, 
                     role: role,
-                    department: department,
+                    department: finalDept,
                     location: location,
                     assigned_equipment: assigned_equipment
                 })

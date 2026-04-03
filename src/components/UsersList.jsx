@@ -41,6 +41,8 @@ const UserRoleBadge = ({ role }) => {
 const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser }) => {
     const { profile } = useAuth();
     const isAdmin = profile?.role === 'admin';
+    const isMaint = profile?.department?.trim() === 'Mantenimiento';
+    const canEdit = isAdmin || (isMaint && user?.department === profile?.department);
 
     if (!isOpen) return null;
 
@@ -111,7 +113,7 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                         </div>
                     </div>
 
-                    {isAdmin && (
+                    {canEdit && (
                         <div className="space-y-6 pt-6 mt-6 border-t border-slate-200 dark:border-slate-700">
                             <div className="flex items-center justify-between">
                                 <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-[10px]">Gestión Administrativa</h4>
@@ -147,8 +149,9 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                                         <input 
                                             type="text"
                                             id={`dept_${user?.id}`}
-                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500 disabled:opacity-50"
                                             defaultValue={user?.department || ''}
+                                            disabled={isMaint}
                                         />
                                     </div>
                                 </div>
@@ -174,15 +177,16 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                                 </div>
 
                                 <div className="flex flex-col gap-2">
-                                    <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest">Rol del Sistema</label>
                                     <select 
                                         id={`role_${user?.id}`}
-                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white"
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white disabled:opacity-50"
                                         defaultValue={user?.role || 'user'}
+                                        disabled={isMaint && profile.id === user?.id}
                                     >
                                         <option value="user">Usuario (Lectura)</option>
-                                        <option value="tech">Técnico (Soporte)</option>
-                                        <option value="admin">Administrador</option>
+                                        <option value="tech">Ingeniero / Técnico</option>
+                                        <option value="jefe_mantenimiento">Jefe de Área</option>
+                                        {isAdmin && <option value="admin">Administrador Global</option>}
                                     </select>
                                 </div>
 
@@ -230,12 +234,15 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
 
 // --- SUBCOMPONENTE: Slider para Agregar Usuario ---
 const AddUserSlider = ({ isOpen, onClose, onSave }) => {
+    const { profile } = useAuth();
+    const isMaint = profile?.department?.trim() === 'Mantenimiento';
+
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
         password: '',
         role: 'user',
-        department: 'General'
+        department: isMaint ? 'Mantenimiento' : 'General'
     });
     const [loading, setLoading] = useState(false);
 
@@ -328,7 +335,8 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
                                 name="department"
                                 value={formData.department}
                                 onChange={handleChange}
-                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 transition-all"
+                                disabled={isMaint}
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 transition-all disabled:opacity-50"
                             >
                                 <option value="General">General</option>
                                 <option value="Sistemas">Sistemas</option>
@@ -355,6 +363,9 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
 
 // --- COMPONENTE PRINCIPAL: Módulo de Usuarios ---
 const UsersView = ({ searchTerm = '' }) => {
+    const { profile } = useAuth();
+    const isMaint = profile?.department?.trim() === 'Mantenimiento';
+
     const [selectedUser, setSelectedUser] = useState(null);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -364,7 +375,13 @@ const UsersView = ({ searchTerm = '' }) => {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const data = await userService.getAll();
+            let data = await userService.getAll();
+            
+            // FILTRO DE ÁREA: Si es de mantenimiento, solo ve su área
+            if (isMaint) {
+                data = data.filter(u => u.department === 'Mantenimiento');
+            }
+
             setUsers(data);
 
             const newStats = {
@@ -441,10 +458,10 @@ const UsersView = ({ searchTerm = '' }) => {
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 transition-colors duration-300">
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard label="Empleados" value={stats.total} trend="Totales" icon={Users} color="text-slate-600" bg="bg-slate-100" />
+                <StatCard label="Empleados" value={stats.total} trend={isMaint ? "Mantenimiento" : "Totales"} icon={Users} color="text-slate-600" bg="bg-slate-100" />
                 <StatCard label="Activos" value={stats.active} trend="En línea" icon={UserCheck} color="text-emerald-600" bg="bg-emerald-100" />
-                <StatCard label="Técnicos" value={stats.techs} trend="Soporte" icon={Shield} color="text-blue-600" bg="bg-blue-100" />
-                <StatCard label="Administradores" value={stats.admins} trend="Sistemas" icon={ShieldCheck} color="text-purple-600" bg="bg-purple-100" />
+                <StatCard label={isMaint ? "Ingenieros" : "Técnicos"} value={stats.techs} trend="Área" icon={Shield} color="text-blue-600" bg="bg-blue-100" />
+                {!isMaint && <StatCard label="Administradores" value={stats.admins} trend="Sistemas" icon={ShieldCheck} color="text-purple-600" bg="bg-purple-100" />}
             </div>
 
             {/* Main Table Container */}

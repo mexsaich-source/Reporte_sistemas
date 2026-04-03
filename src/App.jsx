@@ -80,7 +80,9 @@ const RootRedirect = () => {
 
   // Redirección por rol
   const role = profile?.role?.toLowerCase() || '';
-  if (role === 'admin' || role === 'tech' || role === 'técnico') {
+  const isMaint = ['jefe_mantenimiento', 'ingeniero'].includes(role);
+  
+  if (role === 'admin' || role === 'tech' || role === 'técnico' || isMaint) {
     return <Navigate to="/admin" replace />;
   }
 
@@ -110,9 +112,6 @@ const ProtectedRoute = memo(({ children, allowedRoles = [] }) => {
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
     console.warn("Acceso denegado. Rol:", userRole, "Rutas permitidas:", allowedRoles);
-    // IMPORTANTE: Solo redirigimos si NO estamos ya en la ruta destino
-    // Para evitar bucles, si no tiene permiso aquí, lo mandamos al 'Root'
-    // y que RootRedirect decida según su rol real.
     return <Navigate to="/" replace />;
   }
 
@@ -130,17 +129,17 @@ function App() {
       <Route
         path="/portal"
         element={
-          <ProtectedRoute allowedRoles={['user', 'operativo', 'operador']}>
+          <ProtectedRoute allowedRoles={['user', 'operativo', 'operador', 'jefe_mantenimiento', 'ingeniero']}>
             <UserPortal />
           </ProtectedRoute>
         }
       />
 
-      {/* Dashboard de Administradores / Técnicos */}
+      {/* Dashboard de Administradores / Técnicos / Mantenimiento */}
       <Route
         path="/admin"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'tech', 'técnico']}>
+          <ProtectedRoute allowedRoles={['admin', 'tech', 'técnico', 'jefe_mantenimiento', 'ingeniero']}>
             <AdminDashboard />
           </ProtectedRoute>
         }

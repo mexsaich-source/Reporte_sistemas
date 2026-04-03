@@ -8,21 +8,25 @@ import {
     Users,
     Laptop,
     Settings,
-    FileSpreadsheet
+    FileSpreadsheet,
+    Wrench
 } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 
 const Sidebar = ({ activeItem, onSelectItem, onSettingsClick }) => {
     // 1. Obtenemos el perfil del contexto
     const { profile } = useAuth();
-
-    // 2. Verificamos si es administrador o técnico
-    const isStaff = profile?.role === 'admin' || profile?.role === 'tech' || profile?.role === 'técnico';
+    const role = (profile?.role || '').toLowerCase().trim();
+    const department = (profile?.department || '').toLowerCase().trim();
+    const isMaint = department.includes('mantenimiento') || department.includes('ingenieria') || department.includes('ingeniería');
+    const isIT = ['admin', 'tech', 'técnico'].includes(role) && !isMaint;
+    const isStaff = isIT || isMaint;
 
     // 3. Definimos todos los botones y quién puede verlos (requireStaff)
     const allMenuItems = [
         { name: 'Dashboard', icon: LayoutDashboard, id: 'Dashboard', requireStaff: true },
-        { name: 'Tickets', icon: Ticket, id: 'Tickets', requireStaff: false }, // Lo ven todos
+        { name: 'Tickets', icon: Ticket, id: 'Tickets', requireStaff: false }, 
+        { name: 'Mantenimiento', icon: Wrench, id: 'Maintenance', requireStaff: true },
         { name: 'Inventario', icon: MonitorSmartphone, id: 'Inventory', requireStaff: true },
         { name: 'Actividades', icon: Activity, id: 'Activities', requireStaff: true },
         { name: 'Solicitudes', icon: Laptop, id: 'Requests', requireStaff: true },
@@ -31,11 +35,24 @@ const Sidebar = ({ activeItem, onSelectItem, onSettingsClick }) => {
         { name: 'Carga Masiva', icon: FileSpreadsheet, id: 'Import', requireStaff: true, adminOnly: true },
     ];
 
-    // 4. Filtramos: Si no es staff, solo mostramos los que tienen requireStaff en false
-    // Adicionalmente, si es adminOnly, verificamos que el rol sea exactamente 'admin'
+    // 4. Filtramos: Lógica de permisos por área
     const menuItems = allMenuItems.filter(item => {
+        // Regla 1: Si no es Staff, solo ve 'Tickets' (portal usuario)
         if (!isStaff && item.requireStaff) return false;
-        if (item.adminOnly && profile?.role !== 'admin') return false;
+
+        // Regla 2: Personal de Mantenimiento -> Solo ve su área. Usuarios solo si es jefe/admin.
+        if (isMaint) {
+            const canManageUsers = ['admin', 'jefe_mantenimiento'].includes(role);
+            if (item.id === 'Users') return canManageUsers;
+            return item.id === 'Maintenance';
+        }
+
+        // Regla 3: Personal de IT -> Ve todo lo que NO es adminOnly (a menos que sea admin)
+        if (isIT) {
+            if (item.adminOnly && role !== 'admin') return false;
+            return true;
+        }
+
         return true;
     });
 
@@ -43,13 +60,15 @@ const Sidebar = ({ activeItem, onSelectItem, onSettingsClick }) => {
         <div className="w-72 bg-slate-950 text-slate-300 flex flex-col h-screen overflow-hidden sticky top-0 border-r border-slate-800 shadow-2xl z-20 transition-all duration-300">
             {/* Header/Logo */}
             <div className="p-8 flex items-center gap-4">
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-500/20">
-                    <Laptop size={28} strokeWidth={2.5} />
+                <div className="bg-white/20 p-2.5 rounded-xl shadow-inner group-hover:bg-white/30 transition-all">
+                    {isMaint ? <Wrench size={28} strokeWidth={2.5} /> : <Laptop size={28} strokeWidth={2.5} />}
                 </div>
                 <div className="flex flex-col">
-                    <span className="font-black text-xl text-white tracking-tight leading-none"> IT Helpdesk</span>
+                    <span className="font-black text-xl text-white tracking-tight leading-none">
+                        {isMaint ? 'Mantenimiento' : 'IT Helpdesk'}
+                    </span>
                     <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">
-                        {isStaff ? 'Admin Portal' : 'User Portal'}
+                        {isStaff ? (isMaint ? 'Staff Mantenimiento' : 'Admin Portal') : 'User Portal'}
                     </span>
                 </div>
             </div>
