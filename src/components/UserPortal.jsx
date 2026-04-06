@@ -873,6 +873,7 @@ const UserPortal = () => {
         if (currentView === 'Tickets' || currentView === 'Dashboard') {
             fetchMyTickets();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentView, user]);
 
     const filteredMyTickets = React.useMemo(() => {

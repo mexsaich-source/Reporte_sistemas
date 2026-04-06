@@ -42,42 +42,69 @@ function normalize(input: unknown) {
   return String(input || "").trim().toLowerCase();
 }
 
-function normalizeArea(input: unknown): Area | null {
-  const value = normalize(input);
-  if (["it", "admin it", "tech it", "admin_it", "tech_it"].includes(value)) return "IT";
-  if (["ing", "ingenieria", "ingenieria", "engineering", "admin ing", "tech ing", "admin_ing", "tech_ing", "mantenimiento"].includes(value)) return "ING";
-  return null;
-}
-
+/**
+ * Devuelve el área (IT | ING) según el departamento del perfil.
+ * Coincide exactamente con la lógica de Sidebar.jsx:
+ *   isMaint = department.includes('mantenimiento' | 'ingenieria' | 'ingeniería')
+ */
 function resolveProfileArea(profile: ProfileRow): Area | null {
-  const fromDept = normalizeArea(profile.department);
-  if (fromDept) return fromDept;
-
+  const dept = normalize(profile.department);
+  if (dept.includes("mantenimiento") || dept.includes("ingenieria") || dept.includes("ingeniería")) {
+    return "ING";
+  }
+  // Sin departamento de mantenimiento → IT si tiene rol de staff
   const role = normalize(profile.role);
-  if (role.includes("admin_it") || role.includes("tech_it")) return "IT";
-  if (role.includes("admin_ing") || role.includes("tech_ing")) return "ING";
-  if (role.includes("jefe_mantenimiento") || role.includes("ingeniero")) return "ING";
+  const itRoles = ["admin", "tech", "técnico", "tecnico"];
+  if (itRoles.includes(role)) return "IT";
   return null;
 }
 
+/**
+ * ¿Es administrador del área indicada?
+ *
+ * IT Admin  → role = 'admin'  AND  departamento NO es mantenimiento/ingeniería
+ * ING Admin → role = 'admin' OR 'jefe_mantenimiento'  AND  departamento ES mantenimiento/ingeniería
+ */
 function isAdminForArea(profile: ProfileRow, area: Area): boolean {
   const role = normalize(profile.role);
-  const profileArea = resolveProfileArea(profile);
+  const dept = normalize(profile.department);
+  const isMaint = dept.includes("mantenimiento") || dept.includes("ingenieria") || dept.includes("ingeniería");
 
   if (area === "IT") {
-    return role === "admin_it" || (role === "admin" && profileArea === "IT");
+    return role === "admin" && !isMaint;
   }
-  return role === "admin_ing" || role === "jefe_mantenimiento" || (role === "admin" && profileArea === "ING");
+  // ING
+  return (role === "admin" && isMaint) || role === "jefe_mantenimiento";
 }
 
+/**
+ * ¿Es técnico del área indicada?
+ *
+ * IT Tech  → role = 'tech' | 'técnico'  AND  departamento NO es mantenimiento/ingeniería
+ * ING Tech → role = 'tech' | 'técnico' | 'ingeniero'  AND  departamento ES mantenimiento/ingeniería
+ */
 function isTechForArea(profile: ProfileRow, area: Area): boolean {
   const role = normalize(profile.role);
-  const profileArea = resolveProfileArea(profile);
+  const dept = normalize(profile.department);
+  const isMaint = dept.includes("mantenimiento") || dept.includes("ingenieria") || dept.includes("ingeniería");
+  const isTechRole = ["tech", "técnico", "tecnico"].includes(role);
 
   if (area === "IT") {
-    return role === "tech_it" || ((role === "tech" || role === "tecnico" || role === "técnico") && profileArea === "IT");
+    return isTechRole && !isMaint;
   }
-  return role === "tech_ing" || role === "ingeniero" || ((role === "tech" || role === "tecnico" || role === "técnico") && profileArea === "ING");
+  // ING
+  return (isTechRole && isMaint) || role === "ingeniero";
+}
+
+/**
+ * Intenta resolver el área desde valores sueltos de payload (fallback).
+ * Solo usada cuando NO se puede resolver desde el perfil.
+ */
+function normalizeAreaFromString(input: unknown): Area | null {
+  const value = normalize(input);
+  if (["it", "sistemas", "helpdesk", "soporte"].some((k) => value.includes(k))) return "IT";
+  if (["ing", "ingenieria", "ingeniería", "mantenimiento", "engineering"].some((k) => value.includes(k))) return "ING";
+  return null;
 }
 
 function getTelegramChatId(profile: ProfileRow): string | null {
@@ -181,7 +208,7 @@ async function resolveTicketContext(supabase: any, payload: any): Promise<Ticket
   const ticketId = String(payload.ticket_id || "").trim();
   if (!ticketId) return null;
 
-  const forcedArea = normalizeArea(payload.department || payload.area);
+  const forcedArea = normalizeAreaFromString(payload.department || payload.area);
 
   const { data: itTicket } = await supabase
     .from("tickets")
@@ -233,6 +260,10 @@ async function resolveTicketContext(supabase: any, payload: any): Promise<Ticket
   return null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTO 1: NUEVO TICKET CREADO
+// → Telegram al Admin del área (IT o Ingeniería) únicamente.
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleNewTicketCreated(supabase: any, payload: any) {
   const ctx = await resolveTicketContext(supabase, payload);
   if (!ctx) return { ok: false, status: 404, error: "No se pudo resolver el ticket o su area" };
@@ -242,12 +273,30 @@ async function handleNewTicketCreated(supabase: any, payload: any) {
     .map((a) => ({ id: a.id, chatId: getTelegramChatId(a), name: a.full_name || a.id }))
     .filter((a) => Boolean(a.chatId));
 
-  const text = `*Nuevo ticket ${ctx.area}*\nFolio: #${ctx.ticketId}\nTitulo: ${ctx.title}\nAccion: revisar y asignar.`;
+  const areaLabel = ctx.area === "IT" ? "IT" : "Ingeniería";
+  const text =
+    `🔔 *Nuevo ticket — ${areaLabel}*\n` +
+    `📋 Folio: \`#${ctx.ticketId}\`` + `\n` +
+    `📝 Asunto: ${ctx.title}\n` +
+    `⚡ Acción requerida: revisar y asignar a un técnico.`;
+
   const results = await Promise.all(targets.map((t) => sendTelegramMessage(t.chatId as string, text)));
 
-  return { ok: true, status: 200, event: "NEW_TICKET_CREATED", area: ctx.area, notified_admins: targets.length, results };
+  return {
+    ok: true,
+    status: 200,
+    event: "NEW_TICKET_CREATED",
+    area: ctx.area,
+    notified_admins: targets.length,
+    admin_names: targets.map((t) => t.name),
+    results,
+  };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTO 2: TICKET ASIGNADO
+// → Telegram ÚNICAMENTE al Técnico asignado de ese departamento.
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleTicketAssigned(supabase: any, payload: any) {
   const ctx = await resolveTicketContext(supabase, payload);
   if (!ctx) return { ok: false, status: 404, error: "No se pudo resolver el ticket o su area" };
@@ -255,38 +304,84 @@ async function handleTicketAssigned(supabase: any, payload: any) {
 
   const techProfile = await getProfileById(supabase, ctx.assignedTechId);
   if (!techProfile) return { ok: false, status: 404, error: "Tecnico asignado no encontrado" };
+
+  // Validación estricta: el técnico debe pertenecer al mismo departamento del ticket.
   if (!isTechForArea(techProfile, ctx.area)) {
-    return { ok: false, status: 400, error: `El usuario asignado no es tecnico del departamento ${ctx.area}` };
+    return {
+      ok: false,
+      status: 400,
+      error: `El usuario "${techProfile.full_name}" no es técnico del departamento ${ctx.area}. Rol: ${techProfile.role}, Depto: ${techProfile.department}`,
+    };
   }
 
   const chatId = getTelegramChatId(techProfile);
-  if (!chatId) return { ok: false, status: 400, error: "Tecnico sin chat_id de Telegram" };
+  if (!chatId) return { ok: false, status: 400, error: `Técnico ${techProfile.full_name} no tiene Chat ID de Telegram configurado` };
 
-  const text = `*Ticket asignado*\nArea: ${ctx.area}\nFolio: #${ctx.ticketId}\nTitulo: ${ctx.title}\nAccion: atender ticket.`;
+  const areaLabel = ctx.area === "IT" ? "IT" : "Ingeniería";
+  const text =
+    `🛠 *Ticket asignado — ${areaLabel}*\n` +
+    `📋 Folio: \`#${ctx.ticketId}\`` + `\n` +
+    `📝 Asunto: ${ctx.title}\n` +
+    `⚡ Acción requerida: atender y resolver el ticket.`;
+
   const result = await sendTelegramMessage(chatId, text);
 
-  return { ok: true, status: 200, event: "TICKET_ASSIGNED", area: ctx.area, assigned_tech_id: techProfile.id, result };
+  return {
+    ok: true,
+    status: 200,
+    event: "TICKET_ASSIGNED",
+    area: ctx.area,
+    assigned_tech: techProfile.full_name,
+    assigned_tech_id: techProfile.id,
+    result,
+  };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTO 3: TICKET RESUELTO
+// → a) Telegram al Admin del área: el técnico completó el ticket.
+// → b) Email SMTP al usuario reportador: su solicitud fue resuelta.
+// ─────────────────────────────────────────────────────────────────────────────
 async function handleTicketResolved(supabase: any, payload: any) {
   const ctx = await resolveTicketContext(supabase, payload);
   if (!ctx) return { ok: false, status: 404, error: "No se pudo resolver el ticket o su area" };
 
+  const areaLabel = ctx.area === "IT" ? "IT" : "Ingeniería";
+
+  // ── a) Telegram → Admin del departamento ─────────────────────────────────
   const admins = await getAdminsByArea(supabase, ctx.area);
   const adminTargets = admins
     .map((a) => ({ id: a.id, chatId: getTelegramChatId(a), name: a.full_name || a.id }))
     .filter((a) => Boolean(a.chatId));
 
-  const telegramText = `*Ticket resuelto*\nArea: ${ctx.area}\nFolio: #${ctx.ticketId}\nTitulo: ${ctx.title}\nEstado: completado por tecnico.`;
-  const telegramResults = await Promise.all(adminTargets.map((a) => sendTelegramMessage(a.chatId as string, telegramText)));
+  const techName = payload.tech_name ||
+    (ctx.assignedTechId ? (await getProfileById(supabase, ctx.assignedTechId))?.full_name : null) ||
+    "Técnico";
 
+  const telegramText =
+    `✅ *Ticket resuelto — ${areaLabel}*\n` +
+    `📋 Folio: \`#${ctx.ticketId}\`` + `\n` +
+    `📝 Asunto: ${ctx.title}\n` +
+    `👷 Resuelto por: ${techName}\n` +
+    `📌 Estado: completado.`;
+
+  const telegramResults = await Promise.all(
+    adminTargets.map((a) => sendTelegramMessage(a.chatId as string, telegramText))
+  );
+
+  // ── b) Email → Usuario reportador (SMTP únicamente, NO Telegram) ──────────
   const toEmail = ctx.reporterEmail || payload.reporter_email || null;
-  let emailResult: Record<string, unknown> = { channel: "email", status: "skipped", reason: "missing_reporter_email" };
+  let emailResult: Record<string, unknown> = {
+    channel: "email",
+    status: "skipped",
+    reason: "missing_reporter_email",
+  };
+
   if (toEmail) {
     emailResult = await sendEmail(
       toEmail,
-      `Solicitud resuelta - Ticket #${ctx.ticketId}`,
-      `Hola, tu solicitud "${ctx.title}" fue marcada como resuelta por el equipo de ${ctx.area}.`
+      `Tu solicitud ha sido resuelta — Ticket #${ctx.ticketId}`,
+      `Hola,\n\nTe informamos que tu solicitud "${ctx.title}" ha sido atendida y marcada como resuelta por el equipo de ${areaLabel}.\n\nSi el problema persiste o tienes alguna duda, crea un nuevo ticket desde la plataforma.\n\nGracias,\nEquipo de ${areaLabel}`
     );
   }
 
@@ -296,6 +391,8 @@ async function handleTicketResolved(supabase: any, payload: any) {
     event: "TICKET_RESOLVED",
     area: ctx.area,
     notified_admins: adminTargets.length,
+    admin_names: adminTargets.map((a) => a.name),
+    reporter_email: toEmail,
     telegram_results: telegramResults,
     email_result: emailResult,
   };
