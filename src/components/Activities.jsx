@@ -69,11 +69,13 @@ const ActivityStatusBadge = ({ status }) => {
   );
 };
 
-const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
+const ActivitiesSection = ({ viewerRole, viewerId, viewerDepartment = '', searchTerm = '' }) => {
   const isAdmin = viewerRole === 'admin';
   const isTech = viewerRole === 'tech' || viewerRole === 'técnico';
+  const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm || '');
 
   const [techUsers, setTechUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedActivityId, setSelectedActivityId] = useState(null);
@@ -100,6 +102,24 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
 
+  const normalize = useCallback((value) => String(value || '').toLowerCase().trim(), []);
+  const isMaintDepartment = useCallback((value) => {
+    const d = normalize(value);
+    return d.includes('mantenimiento') || d.includes('ingenieria') || d.includes('ingeniería');
+  }, [normalize]);
+  const viewerIsMaint = isMaintDepartment(viewerDepartment);
+
+  useEffect(() => {
+    setLocalSearchTerm(searchTerm || '');
+  }, [searchTerm]);
+
+  const usersById = useMemo(() => {
+    return (allUsers || []).reduce((acc, u) => {
+      acc[u.id] = u;
+      return acc;
+    }, {});
+  }, [allUsers]);
+
   const isErrorLike = useCallback((a) => {
     const text = `${a?.title || ''} ${a?.description || ''}`.toLowerCase();
     const keywords = ['error', 'falla', 'fallo', 'bug', 'problema', 'no funciona', 'no conecta', 'no prende'];
@@ -122,21 +142,46 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
   useEffect(() => {
     let mounted = true;
     const run = async () => {
-      if (isAdmin) {
-        const users = await userService.getAll();
-        const onlyTech = (users || []).filter(u => u.role === 'tech' || u.role === 'técnico');
-        if (mounted) setTechUsers(onlyTech);
+      const users = await userService.getAll();
+      const sameDomainTech = (users || []).filter((u) => {
+        const isTechRole = u.role === 'tech' || u.role === 'técnico';
+        if (!isTechRole) return false;
+        const deptIsMaint = isMaintDepartment(u.department);
+        return viewerIsMaint ? deptIsMaint : !deptIsMaint;
+      });
+      if (mounted) {
+        setAllUsers(users || []);
+        setTechUsers(sameDomainTech);
       }
     };
     run();
     return () => { mounted = false; };
-  }, [isAdmin]);
+  }, [isAdmin, isMaintDepartment, viewerIsMaint]);
+
+  const belongsToViewerDomain = useCallback((a) => {
+    const assignedUser = a?.assigned_tech ? usersById[a.assigned_tech] : null;
+    const creatorUser = a?.created_by ? usersById[a.created_by] : null;
+
+    const assignedMaint = assignedUser ? isMaintDepartment(assignedUser.department) : null;
+    const creatorMaint = creatorUser ? isMaintDepartment(creatorUser.department) : null;
+
+    if (viewerIsMaint) {
+      if (assignedMaint !== null) return assignedMaint;
+      if (creatorMaint !== null) return creatorMaint;
+      return false;
+    }
+
+    if (assignedMaint !== null) return !assignedMaint;
+    if (creatorMaint !== null) return !creatorMaint;
+    return true;
+  }, [usersById, viewerIsMaint, isMaintDepartment]);
 
   const refreshActivities = useCallback(async () => {
     setLoading(true);
     try {
       const all = await activityService.getAll();
-      const filtered = isTech ? all.filter(a => a.assigned_tech === viewerId) : all;
+      let filtered = isTech ? all.filter(a => a.assigned_tech === viewerId) : all;
+      filtered = filtered.filter(belongsToViewerDomain);
       setActivities(filtered);
     } catch (err) {
       console.error('Error loading activities:', err);
@@ -144,7 +189,7 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
     } finally {
       setLoading(false);
     }
-  }, [isTech, viewerId]);
+  }, [isTech, viewerId, belongsToViewerDomain]);
 
   useEffect(() => {
     refreshActivities();
@@ -169,8 +214,8 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
     let base = isAdmin ? exportBaseActivities : activities;
 
     // NUEVO: Filtro por Buscador (Expandido)
-    if (searchTerm.trim() !== '') {
-      const term = searchTerm.toLowerCase();
+    if (localSearchTerm.trim() !== '') {
+      const term = localSearchTerm.toLowerCase();
       base = base.filter(a => {
         const techName = techUsers.find(u => u.id === a.assigned_tech)?.full_name || '';
         const statusText = a.status === 'pending' ? 'pendiente' :
@@ -201,7 +246,7 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
     }
 
     return base;
-  }, [activities, isAdmin, exportBaseActivities, adminStatusView, isErrorLike, searchTerm, techUsers]);
+  }, [activities, isAdmin, exportBaseActivities, adminStatusView, isErrorLike, localSearchTerm, techUsers]);
 
   const techCounts = useMemo(() => {
     if (!isAdmin) return [];
@@ -392,8 +437,8 @@ const ActivitiesSection = ({ viewerRole, viewerId, searchTerm = '' }) => {
               <input
                 type="text"
                 placeholder="Buscar por título o descripción..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={localSearchTerm}
+                onChange={(e) => setLocalSearchTerm(e.target.value)}
                 className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 pl-10 pr-4 py-3 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 transition-all"
               />
             </div>
@@ -758,12 +803,13 @@ const ActivitiesView = ({ searchTerm = '' }) => {
   const { profile, user } = useAuth();
   const role = (profile?.role || '').toLowerCase();
   const viewerId = user?.id;
+  const viewerDepartment = profile?.department || '';
 
   if (!viewerId || !profile) return <div className="p-20 text-center animate-spin">Cargando...</div>;
 
   return (
     <div className="w-full">
-      <ActivitiesSection viewerRole={role} viewerId={viewerId} searchTerm={searchTerm} />
+      <ActivitiesSection viewerRole={role} viewerId={viewerId} viewerDepartment={viewerDepartment} searchTerm={searchTerm} />
     </div>
   );
 };

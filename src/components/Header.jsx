@@ -7,8 +7,6 @@ import { supabase } from '../lib/supabaseClient';
 import { notificationService } from '../services/notificationService';
 
 const Header = ({
-    userName: _userName = 'Usuario',
-    userType: _userType = 'Operativo',
     onMenuClick,
     searchTerm,
     onSearchChange,
@@ -21,6 +19,7 @@ const Header = ({
     const [notifications, setNotifications] = React.useState([]);
     const [dropdownPos, setDropdownPos] = React.useState({ top: 72, right: 16 });
     const bellRef = React.useRef(null);
+    const deniedWarnedRef = React.useRef(false);
 
     const placeDropdown = React.useCallback(() => {
         const el = bellRef.current;
@@ -40,13 +39,6 @@ const Header = ({
 
         notificationService.syncPushForUser(user.id).catch(console.error);
 
-        const onVisible = () => {
-            if (document.visibilityState === 'visible') {
-                notificationService.syncPushForUser(user.id).catch(() => {});
-            }
-        };
-        document.addEventListener('visibilitychange', onVisible);
-
         const fetchNotifs = async () => {
             const { data, error } = await supabase
                 .from('notifications')
@@ -55,9 +47,21 @@ const Header = ({
                 .order('created_at', { ascending: false })
                 .limit(10);
 
-            if (error) console.error('Error fetching initial notifications:', error);
+            if (error) {
+                console.error('Error fetching notifications:', error);
+                return;
+            }
             if (data) setNotifications(data);
         };
+
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') {
+                notificationService.syncPushForUser(user.id).catch(() => {});
+                fetchNotifs();
+            }
+        };
+        document.addEventListener('visibilitychange', onVisible);
+
         fetchNotifs();
 
         const channelName = `header_notifs_${user.id}`;
@@ -81,7 +85,43 @@ const Header = ({
                     });
                 }
             )
-            .subscribe();
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`,
+                },
+                (payload) => {
+                    const updated = payload.new;
+                    setNotifications((prev) => prev.map((n) => (n.id === updated.id ? { ...n, ...updated } : n)));
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `user_id=eq.${user.id}`,
+                },
+                (payload) => {
+                    const deletedId = payload.old?.id;
+                    if (!deletedId) return;
+                    setNotifications((prev) => prev.filter((n) => n.id !== deletedId));
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    fetchNotifs();
+                }
+            });
+
+        // Polling de respaldo para casos donde el canal realtime se corta silenciosamente.
+        const pollId = window.setInterval(() => {
+            fetchNotifs();
+        }, 30000);
 
         let unsubscribeFirebase = () => {};
         import('../lib/firebaseClient').then(({ onMessageListener }) => {
@@ -108,6 +148,7 @@ const Header = ({
 
         return () => {
             document.removeEventListener('visibilitychange', onVisible);
+            window.clearInterval(pollId);
             supabase.removeChannel(channel);
             if (unsubscribeFirebase) unsubscribeFirebase();
         };
@@ -127,7 +168,15 @@ const Header = ({
 
     const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-    const handleOpenNotifications = () => {
+    const handleOpenNotifications = async () => {
+        if (user?.id) {
+            const permission = await notificationService.requestPermission(user.id);
+            if (permission === 'denied' && !deniedWarnedRef.current) {
+                deniedWarnedRef.current = true;
+                alert('Las notificaciones del navegador están bloqueadas. Actívalas en la configuración del sitio para recibir alertas en tiempo real.');
+            }
+        }
+
         const willOpen = !showNotifications;
         if (willOpen) placeDropdown();
         setShowNotifications(willOpen);

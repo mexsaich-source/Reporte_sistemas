@@ -13,6 +13,7 @@ import UsersView from './UsersList';
 import ImportModule from './ImportModule';
 import RequestsModule from './RequestsModule';
 import MaintenanceModule from './MaintenanceModule';
+import BotIncidentsAdmin from './BotIncidentsAdmin';
 import ProfileSettingsModal from './ProfileSettingsModal';
 import { userService } from '../services/userService';
 import { workNotificationService } from '../services/workNotificationService';
@@ -290,10 +291,10 @@ const AdminDashboard = () => {
         };
 
         loadDashboardData();
-    }, []);
+    }, [isIT]);
 
     useEffect(() => {
-        if (profile?.role !== 'admin') return undefined;
+        if ((profile?.role || '').toLowerCase().trim() !== 'admin') return undefined;
 
         workNotificationService.runDueReminders();
         const timer = setInterval(() => {
@@ -313,6 +314,7 @@ const AdminDashboard = () => {
     const renderView = () => {
         // Bloqueo de acceso: Redirigir si intenta entrar a áreas no permitidas
         const isBoss = isMaint && ['admin', 'jefe_mantenimiento'].includes(role);
+        const canManageNews = ['admin', 'jefe_mantenimiento'].includes(role);
         const restrictedViews = ['Tickets', 'Inventory', 'Activities', 'Reports', 'Import', 'Requests'];
         
         // Si es de mantenimiento pero NO es jefe, también bloqueamos 'Users'
@@ -324,6 +326,10 @@ const AdminDashboard = () => {
             return <MaintenanceModule />;
         }
 
+        if (currentView === 'NewsTI' && !canManageNews) {
+            return <MaintenanceModule />;
+        }
+
         switch (currentView) {
             case 'Tickets': return <TicketsModule searchTerm={searchTerm} />;
             case 'Inventory': return <InventoryView searchTerm={searchTerm} />;
@@ -332,6 +338,7 @@ const AdminDashboard = () => {
             case 'Users': return <UsersView searchTerm={searchTerm} />;
             case 'Import': return <ImportModule />;
             case 'Requests': return <RequestsModule searchTerm={searchTerm} />;
+            case 'NewsTI': return <BotIncidentsAdmin />;
             case 'Maintenance': return <MaintenanceModule />;
             case 'Dashboard':
             default:
@@ -375,21 +382,21 @@ const AdminDashboard = () => {
                     onMenuClick={() => setIsSidebarOpen(true)}
                     userName={profile?.full_name || 'Usuario'}
                     userType={profile?.role || (isMaint ? 'Mantenimiento' : 'Cargando...')}
-                    searchTerm={(currentView === 'Dashboard' || currentView === 'Maintenance') ? '' : searchTerm}
+                    searchTerm={(currentView === 'Dashboard' || currentView === 'Maintenance' || currentView === 'NewsTI') ? '' : searchTerm}
                     onSearchChange={setSearchTerm}
-                    hideSearch={currentView === 'Dashboard' || currentView === 'Maintenance'}
+                    hideSearch={currentView === 'Dashboard' || currentView === 'Maintenance' || currentView === 'NewsTI'}
                 />
 
                 <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full min-h-0">
                     <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                             {currentView === 'Dashboard' ? (isIT ? 'Centro de Mando IT' : 'Portal de Mantenimiento') : 
-                             currentView === 'Maintenance' ? 'Gestión de Mantenimiento' : currentView}
+                                currentView === 'Maintenance' ? 'Gestión de Mantenimiento' : currentView === 'NewsTI' ? 'Administración Noticias IT' : currentView}
                         </h1>
 
                         <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium text-sm">
                             {currentView === 'Dashboard' ? (isIT ? 'Métricas en tiempo real y carga operativa.' : 'Bienvenido jefe, gestione sus órdenes de trabajo.') : 
-                             currentView === 'Maintenance' ? 'Control de ingeniería y reparaciones.' : `sección de ${currentView}.`}
+                                currentView === 'Maintenance' ? 'Control de ingeniería y reparaciones.' : currentView === 'NewsTI' ? 'Publica y cierra avisos técnicos para todo el hotel.' : `sección de ${currentView}.`}
                         </p>
 
                     </div>

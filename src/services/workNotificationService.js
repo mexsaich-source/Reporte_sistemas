@@ -7,7 +7,9 @@ async function createNotification(userId, title, message, type = 'info', actionU
   if (!userId || !title || !message) return false;
 
   try {
-    // Usar función RPC segura que valida permisos en el servidor
+    let notificationId = null;
+
+    // 1) Intento principal: RPC con validación de negocio.
     const { data, error } = await supabase.rpc('create_notification_safe', {
       p_user_id: userId,
       p_title: title,
@@ -16,12 +18,33 @@ async function createNotification(userId, title, message, type = 'info', actionU
       p_action_url: actionUrl
     });
 
-    if (error) {
-      console.error('❌ Error creando notificación:', error.message);
-      return false;
-    }
+    if (!error) {
+      notificationId = data?.[0]?.id || null;
+    } else {
+      console.warn('⚠️ RPC create_notification_safe falló, usando fallback directo:', error.message || error);
 
-    const notificationId = data?.[0]?.id || null;
+      // 2) Fallback: inserción directa en notifications cuando el RPC no aplique para el actor.
+      const { data: directData, error: directErr } = await supabase
+        .from('notifications')
+        .insert([
+          {
+            user_id: userId,
+            title,
+            message,
+            type,
+            action_url: actionUrl,
+          }
+        ])
+        .select('id')
+        .single();
+
+      if (directErr) {
+        console.error('❌ Error creando notificación (fallback directo):', directErr.message || directErr);
+        return false;
+      }
+
+      notificationId = directData?.id || null;
+    }
 
     // Fallback: intentar push directo para no depender solo del trigger SQL.
     // Si falla, no bloquea el flujo principal porque la notificacion ya quedo guardada.

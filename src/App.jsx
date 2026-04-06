@@ -6,6 +6,7 @@ import { useAuth } from './context/authStore';
 
 // Importamos tus vistas principales
 import Login from './components/Login';
+import ResetPassword from './components/ResetPassword';
 import AdminDashboard from './components/AdminDashboard';
 import UserPortal from './components/UserPortal';
 
@@ -124,6 +125,7 @@ function App() {
     <Routes>
       {/* Ruta pública */}
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Portal de Usuarios Operativos */}
       <Route

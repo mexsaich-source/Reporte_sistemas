@@ -44,7 +44,9 @@ export const ticketService = {
                     created_at,
                     reported_by,
                     assigned_tech,
-                    scheduled_for
+                    scheduled_for,
+                    asset_id,
+                    asset_serial_number
                 `)
                 .order('created_at', { ascending: false });
 
@@ -93,11 +95,11 @@ export const ticketService = {
                     `Se te asigno el ticket "${data.title || `#${data.id}`}".`
                 );
             } else {
-                // Si aun no hay tecnico asignado, avisar a admins para toma del ticket.
+                // Si aun no hay tecnico asignado, avisar a staff de gestion para toma del ticket.
                 const { data: admins } = await supabase
                     .from('profiles')
                     .select('id')
-                    .eq('role', 'admin');
+                    .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
 
                 const recipients = (admins || [])
                     .map((a) => a?.id)
@@ -183,6 +185,18 @@ export const ticketService = {
                 );
             }
 
+            if (scheduleChanged && data?.reported_by) {
+                const scheduleMessage = data?.scheduled_for
+                    ? `Tu ticket "${data.title || `#${data.id}`}" fue programado para ${new Date(data.scheduled_for).toLocaleString()}.`
+                    : `La fecha de atencion de tu ticket "${data.title || `#${data.id}`}" fue retirada temporalmente.`;
+
+                await workNotificationService.createNotification(
+                    data.reported_by,
+                    'Fecha de atencion actualizada',
+                    scheduleMessage
+                );
+            }
+
             if (resolvedNow && data?.reported_by) {
                 await workNotificationService.createNotification(
                     data.reported_by,
@@ -195,7 +209,7 @@ export const ticketService = {
                 const uiStatusUpdate = updates.status || data.status;
                 const statusChanged = uiStatusUpdate && uiStatusUpdate !== prev.status;
 
-                if (statusChanged || assignedTechChanged) {
+                if (statusChanged || assignedTechChanged || scheduleChanged) {
                     const recipients = new Set();
                     if (data.reported_by) recipients.add(data.reported_by);
                     if (data.assigned_tech) recipients.add(data.assigned_tech);
@@ -218,6 +232,17 @@ export const ticketService = {
                                 ticket_id: id,
                                 sender_id: actorId,
                                 message: cleanUpdates.assigned_tech ? '[STATUS_ASSIGNED] Técnico asignado' : '[STATUS_ASSIGNED] Técnico desasignado'
+                            }
+                        ]);
+                    } else if (scheduleChanged) {
+                        const scheduleText = data?.scheduled_for
+                            ? `[STATUS_SCHEDULED] Fecha de atención programada para ${new Date(data.scheduled_for).toLocaleString()}`
+                            : '[STATUS_SCHEDULED] Se retiró la fecha programada de atención';
+                        await supabase.from('ticket_messages').insert([
+                            {
+                                ticket_id: id,
+                                sender_id: actorId,
+                                message: scheduleText
                             }
                         ]);
                     }

@@ -4,6 +4,7 @@ import { TicketStatusBadge } from './TicketsModule';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
 import { uploadTicketChatImage } from '../services/ticketChatStorage';
+import { workNotificationService } from '../services/workNotificationService';
 
 const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateTicket }) => {
     const { profile, user } = useAuth();
@@ -47,7 +48,8 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
         return raw
             .replace(/^\[STATUS_ASSIGNED\]\s*/u, '')
             .replace(/^\[STATUS_IN_PROGRESS\]\s*/u, '')
-            .replace(/^\[STATUS_RESOLVED\]\s*/u, '');
+            .replace(/^\[STATUS_RESOLVED\]\s*/u, '')
+            .replace(/^\[STATUS_SCHEDULED\]\s*/u, '');
     };
 
     const isSystemMessage = (raw) => {
@@ -55,7 +57,8 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
         return (
             raw.startsWith('[STATUS_ASSIGNED]') ||
             raw.startsWith('[STATUS_IN_PROGRESS]') ||
-            raw.startsWith('[STATUS_RESOLVED]')
+            raw.startsWith('[STATUS_RESOLVED]') ||
+            raw.startsWith('[STATUS_SCHEDULED]')
         );
     };
 
@@ -170,11 +173,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             if (ticketData) {
                 const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
                 if (recipientId) {
-                    await supabase.from('notifications').insert([{
-                        user_id: recipientId,
-                        title: `Nuevo mensaje en Ticket #${ticketId}`,
-                        message: `${profile?.full_name || 'Alguien'} te ha enviado un mensaje.`,
-                    }]);
+                    await workNotificationService.createNotification(
+                        recipientId,
+                        `Nuevo mensaje en Ticket #${ticketId}`,
+                        `${profile?.full_name || 'Alguien'} te ha enviado un mensaje.`
+                    );
                 }
             }
         } catch (error) {
@@ -221,11 +224,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             if (ticketData) {
                 const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
                 if (recipientId) {
-                    await supabase.from('notifications').insert([{
-                        user_id: recipientId,
-                        title: `Nuevo adjunto en Ticket #${ticketId}`,
-                        message: `${profile?.full_name || 'Alguien'} compartió una imagen en el chat.`,
-                    }]);
+                    await workNotificationService.createNotification(
+                        recipientId,
+                        `Nuevo adjunto en Ticket #${ticketId}`,
+                        `${profile?.full_name || 'Alguien'} compartió una imagen en el chat.`
+                    );
                 }
             }
         } catch (err) {

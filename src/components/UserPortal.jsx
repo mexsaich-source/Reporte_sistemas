@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     FilePlus, History, Calendar as CalendarIcon, LogOut, Search, Bell, LayoutDashboard,
     Ticket as TicketIcon, CheckCircle, Clock, AlertCircle, ChevronRight, User,
     CheckCircle2, ChevronLeft, Send, X, Laptop, Settings, Smartphone, Monitor, ImagePlus, Hash, Menu, FileText,
-    Cpu, Cable, Keyboard, MousePointer2, ChevronDown, Sparkles, Wifi, Briefcase
+    Cpu, Cable, Keyboard, MousePointer2, ChevronDown, ChevronUp, Sparkles, Wifi, Briefcase, Trash2
 } from 'lucide-react';
 import Header from './Header';
 import StatCard from './StatCard';
@@ -12,10 +12,12 @@ import GeneralRequestForm from './GeneralRequestForm';
 import TermsModal from './TermsModal';
 import ProfileSettingsModal from './ProfileSettingsModal';
 import TicketDetailSlider from './TicketDetailSlider';
+import UserSupportBot from './UserSupportBot';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
 import { userService } from '../services/userService';
 import { ticketService } from '../services/ticketService';
+import { workNotificationService } from '../services/workNotificationService';
 
 // --- SUBCOMPONENTE: Agenda de Usuario ---
 const UserAgenda = () => {
@@ -23,6 +25,9 @@ const UserAgenda = () => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDay, setSelectedDay] = useState(null);
+    const [typeFilter, setTypeFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
 
     const fetchEvents = React.useCallback(async () => {
         if (!user) return;
@@ -128,6 +133,12 @@ const UserAgenda = () => {
         setCurrentDate(d);
     };
 
+    const normalizeDay = (dateValue) => {
+        const d = new Date(dateValue);
+        d.setHours(12, 0, 0, 0);
+        return d;
+    };
+
     const sameCalDay = (a, b) =>
         a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
 
@@ -145,6 +156,44 @@ const UserAgenda = () => {
         });
     };
 
+    const monthEventsCount = useMemo(() => {
+        return events.filter((e) => e.rawDate.getMonth() === month && e.rawDate.getFullYear() === year).length;
+    }, [events, month, year]);
+
+    const getRelativeTag = (rawDate) => {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const target = new Date(rawDate.getFullYear(), rawDate.getMonth(), rawDate.getDate());
+        const diff = Math.floor((target - today) / (1000 * 60 * 60 * 24));
+
+        if (diff < 0) return { label: 'Vencido', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200' };
+        if (diff === 0) return { label: 'Hoy', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200' };
+        if (diff === 1) return { label: 'Mañana', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200' };
+        return { label: `En ${diff} días`, cls: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' };
+    };
+
+    const visibleEvents = useMemo(() => {
+        const filtered = events.filter((event) => {
+            if (selectedDay && !sameCalDay(normalizeDay(event.rawDate), selectedDay)) return false;
+            if (typeFilter !== 'all') {
+                if (typeFilter === 'scheduled' && event.markerKind !== 'scheduled') return false;
+                if (typeFilter === 'loan' && event.markerKind !== 'loan_range') return false;
+            }
+            if (statusFilter !== 'all' && event.status !== statusFilter) return false;
+            return true;
+        });
+
+        return filtered.sort((a, b) => {
+            const nowTs = Date.now();
+            const aTs = a.rawDate.getTime();
+            const bTs = b.rawDate.getTime();
+            const aWeight = aTs < nowTs ? 1 : 0;
+            const bWeight = bTs < nowTs ? 1 : 0;
+            if (aWeight !== bWeight) return aWeight - bWeight;
+            return aTs - bTs;
+        });
+    }, [events, selectedDay, typeFilter, statusFilter]);
+
     return (
         <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in slide-in-from-bottom-2 duration-700 transition-colors">
             {/* Real Interactive Calendar */}
@@ -156,6 +205,9 @@ const UserAgenda = () => {
                         <button onClick={() => changeMonth(1)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 transition-all active:scale-90"><ChevronRight size={16} className="text-slate-500" /></button>
                     </div>
                 </div>
+                <div className="mb-4 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-xl px-3 py-2 text-center">
+                    {monthEventsCount} evento{monthEventsCount === 1 ? '' : 's'} este mes
+                </div>
                 <div className="grid grid-cols-7 text-center text-[10px] font-black text-slate-300 dark:text-slate-600 mb-4 uppercase tracking-[0.2em]">
                     <span>Dom</span><span>Lun</span><span>Mar</span><span>Mie</span><span>Jue</span><span>Vie</span><span>Sab</span>
                 </div>
@@ -165,11 +217,17 @@ const UserAgenda = () => {
 
                     {Array.from({ length: numDays }, (_, i) => {
                         const day = i + 1;
+                        const cellDate = normalizeDay(new Date(year, month, day));
                         const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                        const isSelected = selectedDay && sameCalDay(selectedDay, cellDate);
                         const dayHasEvent = hasEvent(day);
 
                         return (
-                            <div key={day} className={`relative py-3 rounded-xl cursor-pointer transition-all duration-300 font-black group ${isToday ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/30' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 text-slate-600 dark:text-slate-400'}`}>
+                            <div
+                                key={day}
+                                onClick={() => setSelectedDay(isSelected ? null : cellDate)}
+                                className={`relative py-3 rounded-xl cursor-pointer transition-all duration-300 font-black group ${isToday ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/30' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 text-slate-600 dark:text-slate-400'} ${isSelected && !isToday ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : ''}`}
+                            >
                                 {day}
                                 {dayHasEvent && <div className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${isToday ? 'bg-white' : 'bg-blue-500'}`}></div>}
                             </div>
@@ -187,15 +245,60 @@ const UserAgenda = () => {
                         </div>
                         Próximas Actividades
                     </h3>
-                    <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 px-4 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-100 dark:border-blue-800 uppercase tracking-widest leading-none">{events.length} Tareas</span>
+                    <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 px-4 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-100 dark:border-blue-800 uppercase tracking-widest leading-none">{visibleEvents.length} visibles / {events.length}</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <button
+                        type="button"
+                        onClick={() => setSelectedDay(null)}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${selectedDay ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-slate-900 text-white border-slate-900'}`}
+                    >
+                        Todo el mes
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setTypeFilter('all')}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${typeFilter === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'}`}
+                    >
+                        Todos
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setTypeFilter('scheduled')}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${typeFilter === 'scheduled' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'}`}
+                    >
+                        Tickets
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setTypeFilter('loan')}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${typeFilter === 'loan' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-300'}`}
+                    >
+                        Préstamos
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${statusFilter === 'pending' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-300'}`}
+                    >
+                        Pendientes
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setStatusFilter(statusFilter === 'completed' ? 'all' : 'completed')}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${statusFilter === 'completed' ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+                    >
+                        Completados
+                    </button>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4">
                     {loading ? (
                         <div className="p-12 text-center text-slate-400 font-bold uppercase tracking-widest animate-pulse">Sincronizando...</div>
-                    ) : events.length === 0 ? (
-                        <div className="p-16 text-center text-slate-400 font-black uppercase tracking-[0.2em] text-xs border-4 border-dashed border-slate-50 dark:border-slate-900 rounded-[3rem]">No hay actividades registradas</div>
-                    ) : events.map((event) => (
+                    ) : visibleEvents.length === 0 ? (
+                        <div className="p-16 text-center text-slate-400 font-black uppercase tracking-[0.2em] text-xs border-4 border-dashed border-slate-50 dark:border-slate-900 rounded-[3rem]">{selectedDay ? 'No hay actividades para este día' : 'No hay actividades registradas'}</div>
+                    ) : visibleEvents.map((event) => (
                         <div key={event.id} className="group bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-blue-500/50 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/40 dark:hover:shadow-none cursor-pointer">
                             <div className="flex items-center gap-5">
                                 <div className={`p-4 rounded-2xl transition-all group-hover:rotate-12 duration-500 ${event.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400'}`}>
@@ -208,6 +311,9 @@ const UserAgenda = () => {
                                         <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest">
                                             <CalendarIcon size={12} /> {event.date}
                                         </div>
+                                        <span className={`text-[10px] font-black px-3 py-1 rounded-xl uppercase tracking-widest ${getRelativeTag(event.rawDate).cls}`}>
+                                            {getRelativeTag(event.rawDate).label}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -229,6 +335,10 @@ const MyGeneralRequestsPanel = () => {
     const { user } = useAuth();
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showResolvedHistory, setShowResolvedHistory] = useState(false);
+    const [extendModal, setExtendModal] = useState({ open: false, row: null });
+    const [extendForm, setExtendForm] = useState({ requestedEndDate: '', reason: '' });
+    const [extendSubmitting, setExtendSubmitting] = useState(false);
 
     const fetchRows = React.useCallback(async () => {
         if (!user?.id) return;
@@ -239,7 +349,7 @@ const MyGeneralRequestsPanel = () => {
                 .select('*')
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
-                .limit(12);
+                .limit(20);
             if (error) throw error;
             setRows(data || []);
         } catch (e) {
@@ -266,7 +376,29 @@ const MyGeneralRequestsPanel = () => {
         return () => supabase.removeChannel(ch);
     }, [user?.id, fetchRows]);
 
+    const handleDeleteRejected = async (id) => {
+        if (!id || !user?.id) return;
+        if (!window.confirm('¿Eliminar esta petición denegada de tu historial?')) return;
+        try {
+            const { error } = await supabase
+                .from('general_requests')
+                .delete()
+                .eq('id', id)
+                .eq('user_id', user.id)
+                .eq('status', 'rejected');
+
+            if (error) throw error;
+            await fetchRows();
+        } catch (e) {
+            console.error(e);
+            alert('No se pudo eliminar la petición denegada.');
+        }
+    };
+
     const statusLabel = (s) => {
+        if (s === 'borrowed') return 'Prestado';
+        if (s === 'overdue') return 'Vencido';
+        if (s === 'returned') return 'Devuelto';
         if (s === 'delivered') return 'Entregada';
         if (s === 'rejected') return 'Denegada';
         if (s === 'approved') return 'Aprobada';
@@ -274,13 +406,102 @@ const MyGeneralRequestsPanel = () => {
     };
 
     const statusClass = (s) => {
+        if (s === 'borrowed') return 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20';
+        if (s === 'overdue') return 'bg-orange-500/10 text-orange-600 border-orange-500/20';
+        if (s === 'returned') return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
         if (s === 'delivered') return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
         if (s === 'rejected') return 'bg-rose-500/10 text-rose-600 border-rose-500/20';
         if (s === 'approved') return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
         return 'bg-slate-500/10 text-slate-600 border-slate-500/20';
     };
 
+    const extensionStatusLabel = (value) => {
+        const s = (value || '').toLowerCase();
+        if (s === 'pending') return 'Prórroga en revisión';
+        if (s === 'approved') return 'Prórroga aprobada';
+        if (s === 'rejected') return 'Prórroga rechazada';
+        return null;
+    };
+
+    const extensionStatusClass = (value) => {
+        const s = (value || '').toLowerCase();
+        if (s === 'pending') return 'bg-amber-500/10 text-amber-700 border-amber-500/30';
+        if (s === 'approved') return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30';
+        if (s === 'rejected') return 'bg-rose-500/10 text-rose-700 border-rose-500/30';
+        return 'bg-slate-500/10 text-slate-700 border-slate-500/20';
+    };
+
+    const canRequestExtension = (row) => {
+        if (!row?.is_loan) return false;
+        const st = (row.status || '').toLowerCase();
+        const ext = (row.extension_status || '').toLowerCase();
+        return (st === 'borrowed' || st === 'overdue') && ext !== 'pending';
+    };
+
+    const openExtensionModal = (row) => {
+        const currentEndDate = row?.loan_end_date || '';
+        setExtendForm({
+            requestedEndDate: currentEndDate,
+            reason: '',
+        });
+        setExtendModal({ open: true, row });
+    };
+
+    const handleSubmitExtensionRequest = async () => {
+        const row = extendModal.row;
+        if (!row?.id) return;
+        if (!extendForm.requestedEndDate) {
+            alert('Debes indicar una nueva fecha de devolución.');
+            return;
+        }
+        if (!extendForm.reason.trim()) {
+            alert('Debes explicar por qué necesitas más tiempo.');
+            return;
+        }
+
+        setExtendSubmitting(true);
+        try {
+            const { error } = await supabase.rpc('request_general_request_extension', {
+                p_request_id: row.id,
+                p_requested_end_date: extendForm.requestedEndDate,
+                p_reason: extendForm.reason.trim(),
+            });
+            if (error) throw error;
+
+            const { data: admins } = await supabase
+                .from('profiles')
+                .select('id, role')
+                .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
+
+            const recipients = (admins || [])
+                .map((a) => a?.id)
+                .filter(Boolean);
+
+            await Promise.all(
+                recipients.map((recipientId) =>
+                    workNotificationService.createNotification(
+                        recipientId,
+                        'Nueva apelación de préstamo',
+                        `El usuario solicitó ampliar devolución de "${row.subject || 'Préstamo'}" hasta ${extendForm.requestedEndDate}.`
+                    )
+                )
+            );
+
+            setExtendModal({ open: false, row: null });
+            setExtendForm({ requestedEndDate: '', reason: '' });
+            await fetchRows();
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'No se pudo enviar la apelación de prórroga.');
+        } finally {
+            setExtendSubmitting(false);
+        }
+    };
+
     if (!user) return null;
+
+    const activeRows = rows.filter((r) => !['approved', 'delivered', 'returned'].includes((r.status || '').toLowerCase()));
+    const resolvedRows = rows.filter((r) => ['approved', 'delivered', 'returned'].includes((r.status || '').toLowerCase()));
 
     return (
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/60 dark:border-slate-800 shadow-xl overflow-hidden transition-colors">
@@ -299,41 +520,167 @@ const MyGeneralRequestsPanel = () => {
                 ) : rows.length === 0 ? (
                     <p className="p-6 text-center text-slate-500 text-sm">Aún no has enviado peticiones generales.</p>
                 ) : (
-                    rows.map((r) => (
-                        <div
-                            key={r.id}
-                            className="rounded-2xl border border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/40"
-                        >
-                            <div className="flex flex-wrap justify-between gap-2 items-start">
-                                <p className="font-black text-slate-900 dark:text-white text-sm">{r.subject}</p>
-                                <span
-                                    className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${statusClass(r.status)}`}
-                                >
-                                    {statusLabel(r.status)}
-                                </span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-1">{new Date(r.created_at).toLocaleString()}</p>
-                            {r.status === 'rejected' && r.reject_reason && (
-                                <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-900/40">
-                                    <p className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 mb-1">
-                                        Motivo de denegación
-                                    </p>
-                                    <p className="text-sm text-rose-800 dark:text-rose-200 font-medium whitespace-pre-wrap">
-                                        {r.reject_reason}
-                                    </p>
+                    <>
+                        {activeRows.map((r) => (
+                            <div
+                                key={r.id}
+                                className="rounded-2xl border border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/40"
+                            >
+                                <div className="flex flex-wrap justify-between gap-2 items-start">
+                                    <p className="font-black text-slate-900 dark:text-white text-sm">{r.subject}</p>
+                                    <span
+                                        className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${statusClass(r.status)}`}
+                                    >
+                                        {statusLabel(r.status)}
+                                    </span>
                                 </div>
-                            )}
-                        </div>
-                    ))
+                                <p className="text-[10px] text-slate-500 mt-1">{new Date(r.created_at).toLocaleString()}</p>
+                                {r.is_loan && (
+                                    <div className="mt-2 space-y-2">
+                                        {r.loan_end_date && (
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+                                                Devolver: {new Date(`${r.loan_end_date}T12:00:00`).toLocaleDateString()}
+                                            </p>
+                                        )}
+                                        {extensionStatusLabel(r.extension_status) && (
+                                            <span
+                                                className={`inline-flex text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${extensionStatusClass(r.extension_status)}`}
+                                            >
+                                                {extensionStatusLabel(r.extension_status)}
+                                            </span>
+                                        )}
+                                        {r.extension_status === 'rejected' && r.extension_reject_reason && (
+                                            <p className="text-[11px] text-rose-700 dark:text-rose-300">
+                                                Motivo rechazo prórroga: {r.extension_reject_reason}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {r.status === 'rejected' && r.reject_reason && (
+                                    <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-900/40">
+                                        <p className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 mb-1">
+                                            Motivo de denegación
+                                        </p>
+                                        <p className="text-sm text-rose-800 dark:text-rose-200 font-medium whitespace-pre-wrap">
+                                            {r.reject_reason}
+                                        </p>
+                                        <div className="mt-3 flex justify-end">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteRejected(r.id)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg border border-rose-300 text-rose-700 bg-white hover:bg-rose-600 hover:text-white"
+                                            >
+                                                <Trash2 size={12} /> Eliminar
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                {canRequestExtension(r) && (
+                                    <div className="mt-3 flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => openExtensionModal(r)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg border border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-600 hover:text-white"
+                                        >
+                                            Solicitar prórroga
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        {resolvedRows.length > 0 && (
+                            <div className="mt-2 rounded-2xl border border-slate-200/70 dark:border-slate-700/70 bg-slate-50/40 dark:bg-slate-800/30">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowResolvedHistory((v) => !v)}
+                                    className="w-full flex items-center justify-between px-4 py-3"
+                                >
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                        Historial cerrado ({resolvedRows.length})
+                                    </span>
+                                    {showResolvedHistory ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                </button>
+                                {showResolvedHistory && (
+                                    <div className="px-3 pb-3 space-y-2">
+                                        {resolvedRows.map((r) => (
+                                            <div key={r.id} className="rounded-xl border border-slate-100 dark:border-slate-700 bg-white/70 dark:bg-slate-900/40 px-3 py-2.5 flex items-center justify-between gap-2">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{r.subject}</p>
+                                                    <p className="text-[10px] text-slate-500">{new Date(r.created_at).toLocaleString()}</p>
+                                                </div>
+                                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${statusClass(r.status)}`}>
+                                                    {statusLabel(r.status)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
+
+            {extendModal.open && extendModal.row && (
+                <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-4">
+                        <h4 className="font-black text-lg text-slate-900 dark:text-white">Apelar prórroga de préstamo</h4>
+                        <p className="text-xs text-slate-500">
+                            Solicita más tiempo para devolver: <strong>{extendModal.row.subject || 'Préstamo'}</strong>
+                        </p>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Nueva fecha de devolución</label>
+                                <input
+                                    type="date"
+                                    value={extendForm.requestedEndDate}
+                                    onChange={(e) => setExtendForm((prev) => ({ ...prev, requestedEndDate: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Motivo de la apelación</label>
+                                <textarea
+                                    rows={4}
+                                    value={extendForm.reason}
+                                    onChange={(e) => setExtendForm((prev) => ({ ...prev, reason: e.target.value }))}
+                                    placeholder="Ej. Aún estoy en pruebas de campo y necesito 2 días adicionales."
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm font-medium"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setExtendModal({ open: false, row: null });
+                                    setExtendForm({ requestedEndDate: '', reason: '' });
+                                }}
+                                className="px-4 py-2 rounded-xl text-xs font-black uppercase text-slate-500"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSubmitExtensionRequest}
+                                disabled={extendSubmitting}
+                                className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-indigo-600 text-white disabled:opacity-60"
+                            >
+                                {extendSubmitting ? 'Enviando...' : 'Enviar apelación'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 // --- SUBCOMPONENTE: Formulario de Nuevo Ticket ---
 const NewTicketForm = ({ onCancel, onSuccess }) => {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
 
     const [myAssets, setMyAssets] = useState([]);
     const [loadingAssets, setLoadingAssets] = useState(true);
@@ -349,6 +696,8 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const profileAssignedEquipment = (profile?.assigned_equipment || '').toString().trim();
 
     const genericDeviceTypes = [
         { id: 'Laptop', label: 'Laptop', icon: Laptop },
@@ -382,17 +731,39 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                         status: a.status,
                     };
                 });
-                if (!cancelled) setMyAssets(normalized);
+                if (!cancelled) {
+                    setMyAssets(normalized);
+                    if (normalized.length > 0) {
+                        const firstAsset = normalized[0];
+                        setSelectedCategoryId((prev) => prev || firstAsset.id);
+                        setAssetTag((prev) => prev || firstAsset.serial_number || String(firstAsset.id));
+                    }
+                    if (normalized.length === 1) {
+                        const onlyAsset = normalized[0];
+                        setSelectedCategoryId((prev) => prev || onlyAsset.id);
+                        setAssetTag((prev) => prev || onlyAsset.serial_number || String(onlyAsset.id));
+                    }
+                    if (normalized.length === 0) {
+                        setShowAltCategories(true);
+                        setSelectedCategoryId((prev) => prev || 'category_otro_equipo');
+                        setAssetTag((prev) => prev || profileAssignedEquipment);
+                    }
+                }
             } catch (err) {
                 console.error('Error al cargar equipos del usuario:', err);
-                if (!cancelled) setMyAssets([]);
+                if (!cancelled) {
+                    setMyAssets([]);
+                    setShowAltCategories(true);
+                    setSelectedCategoryId((prev) => prev || 'category_otro_equipo');
+                    setAssetTag((prev) => prev || profileAssignedEquipment);
+                }
             } finally {
                 if (!cancelled) setLoadingAssets(false);
             }
         };
         fetchMyAssets();
         return () => { cancelled = true; };
-    }, [user]);
+    }, [user, profileAssignedEquipment]);
 
     const handleCategorySelection = (selection) => {
         setSelectedGenericDeviceType('Laptop');
@@ -409,7 +780,8 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!selectedCategoryId) {
+        const effectiveCategoryId = selectedCategoryId || (myAssets.length === 0 ? 'category_otro_equipo' : null);
+        if (!effectiveCategoryId) {
             setError('Selecciona uno de tus equipos o despliega “Otro tipo de incidencia”.');
             return;
         }
@@ -435,14 +807,14 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
             };
 
             let finalDeviceType = 'Hardware';
-            const assetRow = myAssets.find((a) => a.id === selectedCategoryId);
+            const assetRow = myAssets.find((a) => a.id === effectiveCategoryId);
             if (assetRow) {
                 finalDeviceType = assetRow.category || 'Hardware';
-            } else if (selectedCategoryId === 'category_otro_equipo') {
+            } else if (effectiveCategoryId === 'category_otro_equipo') {
                 finalDeviceType = selectedGenericDeviceType;
-            } else if (selectedCategoryId === 'category_software') {
+            } else if (effectiveCategoryId === 'category_software') {
                 finalDeviceType = 'Software';
-            } else if (selectedCategoryId === 'category_red') {
+            } else if (effectiveCategoryId === 'category_red') {
                 finalDeviceType = 'Network';
             }
 
@@ -458,7 +830,11 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
 
             if (assetRow) {
                 newTicket.asset_id = String(assetRow.id);
-                if (assetRow.serial_number) newTicket.asset_serial_number = assetRow.serial_number;
+            }
+
+            const finalAssetSerial = (assetRow?.serial_number || assetTag || profileAssignedEquipment || '').toString().trim();
+            if (finalAssetSerial) {
+                newTicket.asset_serial_number = finalAssetSerial;
             }
 
             const res = await ticketService.create(newTicket);
@@ -487,7 +863,9 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
         return <Cpu className="w-6 h-6" strokeWidth={2} />;
     };
 
-    const isAssignedAssetSelected = myAssets.some((a) => a.id === selectedCategoryId);
+    const selectedAsset = myAssets.find((a) => a.id === selectedCategoryId);
+    const isAssignedAssetSelected = !!selectedAsset;
+    const isSingleAssignedAsset = myAssets.length === 1 && !!selectedAsset;
     const showGenericIcons = selectedCategoryId === 'category_otro_equipo';
     const showAssetTagInput = selectedCategoryId === 'category_otro_equipo' || isAssignedAssetSelected;
 
@@ -500,7 +878,11 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                     </div>
                     <div>
                         <h3 className="font-black text-slate-950 dark:text-white text-xl tracking-tight">Reportar Falla Técnica</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Elige el equipo que tienes asignado en inventario.</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                            {myAssets.length > 0
+                                ? `Equipo detectado en inventario: ${myAssets.length} asignado(s).`
+                                : 'Sin equipo visible en inventario. Puedes reportar por categoría alterna.'}
+                        </p>
                     </div>
                 </div>
                 <button
@@ -527,6 +909,28 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                             <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">1. Tu equipo en inventario</label>
                         </div>
 
+                        {isSingleAssignedAsset && (
+                            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-500/10 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300 mb-1">Equipo preasignado detectado</p>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                    {selectedAsset?.brand ? `${selectedAsset.brand} · ` : ''}{selectedAsset?.model || 'Equipo'}
+                                </p>
+                                <p className="text-[10px] text-slate-500 mt-1">S/N: {selectedAsset?.serial_number || selectedAsset?.id || 'N/A'}</p>
+                            </div>
+                        )}
+
+                        {!isSingleAssignedAsset && isAssignedAssetSelected && (
+                            <div className="rounded-2xl border border-blue-200 dark:border-blue-500/20 bg-blue-50/60 dark:bg-blue-500/10 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300 mb-1">Equipo seleccionado</p>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                                    {selectedAsset?.brand ? `${selectedAsset.brand} · ` : ''}{selectedAsset?.model || 'Equipo'}
+                                </p>
+                                <p className="text-[10px] text-slate-500 mt-1">S/N: {selectedAsset?.serial_number || selectedAsset?.id || 'N/A'}</p>
+                            </div>
+                        )}
+
+                        {!isSingleAssignedAsset && (
+                            <>
                         {loadingAssets ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" aria-busy="true" aria-label="Cargando equipos asignados">
                                 {[1, 2, 3, 4].map((i) => (
@@ -539,10 +943,14 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                         ) : myAssets.length === 0 ? (
                             <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-8 text-center">
                                 <p className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">No hay equipos asignados a tu usuario en inventario.</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Si deberías ver equipos aquí, contacta a TI. Mientras tanto puedes abrir otras categorías.</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Si deberías ver equipos aquí, contacta a TI.</p>
+                                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-4">Activamos modo alterno para que puedas crear tu reporte sin bloqueo.</p>
                                 <button
                                     type="button"
-                                    onClick={() => setShowAltCategories(true)}
+                                    onClick={() => {
+                                        setShowAltCategories(true);
+                                        setSelectedCategoryId((prev) => prev || 'category_otro_equipo');
+                                    }}
                                     className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 hover:underline"
                                 >
                                     Otro tipo de incidencia
@@ -577,17 +985,21 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                                 ))}
                             </div>
                         )}
+                            </>
+                        )}
 
-                        <button
-                            type="button"
-                            onClick={() => setShowAltCategories((v) => !v)}
-                            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700 bg-white/40 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all duration-200"
-                        >
-                            <ChevronDown size={16} className={`transition-transform duration-200 ${showAltCategories ? 'rotate-180' : ''}`} />
-                            {showAltCategories ? 'Ocultar otras incidencias' : 'Otro tipo de incidencia (software, red, equipo no listado)'}
-                        </button>
+                        {!isSingleAssignedAsset && (
+                            <button
+                                type="button"
+                                onClick={() => setShowAltCategories((v) => !v)}
+                                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700 bg-white/40 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all duration-200"
+                            >
+                                <ChevronDown size={16} className={`transition-transform duration-200 ${showAltCategories ? 'rotate-180' : ''}`} />
+                                {showAltCategories ? 'Ocultar otras incidencias' : 'Otro tipo de incidencia (software, red, equipo no listado)'}
+                            </button>
+                        )}
 
-                        {showAltCategories && (
+                        {!isSingleAssignedAsset && showAltCategories && (
                             <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 rounded-3xl border border-slate-200/60 dark:border-slate-700/80 bg-slate-50/40 dark:bg-slate-800/30 p-5 backdrop-blur-sm">
                                 <span className="text-xs font-black text-slate-800 dark:text-slate-200 ml-1 block">Software, red u otro hardware</span>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -784,6 +1196,11 @@ const UserTicketList = ({ tickets, onTicketClick }) => {
                                     <span className="text-[10px] text-slate-300">•</span>
                                     <span className="text-[10px] text-slate-500 font-medium">Técnico: {ticket.tech}</span>
                                 </div>
+                                {ticket.scheduled_for && ticket.status !== 'resolved' && (
+                                    <p className="text-[10px] mt-1 text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-widest">
+                                        Atención: {new Date(ticket.scheduled_for).toLocaleString()}
+                                    </p>
+                                )}
                             </div>
                         </div>
                         <TicketStatusBadge status={ticket.status} withIcon size="sm" />
@@ -892,6 +1309,7 @@ const UserPortal = () => {
         { name: 'Mis Actividades', icon: History, id: 'Tickets' },
         { name: 'Peticiones Generales', icon: FileText, id: 'NewRequest' },
         { name: 'Agenda', icon: CalendarIcon, id: 'Agenda' },
+        { name: 'Noticias IT', icon: Sparkles, id: 'Assistant' },
     ];
 
     const formatCount = (count) => count < 10 ? `0${count}` : `${count}`;
@@ -904,6 +1322,8 @@ const UserPortal = () => {
                 return <GeneralRequestForm onCancel={() => setCurrentView('Dashboard')} onSuccess={() => setCurrentView('Dashboard')} />;
             case 'Agenda':
                 return <UserAgenda />;
+            case 'Assistant':
+                return <UserSupportBot />;
             case 'Tickets':
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">

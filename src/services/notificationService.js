@@ -1,8 +1,9 @@
 import { supabase } from '../lib/supabaseClient';
-import { getToken, isSupported } from 'firebase/messaging';
+import { getToken, isSupported, deleteToken } from 'firebase/messaging';
 import { messaging, VAPID_KEY } from '../lib/firebaseClient';
 
 const DEVICE_KEY = 'it_helpdesk_fcm_device_id';
+const TOKEN_ROTATED_SESSION_KEY = 'it_helpdesk_fcm_token_rotated';
 
 function getOrCreateDeviceId() {
     try {
@@ -72,7 +73,21 @@ export const notificationService = {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') return { ok: false, reason: permission };
         }
-        await this.setupFCMToken(userId);
+
+        // Fuerza renovación de token una vez por sesión de navegador.
+        // Esto ayuda cuando la misma cuenta entra desde otro navegador/dispositivo.
+        let forceRefresh = false;
+        try {
+            const sessionKey = `${TOKEN_ROTATED_SESSION_KEY}:${userId}`;
+            if (!sessionStorage.getItem(sessionKey)) {
+                forceRefresh = true;
+                sessionStorage.setItem(sessionKey, '1');
+            }
+        } catch {
+            forceRefresh = false;
+        }
+
+        await this.setupFCMToken(userId, { forceRefresh });
         return { ok: true };
     },
 
@@ -85,8 +100,9 @@ export const notificationService = {
         return typeof r.reason === 'string' ? r.reason : 'default';
     },
 
-    async setupFCMToken(userId) {
+    async setupFCMToken(userId, options = {}) {
         if (!messaging || !userId) return;
+        const { forceRefresh = false } = options;
         try {
             const registration = await this.registerServiceWorker();
 
@@ -96,6 +112,15 @@ export const notificationService = {
             }
 
             await registration.update?.();
+
+            if (forceRefresh) {
+                try {
+                    await deleteToken(messaging);
+                    console.log('🔁 Token FCM anterior invalidado para forzar renovación de sesión.');
+                } catch (rotateErr) {
+                    console.warn('No se pudo invalidar token previo, se intentará recuperar token actual:', rotateErr?.message || rotateErr);
+                }
+            }
 
             const currentToken = await getToken(messaging, {
                 vapidKey: VAPID_KEY,
@@ -120,7 +145,7 @@ export const notificationService = {
                 // NO incluir created_at ni last_seen_at - SQL los maneja con defaults y triggers
             };
 
-            const { error, data } = await supabase
+            const { error } = await supabase
                 .from('fcm_tokens')
                 .upsert(row, { onConflict: 'user_id,token' })
                 .select();

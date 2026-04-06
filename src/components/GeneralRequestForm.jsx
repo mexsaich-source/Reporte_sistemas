@@ -66,7 +66,7 @@ const GeneralRequestForm = ({ onCancel, onSuccess }) => {
                 const { data: recipients } = await supabase
                     .from('profiles')
                     .select('id')
-                    .in('role', ['admin', 'tech', 'técnico']);
+                    .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
 
                 const title = 'Nueva solicitud de equipo';
                 const message = `${actorName} envió una solicitud: "${formData.subject || 'Solicitud'}".`;

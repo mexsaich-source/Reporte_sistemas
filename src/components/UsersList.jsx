@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail, Trash2, Smartphone } from 'lucide-react';
+import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRight, Search, Activity, Mail, Trash2, Smartphone, Monitor, Laptop } from 'lucide-react';
 import { userService } from '../services/userService';
 import { useAuth } from '../context/authStore';
 import StatCard from './StatCard';
@@ -38,11 +38,34 @@ const UserRoleBadge = ({ role }) => {
 };
 
 // --- SUBCOMPONENTE: Slider de Detalles del Usuario ---
-const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser }) => {
+const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus, onAssetsChanged }) => {
     const { profile } = useAuth();
     const isAdmin = profile?.role === 'admin';
     const isMaint = profile?.department?.trim() === 'Mantenimiento';
     const canEdit = isAdmin || (isMaint && user?.department === profile?.department);
+    const [assignableAssets, setAssignableAssets] = useState([]);
+    const [selectedAssetId, setSelectedAssetId] = useState('');
+    const [loadingAssets, setLoadingAssets] = useState(false);
+
+    const currentAssignedAssets = user?.assigned_assets || [];
+
+    const loadAssignableAssets = async () => {
+        if (!user?.id) return;
+        setLoadingAssets(true);
+        try {
+            const list = await userService.getAssignableAssets(user.id);
+            setAssignableAssets(list);
+        } finally {
+            setLoadingAssets(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen && canEdit && user?.id) {
+            loadAssignableAssets();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, user?.id, canEdit]);
 
     if (!isOpen) return null;
 
@@ -108,10 +131,23 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                             <div className="bg-white dark:bg-slate-700 p-2 rounded-xl shadow-sm"><Activity size={16} className="text-emerald-400" /></div>
                             <div>
                                 <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Equipos</span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block max-w-[150px]">{user?.assigned_equipment || 'Ninguno'}</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block max-w-[150px]">{currentAssignedAssets.length > 0 ? `${currentAssignedAssets.length} asignado(s)` : (user?.assigned_equipment || 'Ninguno')}</span>
                             </div>
                         </div>
                     </div>
+
+                    {currentAssignedAssets.length > 0 && (
+                        <div className="rounded-2xl border border-slate-100 dark:border-slate-700 p-4 bg-slate-50/70 dark:bg-slate-800/30">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Inventario real asignado</p>
+                            <div className="flex flex-wrap gap-2">
+                                {currentAssignedAssets.map((asset) => (
+                                    <span key={asset.id} className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 border border-blue-100 dark:border-blue-500/20">
+                                        {asset.label}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {canEdit && (
                         <div className="space-y-6 pt-6 mt-6 border-t border-slate-200 dark:border-slate-700">
@@ -120,8 +156,8 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                                 {profile.id !== user?.id && (
                                     <button 
                                         onClick={async () => {
-                                            const success = await userService.toggleUserStatus(user.id, user.status, profile.id);
-                                            if (success) onClose(); 
+                                            await onToggleStatus?.(user);
+                                            onClose();
                                         }}
                                         className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${user?.status 
                                             ? 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-600 hover:text-white' 
@@ -174,6 +210,68 @@ const UserDetailSlider = ({ user, isOpen, onClose, onUpdateRole, onDeleteUser })
                                         className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
                                         defaultValue={user?.assigned_equipment || ''}
                                     />
+                                </div>
+
+                                <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50/50 dark:bg-blue-500/10 p-4 space-y-3">
+                                    <label className="text-[9px] font-bold text-blue-500 uppercase tracking-widest ml-1">Asignar equipo real desde inventario</label>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <select
+                                            value={selectedAssetId}
+                                            onChange={(e) => setSelectedAssetId(e.target.value)}
+                                            className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white"
+                                            disabled={loadingAssets}
+                                        >
+                                            <option value="">Selecciona un equipo disponible</option>
+                                            {assignableAssets
+                                                .filter((a) => !a.assigned_to || a.assigned_to === user?.id)
+                                                .map((a) => (
+                                                    <option key={a.id} value={a.id}>{a.label}</option>
+                                                ))}
+                                        </select>
+                                        <button
+                                            type="button"
+                                            disabled={!selectedAssetId || loadingAssets}
+                                            onClick={async () => {
+                                                const ok = await userService.assignAssetToUser(selectedAssetId, user.id, profile.id);
+                                                if (!ok) {
+                                                    alert('No se pudo asignar el equipo.');
+                                                    return;
+                                                }
+                                                setSelectedAssetId('');
+                                                await loadAssignableAssets();
+                                                await onAssetsChanged?.();
+                                            }}
+                                            className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white disabled:opacity-50"
+                                        >
+                                            Asignar
+                                        </button>
+                                    </div>
+
+                                    {currentAssignedAssets.length > 0 && (
+                                        <div className="space-y-2">
+                                            {currentAssignedAssets.map((asset) => (
+                                                <div key={`editable-${asset.id}`} className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
+                                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">{asset.label}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={async () => {
+                                                            if (!window.confirm('¿Quitar este equipo del usuario?')) return;
+                                                            const ok = await userService.unassignAssetFromUser(asset.id, profile.id);
+                                                            if (!ok) {
+                                                                alert('No se pudo desasignar el equipo.');
+                                                                return;
+                                                            }
+                                                            await loadAssignableAssets();
+                                                            await onAssetsChanged?.();
+                                                        }}
+                                                        className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white"
+                                                    >
+                                                        Quitar
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex flex-col gap-2">
@@ -364,7 +462,9 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
 // --- COMPONENTE PRINCIPAL: Módulo de Usuarios ---
 const UsersView = ({ searchTerm = '' }) => {
     const { profile } = useAuth();
+    const role = (profile?.role || '').toLowerCase();
     const isMaint = profile?.department?.trim() === 'Mantenimiento';
+    const canManageStatus = role === 'admin' || role === 'jefe_mantenimiento';
 
     const [selectedUser, setSelectedUser] = useState(null);
     const [users, setUsers] = useState([]);
@@ -372,7 +472,7 @@ const UsersView = ({ searchTerm = '' }) => {
     const [isAddUserOpen, setIsAddUserOpen] = useState(false);
     const [stats, setStats] = useState({ total: 0, active: 0, techs: 0, admins: 0 });
 
-    const fetchUsers = async () => {
+    const fetchUsers = React.useCallback(async () => {
         setLoading(true);
         try {
             let data = await userService.getAll();
@@ -396,7 +496,7 @@ const UsersView = ({ searchTerm = '' }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [isMaint]);
 
     const filteredUsers = React.useMemo(() => {
         if (!searchTerm) return users;
@@ -411,7 +511,7 @@ const UsersView = ({ searchTerm = '' }) => {
 
     useEffect(() => {
         fetchUsers();
-    }, []);
+    }, [fetchUsers]);
 
     const handleSaveUser = async (formData) => {
         const result = await userService.register(
@@ -431,19 +531,6 @@ const UsersView = ({ searchTerm = '' }) => {
         return result;
     };
 
-    const handleUpdateRole = async (userId, newRole) => {
-        const success = await userService.updateRole(userId, newRole);
-        if (success) {
-            await fetchUsers();
-            // Actualizar localmente el slider si sigue abierto
-            if(selectedUser && selectedUser.id === userId) {
-                setSelectedUser(prev => ({ ...prev, role: newRole }));
-            }
-        } else {
-            alert('Error al actualizar el rol.');
-        }
-    };
-
     const handleDeleteUser = async (email) => {
         const result = await userService.unregisterMemberFromDepartment(email);
         if (result.success) {
@@ -452,6 +539,64 @@ const UsersView = ({ searchTerm = '' }) => {
         } else {
             alert("Error al inhabilitar usuario: " + result.error);
         }
+    };
+
+    const handleToggleStatus = async (targetUser) => {
+        if (!targetUser?.id || !profile?.id) return;
+        const success = await userService.toggleUserStatus(targetUser.id, targetUser.status, profile.id);
+
+        if (success) {
+            setUsers((prev) => prev.map((u) =>
+                u.id === targetUser.id ? { ...u, status: !targetUser.status } : u
+            ));
+
+            if (selectedUser?.id === targetUser.id) {
+                setSelectedUser((prev) => ({ ...prev, status: !targetUser.status }));
+            }
+
+            await fetchUsers();
+        } else {
+            alert('No se pudo actualizar el estado del usuario.');
+        }
+    };
+
+    const getEquipmentSummary = (targetUser) => {
+        const assets = targetUser?.assigned_assets || [];
+        if (assets.length === 0) {
+            return {
+                total: 0,
+                breakdown: targetUser?.assigned_equipment || 'Sin equipos asignados',
+            };
+        }
+
+        const counters = {
+            monitor: 0,
+            laptop: 0,
+            other: 0,
+        };
+
+        assets.forEach((asset) => {
+            const source = `${asset?.type || ''} ${asset?.label || ''}`.toLowerCase();
+            if (source.includes('monitor') || source.includes('pantalla')) {
+                counters.monitor += 1;
+                return;
+            }
+            if (source.includes('laptop') || source.includes('notebook')) {
+                counters.laptop += 1;
+                return;
+            }
+            counters.other += 1;
+        });
+
+        const parts = [];
+        if (counters.monitor > 0) parts.push(`${counters.monitor} monitor${counters.monitor > 1 ? 'es' : ''}`);
+        if (counters.laptop > 0) parts.push(`${counters.laptop} laptop${counters.laptop > 1 ? 's' : ''}`);
+        if (counters.other > 0) parts.push(`${counters.other} otro${counters.other > 1 ? 's' : ''}`);
+
+        return {
+            total: assets.length,
+            breakdown: parts.join(', '),
+        };
     };
 
     return (
@@ -495,14 +640,16 @@ const UsersView = ({ searchTerm = '' }) => {
                                 <th className="p-4 pl-6 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Empleado</th>
                                 <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Contacto</th>
                                 <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Rol en Sistema</th>
+                                <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Equipos</th>
                                 <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Estado</th>
+                                <th className="p-4 pb-6 border-b border-slate-100/50 dark:border-slate-800/50">Acceso</th>
                                 <th className="p-4 pr-6 pb-6 border-b border-slate-100/50 dark:border-slate-800/50 text-right">Registrado</th>
                             </tr>
                         </thead>
                         <tbody className="text-sm">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center">
+                                    <td colSpan={7} className="p-8 text-center">
                                         <div className="flex flex-col items-center gap-2 text-slate-500">
                                             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                                             Cargando directorio...
@@ -511,12 +658,14 @@ const UsersView = ({ searchTerm = '' }) => {
                                 </tr>
                             ) : filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center text-slate-500">
+                                    <td colSpan={7} className="p-8 text-center text-slate-500">
                                         {searchTerm ? 'No se encontraron usuarios con esa búsqueda.' : 'No hay usuarios registrados.'}
                                     </td>
                                 </tr>
                             ) : (
-                                filteredUsers.map((user) => (
+                                filteredUsers.map((user) => {
+                                    const equipment = getEquipmentSummary(user);
+                                    return (
                                     <tr key={user.id} onClick={() => setSelectedUser(user)} className="group transition-all duration-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 cursor-pointer">
                                         <td className="p-4 pl-6">
                                             <div className="flex items-center gap-4">
@@ -538,13 +687,57 @@ const UsersView = ({ searchTerm = '' }) => {
                                             <UserRoleBadge role={user.role} />
                                         </td>
                                         <td className="p-4">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-700 border border-blue-200">
+                                                        <Monitor size={12} />
+                                                        <Laptop size={12} />
+                                                        {equipment.total}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 max-w-[180px] truncate" title={equipment.breakdown}>
+                                                    {equipment.breakdown}
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedUser(user);
+                                                    }}
+                                                    className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white"
+                                                >
+                                                    Asignar equipo
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
                                             <UserStatusBadge status={user.status} />
+                                        </td>
+                                        <td className="p-4">
+                                            {canManageStatus && profile?.id !== user.id ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleToggleStatus(user);
+                                                    }}
+                                                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${user?.status
+                                                        ? 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-600 hover:text-white'
+                                                        : 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-600 hover:text-white'
+                                                        }`}
+                                                >
+                                                    {user?.status ? 'Suspender' : 'Reactivar'}
+                                                </button>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sin acción</span>
+                                            )}
                                         </td>
                                         <td className="p-4 pr-6 text-right font-medium text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
                                             {new Date(user.created_at).toLocaleDateString()}
                                         </td>
                                     </tr>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
@@ -556,8 +749,16 @@ const UsersView = ({ searchTerm = '' }) => {
                 user={selectedUser}
                 isOpen={!!selectedUser}
                 onClose={() => setSelectedUser(null)}
-                onUpdateRole={handleUpdateRole}
                 onDeleteUser={handleDeleteUser}
+                onToggleStatus={handleToggleStatus}
+                onAssetsChanged={async () => {
+                    await fetchUsers();
+                    if (selectedUser?.id) {
+                        const refreshed = await userService.getAll();
+                        const found = refreshed.find((u) => u.id === selectedUser.id);
+                        if (found) setSelectedUser(found);
+                    }
+                }}
             />
 
             <AddUserSlider

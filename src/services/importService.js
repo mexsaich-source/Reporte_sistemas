@@ -42,8 +42,6 @@ export const importService = {
     validateInventoryColumns(data) {
         if (data.length === 0) return { valid: false, error: 'El archivo está vacío' };
         const headers = Object.keys(data[0]);
-        const required = ['asset_type', 'brand', 'model', 'serial_number'];
-        const missing = required.filter(h => !headers.some(header => header.toLowerCase() === h.toLowerCase()));
 
         if (!headers.some(h => h.toLowerCase().includes('serial'))) {
             return { valid: false, missing: ['serial_number (Número de Serie)'] };
@@ -161,7 +159,7 @@ export const importService = {
             const foundUser = allUsers.find((u) => u.email.toLowerCase() === assignedEmail);
             if (foundUser) {
                 assignedUserId = foundUser.id;
-                if (!row.status) status = 'in_use';
+                if (!row.status) status = 'active';
             }
         }
 
@@ -209,7 +207,19 @@ export const importService = {
                         full_name: row.name || row.Name || row.Nombre,
                         email: row.email || row.Email,
                         department: row.department || row.Department || row.Departamento || 'General',
-                        role: safeRole
+                        role: safeRole,
+                        location:
+                            row.location ||
+                            row.Location ||
+                            row.localizacion ||
+                            row.Localizacion ||
+                            row['Localización'] ||
+                            row.Ubicacion ||
+                            row['Ubicación'] ||
+                            row['Ubicación Física'] ||
+                            row['Localización Física'] ||
+                            null,
+                        assigned_equipment: row.assigned_equipment || row.Assigned_Equipment || row.Equipos || row['Equipos Asignados'] || null,
                     };
 
                     if (row._action === 'update' && row._existingId) {
@@ -260,5 +270,111 @@ export const importService = {
         }
 
         return { newCount, updateCount, duplicateCount, errorCount };
+    },
+
+    async getAssignmentDiagnostics() {
+        const [{ data: profiles, error: profilesError }, { data: assets, error: assetsError }] = await Promise.all([
+            supabase.from('profiles').select('id, full_name, email, role, status').eq('status', true),
+            supabase.from('assets').select('id, type, model, status, assigned_to, specs'),
+        ]);
+
+        if (profilesError) throw profilesError;
+        if (assetsError) throw assetsError;
+
+        const userRows = profiles || [];
+        const assetRows = assets || [];
+
+        const eligibleRoles = new Set(['user', 'tech', 'operativo', 'operador', 'jefe_mantenimiento']);
+        const eligibleUsers = userRows.filter((u) => eligibleRoles.has(String(u.role || '').toLowerCase()));
+
+        const userIdSet = new Set(userRows.map((u) => u.id));
+        const assignedByUser = new Map();
+        const orphanAssets = [];
+        const availableAssets = [];
+
+        for (const asset of assetRows) {
+            if (asset.assigned_to) {
+                if (!userIdSet.has(asset.assigned_to)) {
+                    orphanAssets.push(asset);
+                } else {
+                    assignedByUser.set(asset.assigned_to, (assignedByUser.get(asset.assigned_to) || 0) + 1);
+                }
+            } else {
+                availableAssets.push(asset);
+            }
+        }
+
+        const usersWithoutAssets = eligibleUsers.filter((u) => !assignedByUser.get(u.id));
+
+        const toAssetLabel = (asset) => {
+            const specs = asset.specs || {};
+            const label = [
+                specs.brand || null,
+                asset.model || specs.model || null,
+                specs.serial_number || specs.serial || null,
+            ].filter(Boolean).join(' · ');
+            return label || `${asset.type || 'Equipo'} · ${asset.id}`;
+        };
+
+        const coverage = eligibleUsers.length > 0
+            ? Math.round(((eligibleUsers.length - usersWithoutAssets.length) / eligibleUsers.length) * 100)
+            : 100;
+
+        return {
+            totals: {
+                eligibleUsers: eligibleUsers.length,
+                usersWithoutAssets: usersWithoutAssets.length,
+                orphanAssets: orphanAssets.length,
+                availableAssets: availableAssets.length,
+                coverage,
+            },
+            usersWithoutAssets: usersWithoutAssets.map((u) => ({
+                id: u.id,
+                full_name: u.full_name,
+                email: u.email,
+                role: u.role,
+            })),
+            orphanAssets: orphanAssets.map((a) => ({
+                id: a.id,
+                assigned_to: a.assigned_to,
+                label: toAssetLabel(a),
+            })),
+            availableAssets: availableAssets.map((a) => ({
+                id: a.id,
+                label: toAssetLabel(a),
+            })),
+        };
+    },
+
+    async quickAssignAsset(userId, assetId) {
+        const { data: currentAsset, error: fetchError } = await supabase
+            .from('assets')
+            .select('id, assigned_to')
+            .eq('id', assetId)
+            .maybeSingle();
+
+        if (fetchError) throw fetchError;
+        if (!currentAsset) throw new Error('Equipo no encontrado.');
+        if (currentAsset.assigned_to && currentAsset.assigned_to !== userId) {
+            throw new Error('El equipo ya fue asignado a otro usuario.');
+        }
+
+        const { error } = await supabase
+            .from('assets')
+            .update({ assigned_to: userId, status: 'active' })
+            .eq('id', assetId);
+
+        if (error) throw error;
+        return true;
+    },
+
+    async clearOrphanAsset(assetId) {
+        const { error } = await supabase
+            .from('assets')
+            .update({ assigned_to: null, status: 'available' })
+            .eq('id', assetId);
+
+        if (error) throw error;
+        return true;
     }
 };

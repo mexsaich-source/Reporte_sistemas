@@ -10,6 +10,48 @@ import {
 
 const PIE_COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#10b981'];
 
+const normalizeIncidentTitle = (title = '') => {
+    const cleaned = String(title || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!cleaned) return 'Sin descripcion';
+    return cleaned.split(' ').slice(0, 5).join(' ');
+};
+
+const toTitleCase = (text = '') =>
+    String(text || '')
+        .split(' ')
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+
+const getAssetLabel = (ticket, assetsById = {}, assetsBySerial = {}) => {
+    const byId = ticket?.asset_id ? assetsById[String(ticket.asset_id)] : null;
+    const bySerial = ticket?.asset_serial_number ? assetsBySerial[String(ticket.asset_serial_number).toLowerCase()] : null;
+    const asset = byId || bySerial;
+
+    if (asset) {
+        const base = [asset.type || 'Equipo', asset.brand || null, asset.model || null].filter(Boolean).join(' · ');
+        const serial = asset.serial || ticket?.asset_serial_number || asset.id;
+        const owner = asset.assignedToName ? `Usuario: ${asset.assignedToName}` : 'Infraestructura TI';
+        return `${base || 'Equipo'} · ${serial} · ${owner}`;
+    }
+
+    const fallback = ticket?.asset_id || ticket?.asset_serial_number || ticket?.device_type;
+    return fallback ? String(fallback) : 'Sin equipo identificado';
+};
+
+const resolveAssetFromTicket = (ticket, assetsById = {}, assetsBySerial = {}) => {
+    const byId = ticket?.asset_id ? assetsById[String(ticket.asset_id)] : null;
+    const bySerial = ticket?.asset_serial_number ? assetsBySerial[String(ticket.asset_serial_number).toLowerCase()] : null;
+    return byId || bySerial || null;
+};
+
 const ReportsView = ({ searchTerm = '' }) => {
     const [tickets, setTickets] = useState([]);
     const [assets, setAssets] = useState([]);
@@ -43,21 +85,78 @@ const ReportsView = ({ searchTerm = '' }) => {
             (t.title && t.title.toLowerCase().includes(s)) ||
             (t.status && t.status.toLowerCase().includes(s)) ||
             (t.urgency && t.urgency.toLowerCase().includes(s)) ||
+            (t.description && t.description.toLowerCase().includes(s)) ||
+            (t.asset_id && t.asset_id.toLowerCase().includes(s)) ||
+            (t.asset_serial_number && t.asset_serial_number.toLowerCase().includes(s)) ||
             (t.device_type && t.device_type.toLowerCase().includes(s))
         );
     }, [tickets, searchTerm]);
 
     const failureAnalytics = React.useMemo(() => {
-        // 1. Failures by Device Type
+        const assetsById = (assets || []).reduce((acc, a) => {
+            acc[String(a.id)] = a;
+            return acc;
+        }, {});
+        const assetsBySerial = (assets || []).reduce((acc, a) => {
+            const serial = (a.serial || '').toString().toLowerCase().trim();
+            if (serial) acc[serial] = a;
+            return acc;
+        }, {});
+
+        // 1. Top equipos con mas fallas
         const typeCount = {};
         filteredTickets.forEach(t => {
-            const matchedType = t.device_type || 'General';
+            const matchedType = getAssetLabel(t, assetsById, assetsBySerial);
             typeCount[matchedType] = (typeCount[matchedType] || 0) + 1;
         });
+        const byType = Object.entries(typeCount)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 10);
 
-        const byType = Object.entries(typeCount).map(([name, value]) => ({ name, value }));
+        // 1.1 Top equipos de usuario final vs infraestructura
+        const endUserCount = {};
+        const infraCount = {};
+        let unresolvedAssetRef = 0;
 
-        // 2. Tickets by Urgency
+        filteredTickets.forEach((t) => {
+            const matchedAsset = resolveAssetFromTicket(t, assetsById, assetsBySerial);
+            const label = getAssetLabel(t, assetsById, assetsBySerial);
+
+            if (!matchedAsset) {
+                unresolvedAssetRef += 1;
+                return;
+            }
+
+            if (matchedAsset.assigned_to) {
+                endUserCount[label] = (endUserCount[label] || 0) + 1;
+            } else {
+                infraCount[label] = (infraCount[label] || 0) + 1;
+            }
+        });
+
+        const byEndUserAssets = Object.entries(endUserCount)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8);
+
+        const byInfraAssets = Object.entries(infraCount)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8);
+
+        // 2. Incidentes mas comunes (por titulo normalizado)
+        const incidentCount = {};
+        filteredTickets.forEach(t => {
+            const key = normalizeIncidentTitle(t.title || t.description || 'Sin descripcion');
+            incidentCount[key] = (incidentCount[key] || 0) + 1;
+        });
+        const topIncidents = Object.entries(incidentCount)
+            .map(([name, value]) => ({ name: toTitleCase(name), value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 10);
+
+        // 3. Tickets by Urgency
         const urgencyCount = {};
         filteredTickets.forEach(t => {
             const u = t.urgency || 'medium';
@@ -66,7 +165,7 @@ const ReportsView = ({ searchTerm = '' }) => {
         });
         const byUrgency = Object.entries(urgencyCount).map(([name, value]) => ({ name, value }));
 
-        // 3. Resolution Trend
+        // 4. Resolution Trend
         const last5Days = Array.from({length: 5}, (_, i) => {
             const d = new Date();
             d.setDate(d.getDate() - (4 - i));
@@ -82,10 +181,14 @@ const ReportsView = ({ searchTerm = '' }) => {
 
         return {
             byType,
+            byEndUserAssets,
+            byInfraAssets,
+            unresolvedAssetRef,
+            topIncidents,
             byUrgency,
             resolutionTrend: trendData
         };
-    }, [filteredTickets]);
+    }, [filteredTickets, assets]);
 
     const generateCSV = () => {
         // SECURITY FIX #9: Prevenir CSV Injection
@@ -100,10 +203,21 @@ const ReportsView = ({ searchTerm = '' }) => {
             return `"${str}"`;
         };
 
-        const headers = ["ID", "Título", "Estado", "Urgencia", "Fecha Creación"];
-        const rows = tickets.map(t => [
+        const headers = ["ID", "Título", "Incidente Normalizado", "Equipo", "Estado", "Urgencia", "Fecha Creación"];
+        const assetsById = (assets || []).reduce((acc, a) => {
+            acc[String(a.id)] = a;
+            return acc;
+        }, {});
+        const assetsBySerial = (assets || []).reduce((acc, a) => {
+            const serial = (a.serial || '').toString().toLowerCase().trim();
+            if (serial) acc[serial] = a;
+            return acc;
+        }, {});
+        const rows = filteredTickets.map(t => [
             sanitizeCSV(t.id),
             sanitizeCSV(t.title),
+            sanitizeCSV(toTitleCase(normalizeIncidentTitle(t.title || t.description || 'Sin descripcion'))),
+            sanitizeCSV(getAssetLabel(t, assetsById, assetsBySerial)),
             sanitizeCSV(t.status),
             sanitizeCSV(t.urgency),
             sanitizeCSV(t.created_at)
@@ -141,7 +255,7 @@ const ReportsView = ({ searchTerm = '' }) => {
                     <div className="flex items-center justify-between mb-8">
                         <div>
                             <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Fallas por Equipo</h3>
-                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Identificando lo más problemático</p>
+                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Equipos con mayor recurrencia de tickets</p>
                         </div>
                         <div className="p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-2xl">
                             <AlertTriangle size={24} />
@@ -184,6 +298,95 @@ const ReportsView = ({ searchTerm = '' }) => {
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
+                </div>
+
+                {/* Top Incidentes Comunes */}
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Incidentes Más Comunes</h3>
+                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Top 10 patrones por descripción reportada</p>
+                        </div>
+                        <div className="p-3 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl">
+                            <FileText size={24} />
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        {failureAnalytics.topIncidents.length === 0 ? (
+                            <p className="text-sm text-slate-500">Sin datos para calcular incidentes comunes.</p>
+                        ) : (
+                            failureAnalytics.topIncidents.map((item, index) => (
+                                <div key={`${item.name}-${index}`} className="flex items-center justify-between rounded-xl border border-slate-100 dark:border-slate-800 px-4 py-3 bg-slate-50/50 dark:bg-slate-800/40">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="inline-flex w-6 h-6 items-center justify-center text-[10px] font-black rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">{index + 1}</span>
+                                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{item.name}</span>
+                                    </div>
+                                    <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{item.value} casos</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Ranking Usuario Final */}
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Equipos de Usuario con Más Fallas</h3>
+                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Solo equipos asignados a colaboradores</p>
+                        </div>
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                            <CheckCircle2 size={24} />
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        {failureAnalytics.byEndUserAssets.length === 0 ? (
+                            <p className="text-sm text-slate-500">Sin datos suficientes en equipos de usuario.</p>
+                        ) : (
+                            failureAnalytics.byEndUserAssets.map((item, index) => (
+                                <div key={`${item.name}-u-${index}`} className="flex items-center justify-between rounded-xl border border-slate-100 dark:border-slate-800 px-4 py-3 bg-slate-50/50 dark:bg-slate-800/40">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="inline-flex w-6 h-6 items-center justify-center text-[10px] font-black rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">{index + 1}</span>
+                                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{item.name}</span>
+                                    </div>
+                                    <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{item.value} casos</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Ranking Infraestructura */}
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Infraestructura TI con Más Fallas</h3>
+                            <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Switches, red, servidores y equipos sin dueño</p>
+                        </div>
+                        <div className="p-3 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl">
+                            <Hammer size={24} />
+                        </div>
+                    </div>
+                    <div className="space-y-3 mb-4">
+                        {failureAnalytics.byInfraAssets.length === 0 ? (
+                            <p className="text-sm text-slate-500">Sin datos suficientes en infraestructura TI.</p>
+                        ) : (
+                            failureAnalytics.byInfraAssets.map((item, index) => (
+                                <div key={`${item.name}-i-${index}`} className="flex items-center justify-between rounded-xl border border-slate-100 dark:border-slate-800 px-4 py-3 bg-slate-50/50 dark:bg-slate-800/40">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="inline-flex w-6 h-6 items-center justify-center text-[10px] font-black rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">{index + 1}</span>
+                                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{item.name}</span>
+                                    </div>
+                                    <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{item.value} casos</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    {failureAnalytics.unresolvedAssetRef > 0 && (
+                        <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                            {failureAnalytics.unresolvedAssetRef} ticket(s) no pudieron vincularse a un activo real por falta de asset_id/serie.
+                        </p>
+                    )}
                 </div>
             </div>
 

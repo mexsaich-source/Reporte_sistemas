@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, CheckCircle2, AlertCircle, Wrench, Package, ArrowRightLeft, UploadCloud, Download, X, Laptop, Monitor, Smartphone, Server, FileDigit, Trash2, Edit, AlertTriangle, MonitorPlay, Settings, Filter, Clock } from 'lucide-react';
 import StatCard from './StatCard';
@@ -110,6 +111,11 @@ const ImportModal = ({ isOpen, onClose, onImportSuccess }) => {
                     <button onClick={reset} className="p-2 hover:bg-slate-100 rounded-xl"><X size={24}/></button>
                 </div>
                 <div className="flex-1 p-8 overflow-auto custom-scrollbar">
+                    {error && (
+                        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">
+                            {error}
+                        </div>
+                    )}
                     {csvData.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center p-12 border-4 border-dashed border-slate-100 dark:border-slate-800 rounded-[2.5rem]">
                             <UploadCloud size={48} className="text-blue-500 mb-4" />
@@ -279,6 +285,7 @@ const InventoryView = ({ searchTerm = '' }) => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingDevice, setEditingDevice] = useState(null);
+    const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm || '');
 
     const loadInventory = async () => {
         setIsLoading(true);
@@ -304,8 +311,9 @@ const InventoryView = ({ searchTerm = '' }) => {
         const matchesTab = activeTab === 'inventory' ? (d.status !== 'decommissioned') : (d.status === 'decommissioned');
         const matchesType = filterType === 'Todos' || d.type.toLowerCase().includes(filterType.toLowerCase().split(' ')[0]);
         const matchesStatus = filterStatus === 'Todos' || (filterStatus === 'En Uso' ? d.status === 'active' : d.status === 'available');
-        const search = (searchTerm || '').toLowerCase();
-        const matchesSearch = d.id.toLowerCase().includes(search) || d.model.toLowerCase().includes(search) || d.brand.toLowerCase().includes(search) || d.serial.toLowerCase().includes(search);
+        const search = (localSearchTerm || '').toLowerCase();
+        const assignedSearch = (d.assignedToName || d.user || '').toLowerCase();
+        const matchesSearch = d.id.toLowerCase().includes(search) || d.model.toLowerCase().includes(search) || d.brand.toLowerCase().includes(search) || d.serial.toLowerCase().includes(search) || assignedSearch.includes(search);
         
         return matchesTab && matchesType && matchesStatus && matchesSearch;
     });
@@ -349,7 +357,7 @@ const InventoryView = ({ searchTerm = '' }) => {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="relative md:col-span-2">
                             <Search size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input className="w-full bg-slate-50 dark:bg-slate-800/50 pl-16 pr-6 py-5 rounded-[2rem] border-none outline-none font-bold text-slate-700 dark:text-white" placeholder="Buscar ID, Marca o Serial..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} />
+                            <input className="w-full bg-slate-50 dark:bg-slate-800/50 pl-16 pr-6 py-5 rounded-[2rem] border-none outline-none font-bold text-slate-700 dark:text-white" placeholder="Buscar ID, Marca o Serial..." value={localSearchTerm} onChange={(e)=>setLocalSearchTerm(e.target.value)} />
                         </div>
                         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 px-6 py-5 rounded-[2rem]">
                             <Filter size={18} className="text-slate-400" />
@@ -375,13 +383,14 @@ const InventoryView = ({ searchTerm = '' }) => {
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Dispositivo</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Identificadores</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Marca</th>
+                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Asignado / Uso</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Estado Actual</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
                             {isLoading ? (
-                                <tr><td colSpan={5} className="p-20 text-center font-black uppercase text-xs text-slate-300 animate-pulse">Sincronizando...</td></tr>
+                                <tr><td colSpan={6} className="p-20 text-center font-black uppercase text-xs text-slate-300 animate-pulse">Sincronizando...</td></tr>
                             ) : filteredList.map(item => (
                                 <tr key={item.id} className="group hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-all">
                                     <td className="p-5 px-8 text-slate-200">
@@ -398,6 +407,26 @@ const InventoryView = ({ searchTerm = '' }) => {
                                         <div className="text-[9px] text-blue-500 font-bold uppercase tracking-[0.15em] mt-0.5">SN: {item.serial || 'NO REGISTRADO'}</div>
                                     </td>
                                     <td className="p-5 px-8"><span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-xl text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">{item.brand || 'Personalizado'}</span></td>
+                                    <td className="p-5 px-8">
+                                        {item.assigned_to ? (
+                                            <div className="space-y-1">
+                                                <span className="inline-flex items-center px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                    {item.assignedToName || 'Usuario asignado'}
+                                                </span>
+                                                {item.assignedToEmail && (
+                                                    <p className="text-[10px] text-slate-500 truncate">{item.assignedToEmail}</p>
+                                                )}
+                                            </div>
+                                        ) : item.status === 'active' ? (
+                                            <span className="inline-flex items-center px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-200">
+                                                Infraestructura TI
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 border border-slate-200">
+                                                Sin asignar
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="p-5 px-8"><DeviceStatusBadge status={item.status} size="sm" /></td>
                                     <td className="p-5 px-8 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">

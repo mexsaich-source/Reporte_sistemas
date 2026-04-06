@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/authStore';
 import { workNotificationService } from '../services/workNotificationService';
@@ -39,7 +39,7 @@ const EquipmentRequestForm = ({ onCancel, onSuccess }) => {
             const { data: admins } = await supabase
                 .from('profiles')
                 .select('id')
-                .eq('role', 'admin');
+                .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
 
             const title = 'Nueva solicitud de equipo';
             const message = `${profile?.full_name || user.email || 'Usuario'} solicitó: ${formData.equipment_type}. Revisa Solicitudes → Equipo.`;

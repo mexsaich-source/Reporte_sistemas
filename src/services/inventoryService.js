@@ -16,8 +16,33 @@ export const inventoryService = {
 
             if (error) throw error;
 
+            const assignedUserIds = [...new Set((data || []).map((a) => a.assigned_to).filter(Boolean))];
+            let assignedUsersMap = {};
+
+            if (assignedUserIds.length > 0) {
+                const { data: profilesData, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .in('id', assignedUserIds);
+
+                if (!profilesError && profilesData) {
+                    assignedUsersMap = profilesData.reduce((acc, p) => {
+                        acc[p.id] = {
+                            full_name: p.full_name || '',
+                            email: p.email || '',
+                        };
+                        return acc;
+                    }, {});
+                }
+            }
+
             return (data || []).map(asset => {
                 const specs = asset.specs || {};
+                const assignedProfile = asset.assigned_to ? assignedUsersMap[asset.assigned_to] : null;
+                const assignedToName =
+                    assignedProfile?.full_name ||
+                    specs.assigned_user_name ||
+                    (asset.assigned_to ? 'Usuario asignado' : '');
                 
                 return {
                     id: String(asset.id), 
@@ -28,7 +53,10 @@ export const inventoryService = {
                     serial: String(specs.serial_number || specs.serial || '').trim(), 
                     category: specs.category || '',
                     specsDetails: specs.details || '',
-                    user: specs.assigned_user_name || '',
+                    user: assignedToName,
+                    assignedToName,
+                    assignedToEmail: assignedProfile?.email || '',
+                    assigned_to: asset.assigned_to || null,
                     department: specs.department || '',
                     status: asset.status || 'available', 
                     condition: asset.condition || 'good',

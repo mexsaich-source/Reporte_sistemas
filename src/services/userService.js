@@ -4,16 +4,140 @@ import { auditService } from './auditService';
 export const userService = {
     async getAll() {
         try {
-            const { data, error } = await supabase
+            const { data: profiles, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            return data;
+
+            const { data: assignedAssets, error: assetsError } = await supabase
+                .from('assets')
+                .select('id, type, model, status, assigned_to, specs')
+                .not('assigned_to', 'is', null);
+
+            if (assetsError) {
+                console.warn('No se pudieron cargar equipos asignados:', assetsError.message);
+                return profiles || [];
+            }
+
+            const assetsByUser = (assignedAssets || []).reduce((acc, asset) => {
+                const userId = asset.assigned_to;
+                if (!userId) return acc;
+                if (!acc[userId]) acc[userId] = [];
+
+                const specs = asset.specs || {};
+                const label = [
+                    specs.brand || null,
+                    asset.model || specs.model || null,
+                    specs.serial_number || specs.serial || null,
+                ]
+                    .filter(Boolean)
+                    .join(' · ');
+
+                acc[userId].push({
+                    id: asset.id,
+                    type: asset.type,
+                    model: asset.model,
+                    status: asset.status,
+                    serial_number: specs.serial_number || specs.serial || null,
+                    brand: specs.brand || null,
+                    label: label || `${asset.type || 'Equipo'} · ${asset.id}`,
+                });
+
+                return acc;
+            }, {});
+
+            return (profiles || []).map((profile) => {
+                const realAssignedAssets = assetsByUser[profile.id] || [];
+                return {
+                    ...profile,
+                    assigned_assets: realAssignedAssets,
+                    assigned_equipment_real: realAssignedAssets.map((a) => a.label).join(', '),
+                };
+            });
         } catch (error) {
             console.error("Error fetching users:", error);
             return [];
+        }
+    },
+
+    async getAssignableAssets(userId = null) {
+        try {
+            let query = supabase
+                .from('assets')
+                .select('id, type, model, status, assigned_to, specs')
+                .order('created_at', { ascending: false });
+
+            if (userId) {
+                query = query.or(`assigned_to.is.null,assigned_to.eq.${userId}`);
+            } else {
+                query = query.is('assigned_to', null);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            return (data || []).map((asset) => {
+                const specs = asset.specs || {};
+                return {
+                    ...asset,
+                    serial_number: specs.serial_number || specs.serial || null,
+                    brand: specs.brand || null,
+                    label: [
+                        specs.brand || null,
+                        asset.model || specs.model || null,
+                        specs.serial_number || specs.serial || null,
+                    ]
+                        .filter(Boolean)
+                        .join(' · ') || `${asset.type || 'Equipo'} · ${asset.id}`,
+                };
+            });
+        } catch (error) {
+            console.error('Error loading assignable assets:', error);
+            return [];
+        }
+    },
+
+    async assignAssetToUser(assetId, userId, actorId = null) {
+        try {
+            const { error } = await supabase
+                .from('assets')
+                .update({ assigned_to: userId, status: 'active' })
+                .eq('id', assetId);
+
+            if (error) throw error;
+
+            if (actorId) {
+                await auditService.log(actorId, 'ASSIGN_ASSET_TO_USER', 'assets', assetId, {
+                    user_id: userId,
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error assigning asset to user:', error);
+            return false;
+        }
+    },
+
+    async unassignAssetFromUser(assetId, actorId = null) {
+        try {
+            const { error } = await supabase
+                .from('assets')
+                .update({ assigned_to: null, status: 'available' })
+                .eq('id', assetId);
+
+            if (error) throw error;
+
+            if (actorId) {
+                await auditService.log(actorId, 'UNASSIGN_ASSET_FROM_USER', 'assets', assetId, {});
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error unassigning asset from user:', error);
+            return false;
         }
     },
 
@@ -39,7 +163,7 @@ export const userService = {
             }
 
             return true;
-        } catch (error) {
+        } catch {
             return false;
         }
     },
@@ -180,7 +304,7 @@ export const userService = {
 
     // --- EL NUEVO SISTEMA DE BORRADO REAL  ---
 
-    async unregisterMemberFromDepartment(email, department) {
+    async unregisterMemberFromDepartment(email) {
         // Redirigimos esto a nuestra función de borrado real
         return this.deleteUserCompleto(email);
     },

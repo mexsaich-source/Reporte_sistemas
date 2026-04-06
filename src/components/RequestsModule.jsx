@@ -21,6 +21,8 @@ const RequestsModule = ({ searchTerm = '' }) => {
 
     const [approveLoanModal, setApproveLoanModal] = useState({ open: false, row: null });
     const [loanForm, setLoanForm] = useState({ loan_start_date: '', loan_end_date: '' });
+    const [extensionReviewModal, setExtensionReviewModal] = useState({ open: false, row: null });
+    const [extensionReviewForm, setExtensionReviewForm] = useState({ decision: 'approve', reviewedEndDate: '', rejectReason: '' });
 
     const [approveEquipModal, setApproveEquipModal] = useState({ open: false, row: null });
     const [equipForm, setEquipForm] = useState({ brand: '', model: '', serial: '' });
@@ -145,7 +147,13 @@ const RequestsModule = ({ searchTerm = '' }) => {
                 status: 'borrowed',
                 loan_start_date: loanForm.loan_start_date || new Date().toISOString().slice(0, 10),
                 loan_end_date: loanForm.loan_end_date,
-                reject_reason: null
+                reject_reason: null,
+                extension_requested_end_date: null,
+                extension_reason: null,
+                extension_status: null,
+                extension_requested_at: null,
+                extension_reviewed_at: null,
+                extension_reject_reason: null,
             };
 
             const { error } = await supabase
@@ -188,6 +196,68 @@ const RequestsModule = ({ searchTerm = '' }) => {
         } catch (err) {
             console.error(err);
             alert(err.message || 'No se pudo marcar como devuelto.');
+        }
+    };
+
+    const openExtensionReview = (row) => {
+        setExtensionReviewForm({
+            decision: 'approve',
+            reviewedEndDate: row?.extension_requested_end_date || row?.loan_end_date || '',
+            rejectReason: ''
+        });
+        setExtensionReviewModal({ open: true, row });
+    };
+
+    const handleExtensionDecision = async () => {
+        const row = extensionReviewModal.row;
+        if (!row?.id) return;
+
+        const isApprove = extensionReviewForm.decision === 'approve';
+        if (isApprove && !extensionReviewForm.reviewedEndDate) {
+            alert('Debes indicar la nueva fecha de devolución.');
+            return;
+        }
+        if (!isApprove && !extensionReviewForm.rejectReason.trim()) {
+            alert('Debes indicar motivo de rechazo de la prórroga.');
+            return;
+        }
+
+        try {
+            const patch = isApprove
+                ? {
+                    loan_end_date: extensionReviewForm.reviewedEndDate,
+                    extension_status: 'approved',
+                    extension_reviewed_at: new Date().toISOString(),
+                    extension_reject_reason: null,
+                }
+                : {
+                    extension_status: 'rejected',
+                    extension_reviewed_at: new Date().toISOString(),
+                    extension_reject_reason: extensionReviewForm.rejectReason.trim(),
+                };
+
+            const { error } = await supabase
+                .from('general_requests')
+                .update(patch)
+                .eq('id', row.id)
+                .eq('extension_status', 'pending');
+
+            if (error) throw error;
+
+            await notifyUser(
+                row.user_id,
+                isApprove ? 'Prórroga aprobada' : 'Prórroga rechazada',
+                isApprove
+                    ? `Tu apelación de préstamo "${row.subject || 'Préstamo'}" fue aprobada. Nueva devolución: ${extensionReviewForm.reviewedEndDate}.`
+                    : `Tu apelación de préstamo "${row.subject || 'Préstamo'}" fue rechazada. Motivo: ${extensionReviewForm.rejectReason.trim()}`
+            );
+
+            setExtensionReviewModal({ open: false, row: null });
+            setExtensionReviewForm({ decision: 'approve', reviewedEndDate: '', rejectReason: '' });
+            await loadAll();
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'No se pudo procesar la apelación de prórroga.');
         }
     };
 
@@ -486,6 +556,16 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                                         Devolver: {new Date(req.loan_end_date).toLocaleDateString()}
                                                     </p>
                                                 )}
+                                                {req.extension_status && (
+                                                    <p className={`text-[10px] mt-1 font-bold ${req.extension_status === 'pending' ? 'text-amber-600' : req.extension_status === 'approved' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                        Prórroga: {req.extension_status === 'pending' ? 'En revisión' : req.extension_status === 'approved' ? 'Aprobada' : 'Rechazada'}
+                                                    </p>
+                                                )}
+                                                {req.extension_requested_end_date && (
+                                                    <p className="text-[10px] text-indigo-600 mt-1">
+                                                        Solicita hasta: {new Date(`${req.extension_requested_end_date}T12:00:00`).toLocaleDateString()}
+                                                    </p>
+                                                )}
                                                 {req.reject_reason && (
                                                     <p className="text-[10px] text-rose-600 mt-1">Rechazo: {req.reject_reason}</p>
                                                 )}
@@ -530,6 +610,16 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                                             title="Marcar como devuelto"
                                                         >
                                                             Marcar devuelto
+                                                        </button>
+                                                    )}
+                                                    {(req.status === 'borrowed' || req.status === 'overdue') && req.extension_status === 'pending' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openExtensionReview(req)}
+                                                            className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-indigo-700 bg-indigo-50 rounded-xl border border-indigo-200 hover:bg-indigo-100"
+                                                            title="Revisar apelación de prórroga"
+                                                        >
+                                                            Revisar prórroga
                                                         </button>
                                                     )}
                                                 </div>
@@ -784,6 +874,79 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                 className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-emerald-600 text-white"
                             >
                                 Crear activo y entregar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {extensionReviewModal.open && extensionReviewModal.row && (
+                <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-6 space-y-4">
+                        <h4 className="font-black text-lg text-slate-900 dark:text-white">Apelación de prórroga</h4>
+                        <p className="text-xs text-slate-500">
+                            Solicitud: <strong>{extensionReviewModal.row.subject || 'Préstamo'}</strong>
+                        </p>
+                        {extensionReviewModal.row.extension_reason && (
+                            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Motivo del usuario</p>
+                                <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{extensionReviewModal.row.extension_reason}</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Decisión</label>
+                                <select
+                                    value={extensionReviewForm.decision}
+                                    onChange={(e) => setExtensionReviewForm((prev) => ({ ...prev, decision: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                >
+                                    <option value="approve">Aprobar prórroga</option>
+                                    <option value="reject">Rechazar prórroga</option>
+                                </select>
+                            </div>
+
+                            {extensionReviewForm.decision === 'approve' ? (
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400">Nueva fecha de devolución</label>
+                                    <input
+                                        type="date"
+                                        value={extensionReviewForm.reviewedEndDate}
+                                        onChange={(e) => setExtensionReviewForm((prev) => ({ ...prev, reviewedEndDate: e.target.value }))}
+                                        className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                    />
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400">Motivo de rechazo</label>
+                                    <textarea
+                                        rows={3}
+                                        value={extensionReviewForm.rejectReason}
+                                        onChange={(e) => setExtensionReviewForm((prev) => ({ ...prev, rejectReason: e.target.value }))}
+                                        className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-medium"
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-2 justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setExtensionReviewModal({ open: false, row: null });
+                                    setExtensionReviewForm({ decision: 'approve', reviewedEndDate: '', rejectReason: '' });
+                                }}
+                                className="px-4 py-2 rounded-xl text-xs font-black uppercase text-slate-500"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleExtensionDecision}
+                                className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-indigo-600 text-white"
+                            >
+                                Confirmar decisión
                             </button>
                         </div>
                     </div>

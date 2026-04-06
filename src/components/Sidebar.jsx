@@ -9,7 +9,8 @@ import {
     Laptop,
     Settings,
     FileSpreadsheet,
-    Wrench
+    Wrench,
+    Megaphone
 } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 
@@ -32,6 +33,7 @@ const Sidebar = ({ activeItem, onSelectItem, onSettingsClick }) => {
         { name: 'Solicitudes', icon: Laptop, id: 'Requests', requireStaff: true },
         { name: 'Reportes', icon: FileText, id: 'Reports', requireStaff: true },
         { name: 'Usuarios', icon: Users, id: 'Users', requireStaff: true },
+        { name: 'Noticias IT', icon: Megaphone, id: 'NewsTI', requireStaff: true, incidentManagersOnly: true },
         { name: 'Carga Masiva', icon: FileSpreadsheet, id: 'Import', requireStaff: true, adminOnly: true },
     ];
 
@@ -44,11 +46,13 @@ const Sidebar = ({ activeItem, onSelectItem, onSettingsClick }) => {
         if (isMaint) {
             const canManageUsers = ['admin', 'jefe_mantenimiento'].includes(role);
             if (item.id === 'Users') return canManageUsers;
+            if (item.incidentManagersOnly) return canManageUsers;
             return item.id === 'Maintenance';
         }
 
         // Regla 3: Personal de IT -> Ve todo lo que NO es adminOnly (a menos que sea admin)
         if (isIT) {
+            if (item.incidentManagersOnly && role !== 'admin') return false;
             if (item.adminOnly && role !== 'admin') return false;
             return true;
         }

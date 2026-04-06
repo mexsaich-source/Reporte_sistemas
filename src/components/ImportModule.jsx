@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
     Upload, FileSpreadsheet, CheckCircle2, AlertTriangle,
     XCircle, Info, Download, Trash2, ArrowRight, Save, Clock, History, X, User
@@ -17,8 +17,29 @@ const ImportModule = () => {
     const [loading, setLoading] = useState(false);
     const [importStatus, setImportStatus] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [diagnostics, setDiagnostics] = useState(null);
+    const [loadingDiagnostics, setLoadingDiagnostics] = useState(true);
+    const [fixSelection, setFixSelection] = useState({});
+    const [applyingFix, setApplyingFix] = useState(false);
 
-    const processFile = async (selectedFile) => {
+    const loadDiagnostics = useCallback(async () => {
+        setLoadingDiagnostics(true);
+        try {
+            const result = await importService.getAssignmentDiagnostics();
+            setDiagnostics(result);
+        } catch (err) {
+            console.error('Error loading assignment diagnostics:', err);
+            setDiagnostics(null);
+        } finally {
+            setLoadingDiagnostics(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadDiagnostics();
+    }, [loadDiagnostics]);
+
+    const processFile = useCallback(async (selectedFile) => {
         if (!selectedFile) return;
         setLoading(true);
         setFile(selectedFile);
@@ -50,7 +71,7 @@ const ImportModule = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [importType]);
 
     const handleFileChange = (e) => {
         processFile(e.target.files[0]);
@@ -75,7 +96,7 @@ const ImportModule = () => {
         } else {
             alert('Por favor, arrastra solo archivos Excel (.xlsx, .xls)');
         }
-    }, [importType]);
+    }, [processFile]);
 
     const clearFile = () => {
         setFile(null);
@@ -110,6 +131,7 @@ const ImportModule = () => {
             setImportStatus(result);
             setPreviewData([]);
             setFile(null);
+            await loadDiagnostics();
         } catch (err) {
             console.error("Import failed:", err);
             alert("Error durante la importación.");
@@ -118,10 +140,40 @@ const ImportModule = () => {
         }
     };
 
+    const handleQuickAssign = async (userId) => {
+        const assetId = fixSelection[userId];
+        if (!assetId) return;
+
+        setApplyingFix(true);
+        try {
+            await importService.quickAssignAsset(userId, assetId);
+            setFixSelection((prev) => ({ ...prev, [userId]: '' }));
+            await loadDiagnostics();
+        } catch (err) {
+            console.error('Quick assign failed:', err);
+            alert('No se pudo asignar el equipo.');
+        } finally {
+            setApplyingFix(false);
+        }
+    };
+
+    const handleClearOrphan = async (assetId) => {
+        setApplyingFix(true);
+        try {
+            await importService.clearOrphanAsset(assetId);
+            await loadDiagnostics();
+        } catch (err) {
+            console.error('Clear orphan failed:', err);
+            alert('No se pudo liberar el equipo huérfano.');
+        } finally {
+            setApplyingFix(false);
+        }
+    };
+
     const downloadTemplate = (type) => {
         // NUEVO: Agregamos assigned_to_email a la plantilla de inventario
         const headers = type === 'users'
-            ? [['employee_id', 'name', 'email', 'department', 'position', 'location', 'status', 'role']]
+            ? [['employee_id', 'name', 'email', 'department', 'position', 'location', 'assigned_equipment', 'status', 'role']]
             : [['asset_id', 'asset_type', 'brand', 'model', 'serial_number', 'inventory_tag', 'hostname', 'status', 'purchase_date', 'assigned_to_email']];
 
         const wb = XLSX.utils.book_new();
@@ -230,6 +282,99 @@ const ImportModule = () => {
                                     </div>
                                 </div>
                             )}
+
+                            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border shadow-xl shadow-slate-200/30 dark:shadow-none">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h5 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Diagnóstico Post-Carga</h5>
+                                    <button
+                                        onClick={loadDiagnostics}
+                                        disabled={loadingDiagnostics || applyingFix}
+                                        className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 disabled:opacity-50"
+                                    >
+                                        Refrescar
+                                    </button>
+                                </div>
+
+                                {loadingDiagnostics ? (
+                                    <p className="text-sm text-slate-500">Analizando asignaciones...</p>
+                                ) : !diagnostics ? (
+                                    <p className="text-sm text-rose-600">No se pudo cargar el diagnóstico.</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                                <span className="text-[10px] font-black uppercase text-slate-400">Cobertura</span>
+                                                <p className="text-lg font-black text-slate-900 dark:text-white">{diagnostics.totals.coverage}%</p>
+                                            </div>
+                                            <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                                <span className="text-[10px] font-black uppercase text-slate-400">Usuarios sin equipo</span>
+                                                <p className="text-lg font-black text-amber-600">{diagnostics.totals.usersWithoutAssets}</p>
+                                            </div>
+                                            <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                                <span className="text-[10px] font-black uppercase text-slate-400">Equipos huérfanos</span>
+                                                <p className="text-lg font-black text-rose-600">{diagnostics.totals.orphanAssets}</p>
+                                            </div>
+                                            <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                                <span className="text-[10px] font-black uppercase text-slate-400">Disponibles</span>
+                                                <p className="text-lg font-black text-emerald-600">{diagnostics.totals.availableAssets}</p>
+                                            </div>
+                                        </div>
+
+                                        {diagnostics.usersWithoutAssets.length > 0 && (
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Corrección rápida: asignar equipo</p>
+                                                {diagnostics.usersWithoutAssets.slice(0, 6).map((u) => (
+                                                    <div key={u.id} className="p-3 rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 space-y-2">
+                                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{u.full_name} · {u.email}</p>
+                                                        <div className="flex gap-2">
+                                                            <select
+                                                                value={fixSelection[u.id] || ''}
+                                                                onChange={(e) => setFixSelection((prev) => ({ ...prev, [u.id]: e.target.value }))}
+                                                                className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                                                            >
+                                                                <option value="">Selecciona equipo disponible</option>
+                                                                {diagnostics.availableAssets.map((a) => (
+                                                                    <option key={a.id} value={a.id}>{a.label}</option>
+                                                                ))}
+                                                            </select>
+                                                            <button
+                                                                type="button"
+                                                                disabled={!fixSelection[u.id] || applyingFix}
+                                                                onClick={() => handleQuickAssign(u.id)}
+                                                                className="px-3 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                                                            >
+                                                                Asignar
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {diagnostics.orphanAssets.length > 0 && (
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Corrección rápida: liberar huérfanos</p>
+                                                {diagnostics.orphanAssets.slice(0, 6).map((a) => (
+                                                    <div key={a.id} className="flex items-center justify-between gap-2 p-3 rounded-2xl border border-rose-100 bg-rose-50/60 dark:bg-rose-500/10 dark:border-rose-500/20">
+                                                        <div>
+                                                            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{a.label}</p>
+                                                            <p className="text-[10px] text-slate-500">Asignado a ID inexistente: {a.assigned_to}</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={applyingFix}
+                                                            onClick={() => handleClearOrphan(a.id)}
+                                                            className="px-3 py-2 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                                                        >
+                                                            Liberar
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="xl:col-span-2 space-y-4">
