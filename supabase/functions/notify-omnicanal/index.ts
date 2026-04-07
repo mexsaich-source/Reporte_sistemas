@@ -31,6 +31,18 @@ type TicketContext = {
   reporterEmail: string | null;
 };
 
+type AreaSettings = {
+  area: Area;
+  telegram_bot_token: string | null;
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_user: string | null;
+  smtp_pass: string | null;
+  smtp_from_name: string | null;
+  meta_access_token: string | null;
+  meta_phone_number_id: string | null;
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -141,6 +153,27 @@ async function sendTelegramMessage(chatId: string, text: string) {
   }
 }
 
+async function sendTelegramMessageWithSettings(chatId: string, text: string, settings: AreaSettings | null) {
+  const settingsToken = String(settings?.telegram_bot_token || "").trim();
+  const tgToken = settingsToken || Deno.env.get("TELEGRAM_BOT_TOKEN");
+  if (!tgToken) {
+    return { channel: "telegram", status: "skipped", reason: "missing_telegram_token" };
+  }
+
+  const url = `https://api.telegram.org/bot${tgToken}/sendMessage`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+    });
+    const json = await res.json();
+    return { channel: "telegram", status: res.ok ? "sent" : "failed", response: json };
+  } catch (error: any) {
+    return { channel: "telegram", status: "error", error: error?.message || String(error) };
+  }
+}
+
 async function sendEmail(to: string, subject: string, body: string) {
   const smtpHost = Deno.env.get("SMTP_HOST");
   const smtpPort = Number(Deno.env.get("SMTP_PORT") || "465");
@@ -180,6 +213,59 @@ async function sendEmail(to: string, subject: string, body: string) {
   } catch (error: any) {
     return { channel: "email", status: "error", error: error?.message || String(error) };
   }
+}
+
+async function sendEmailWithSettings(to: string, subject: string, body: string, settings: AreaSettings | null) {
+  const smtpHost = String(settings?.smtp_host || Deno.env.get("SMTP_HOST") || "").trim();
+  const smtpPort = Number(settings?.smtp_port || Deno.env.get("SMTP_PORT") || "465");
+  const smtpUser = String(settings?.smtp_user || Deno.env.get("SMTP_USER") || "").trim();
+  const smtpPass = String(settings?.smtp_pass || Deno.env.get("SMTP_PASS") || "").trim();
+  const fromName = String(settings?.smtp_from_name || "IT Helpdesk").trim() || "IT Helpdesk";
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    return { channel: "email", status: "skipped", reason: "missing_smtp_config" };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass },
+      connectionTimeout: 10000,
+    });
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px;">
+        <h2 style="color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">${fromName}</h2>
+        <h3 style="color: #374151;">${subject}</h3>
+        <p style="padding: 15px; background-color: #f3f4f6; border-left: 4px solid #3b82f6; border-radius: 4px; line-height: 1.6;">${body}</p>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${smtpUser}>`,
+      to,
+      subject,
+      text: body,
+      html,
+    });
+
+    return { channel: "email", status: "sent" };
+  } catch (error: any) {
+    return { channel: "email", status: "error", error: error?.message || String(error) };
+  }
+}
+
+async function getAreaSettings(supabase: any, area: Area): Promise<AreaSettings | null> {
+  const { data, error } = await supabase
+    .from('notification_area_settings')
+    .select('area, telegram_bot_token, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from_name, meta_access_token, meta_phone_number_id')
+    .eq('area', area)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as AreaSettings;
 }
 
 async function getProfileById(supabase: any, userId: string): Promise<ProfileRow | null> {
@@ -267,6 +353,7 @@ async function resolveTicketContext(supabase: any, payload: any): Promise<Ticket
 async function handleNewTicketCreated(supabase: any, payload: any) {
   const ctx = await resolveTicketContext(supabase, payload);
   if (!ctx) return { ok: false, status: 404, error: "No se pudo resolver el ticket o su area" };
+  const areaSettings = await getAreaSettings(supabase, ctx.area);
 
   const admins = await getAdminsByArea(supabase, ctx.area);
   const targets = admins
@@ -280,7 +367,7 @@ async function handleNewTicketCreated(supabase: any, payload: any) {
     `📝 Asunto: ${ctx.title}\n` +
     `⚡ Acción requerida: revisar y asignar a un técnico.`;
 
-  const results = await Promise.all(targets.map((t) => sendTelegramMessage(t.chatId as string, text)));
+  const results = await Promise.all(targets.map((t) => sendTelegramMessageWithSettings(t.chatId as string, text, areaSettings)));
 
   return {
     ok: true,
@@ -300,6 +387,7 @@ async function handleNewTicketCreated(supabase: any, payload: any) {
 async function handleTicketAssigned(supabase: any, payload: any) {
   const ctx = await resolveTicketContext(supabase, payload);
   if (!ctx) return { ok: false, status: 404, error: "No se pudo resolver el ticket o su area" };
+  const areaSettings = await getAreaSettings(supabase, ctx.area);
   if (!ctx.assignedTechId) return { ok: false, status: 400, error: "Falta assigned_tech_id para evento TICKET_ASSIGNED" };
 
   const techProfile = await getProfileById(supabase, ctx.assignedTechId);
@@ -324,7 +412,7 @@ async function handleTicketAssigned(supabase: any, payload: any) {
     `📝 Asunto: ${ctx.title}\n` +
     `⚡ Acción requerida: atender y resolver el ticket.`;
 
-  const result = await sendTelegramMessage(chatId, text);
+  const result = await sendTelegramMessageWithSettings(chatId, text, areaSettings);
 
   return {
     ok: true,
@@ -345,6 +433,7 @@ async function handleTicketAssigned(supabase: any, payload: any) {
 async function handleTicketResolved(supabase: any, payload: any) {
   const ctx = await resolveTicketContext(supabase, payload);
   if (!ctx) return { ok: false, status: 404, error: "No se pudo resolver el ticket o su area" };
+  const areaSettings = await getAreaSettings(supabase, ctx.area);
 
   const areaLabel = ctx.area === "IT" ? "IT" : "Ingeniería";
 
@@ -366,7 +455,7 @@ async function handleTicketResolved(supabase: any, payload: any) {
     `📌 Estado: completado.`;
 
   const telegramResults = await Promise.all(
-    adminTargets.map((a) => sendTelegramMessage(a.chatId as string, telegramText))
+    adminTargets.map((a) => sendTelegramMessageWithSettings(a.chatId as string, telegramText, areaSettings))
   );
 
   // ── b) Email → Usuario reportador (SMTP únicamente, NO Telegram) ──────────
@@ -378,10 +467,11 @@ async function handleTicketResolved(supabase: any, payload: any) {
   };
 
   if (toEmail) {
-    emailResult = await sendEmail(
+    emailResult = await sendEmailWithSettings(
       toEmail,
       `Tu solicitud ha sido resuelta — Ticket #${ctx.ticketId}`,
-      `Hola,\n\nTe informamos que tu solicitud "${ctx.title}" ha sido atendida y marcada como resuelta por el equipo de ${areaLabel}.\n\nSi el problema persiste o tienes alguna duda, crea un nuevo ticket desde la plataforma.\n\nGracias,\nEquipo de ${areaLabel}`
+      `Hola,\n\nTe informamos que tu solicitud "${ctx.title}" ha sido atendida y marcada como resuelta por el equipo de ${areaLabel}.\n\nSi el problema persiste o tienes alguna duda, crea un nuevo ticket desde la plataforma.\n\nGracias,\nEquipo de ${areaLabel}`,
+      areaSettings
     );
   }
 
@@ -414,6 +504,13 @@ async function handleLegacyNotification(supabase: any, payload: any) {
     return { ok: true, status: 200, success: true, reason: "Usuario suspendido, notificacion omitida" };
   }
 
+  let area: Area = "IT";
+  const profileArea = resolveProfileArea(profile);
+  if (profileArea) area = profileArea;
+  const forcedArea = normalizeAreaFromString(payload?.area || payload?.department);
+  if (forcedArea) area = forcedArea;
+  const areaSettings = await getAreaSettings(supabase, area);
+
   let email = profile.email;
   let chatId = getTelegramChatId(profile);
 
@@ -427,11 +524,11 @@ async function handleLegacyNotification(supabase: any, payload: any) {
     const tgText = type === "test"
       ? `*[IT Helpdesk]*\nPRUEBA DE CONEXION\nTu bot de Telegram esta recibiendo alertas correctamente.`
       : `*${title || "Nueva Notificacion"}*\n\n${message}${ticket_id ? `\n\nTicket ID: #${ticket_id}` : ""}`;
-    jobs.push(sendTelegramMessage(chatId, tgText));
+    jobs.push(sendTelegramMessageWithSettings(chatId, tgText, areaSettings));
   }
 
   if (email) {
-    jobs.push(sendEmail(email, title || "Alerta de IT Helpdesk", message));
+    jobs.push(sendEmailWithSettings(email, title || "Alerta de IT Helpdesk", message, areaSettings));
   }
 
   const results = await Promise.all(jobs);

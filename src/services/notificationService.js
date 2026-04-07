@@ -51,6 +51,108 @@ function generateDeviceInfo() {
 }
 
 export const notificationService = {
+    async persistTokenWithFallback(userId, currentToken, deviceInfo, platform) {
+        const attempts = [
+            {
+                label: 'upsert:user_id,token+extras',
+                mode: 'upsert',
+                row: {
+                    user_id: userId,
+                    token: currentToken,
+                    device_info: deviceInfo,
+                    platform,
+                    is_active: true,
+                },
+                onConflict: 'user_id,token',
+            },
+            {
+                label: 'upsert:user_id,token',
+                mode: 'upsert',
+                row: {
+                    user_id: userId,
+                    token: currentToken,
+                },
+                onConflict: 'user_id,token',
+            },
+            {
+                label: 'upsert:user_id,fcm_token+extras',
+                mode: 'upsert',
+                row: {
+                    user_id: userId,
+                    fcm_token: currentToken,
+                    device_info: deviceInfo,
+                    platform,
+                    is_active: true,
+                },
+                onConflict: 'user_id,fcm_token',
+            },
+            {
+                label: 'upsert:user_id,fcm_token',
+                mode: 'upsert',
+                row: {
+                    user_id: userId,
+                    fcm_token: currentToken,
+                },
+                onConflict: 'user_id,fcm_token',
+            },
+            {
+                label: 'insert:token+extras',
+                mode: 'insert',
+                row: {
+                    user_id: userId,
+                    token: currentToken,
+                    device_info: deviceInfo,
+                    platform,
+                    is_active: true,
+                },
+            },
+            {
+                label: 'insert:fcm_token+extras',
+                mode: 'insert',
+                row: {
+                    user_id: userId,
+                    fcm_token: currentToken,
+                    device_info: deviceInfo,
+                    platform,
+                    is_active: true,
+                },
+            },
+            {
+                label: 'insert:fcm_token-minimal',
+                mode: 'insert',
+                row: {
+                    user_id: userId,
+                    fcm_token: currentToken,
+                },
+            },
+        ];
+
+        let lastError = null;
+        for (const attempt of attempts) {
+            let error = null;
+
+            if (attempt.mode === 'upsert') {
+                ({ error } = await supabase
+                    .from('fcm_tokens')
+                    .upsert(attempt.row, { onConflict: attempt.onConflict })
+                    .select());
+            } else {
+                ({ error } = await supabase
+                    .from('fcm_tokens')
+                    .insert(attempt.row)
+                    .select());
+            }
+
+            if (!error) {
+                return { ok: true, strategy: attempt.label };
+            }
+
+            lastError = error;
+        }
+
+        return { ok: false, error: lastError };
+    },
+
     /**
      * Flujo completo: permiso + SW actualizado + token FCM + upsert en Supabase.
      * Idempotente; llamar tras login y al abrir la app en un dispositivo nuevo.
@@ -136,29 +238,17 @@ export const notificationService = {
             const platform = detectPlatform();
             const deviceInfo = generateDeviceInfo();
 
-            const row = {
-                user_id: userId,
-                token: currentToken,
-                device_info: deviceInfo,
-                platform: platform,
-                is_active: true
-                // NO incluir created_at ni last_seen_at - SQL los maneja con defaults y triggers
-            };
-
-            const { error } = await supabase
-                .from('fcm_tokens')
-                .upsert(row, { onConflict: 'user_id,token' })
-                .select();
-
-            if (error) {
-                console.error('Error guardando token multi-dispositivo:', error);
+            const saved = await this.persistTokenWithFallback(userId, currentToken, deviceInfo, platform);
+            if (!saved.ok) {
+                console.error('Error guardando token multi-dispositivo:', saved.error);
                 return;
             }
 
             console.log(`✅ Dispositivo registrado (${platform}):`, {
                 token: currentToken.substring(0, 20) + '...',
                 device: deviceInfo,
-                userId: userId.substring(0, 8) + '...'
+                userId: userId.substring(0, 8) + '...',
+                strategy: saved.strategy,
             });
 
         } catch (err) {

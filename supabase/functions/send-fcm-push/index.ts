@@ -56,7 +56,7 @@ serve(async (req) => {
     // 3. Buscar TODOS los tokens FCM del usuario (multi-dispositivo)
     let { data: tokenRows, error: dbError } = await supabase
       .from('fcm_tokens')
-      .select('token')
+      .select('*')
       .eq('user_id', notificationRecord.user_id)
       .eq('is_active', true);
 
@@ -64,7 +64,9 @@ serve(async (req) => {
       console.error("Error leyendo fcm_tokens:", dbError);
     }
 
-    const tokensFromTable = (tokenRows || []).map((r: { token: string }) => r.token).filter(Boolean);
+    const tokensFromTable = (tokenRows || [])
+      .map((r: any) => r?.token || r?.fcm_token || null)
+      .filter(Boolean);
     let targetTokens = [...new Set(tokensFromTable)];
 
     if (targetTokens.length === 0) {
@@ -158,11 +160,21 @@ serve(async (req) => {
     });
 
     if (invalidTokens.length > 0) {
-      const { error: deactivateErr } = await supabase
+      let { error: deactivateErr } = await supabase
         .from('fcm_tokens')
         .update({ is_active: false })
         .in('token', invalidTokens)
         .eq('user_id', notificationRecord.user_id);
+
+      if (deactivateErr) {
+        // Fallback para esquemas legacy con columna fcm_token.
+        const fallback = await supabase
+          .from('fcm_tokens')
+          .update({ is_active: false })
+          .in('fcm_token', invalidTokens)
+          .eq('user_id', notificationRecord.user_id);
+        deactivateErr = fallback.error;
+      }
 
       if (deactivateErr) {
         console.error('Error desactivando tokens invalidos:', deactivateErr);

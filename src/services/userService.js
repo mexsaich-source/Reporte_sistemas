@@ -253,6 +253,140 @@ export const userService = {
         }
     },
 
+    async updateWhatsAppCredentials(userId, whatsappPhone, actorId = null) {
+        try {
+            const clean = (whatsappPhone || '').toString().trim();
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    whatsapp_phone: clean || null,
+                    telegram_chat_id: clean || null,
+                })
+                .eq('id', userId);
+
+            if (error) throw error;
+
+            if (actorId) {
+                await auditService.log(actorId, 'UPDATE_OWN_NOTIFICATION_CONTACT', 'profiles', userId, {
+                    whatsapp_phone: clean || null,
+                });
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error updating notification contact:', error);
+            return false;
+        }
+    },
+
+    async getMyAreaNotificationSettings() {
+        try {
+            const { data, error } = await supabase.rpc('get_my_notification_area_settings');
+            if (error) throw error;
+            return { success: true, data: Array.isArray(data) ? (data[0] || null) : null };
+        } catch (error) {
+            console.error('Error loading area notification settings:', error);
+            return { success: false, error: error.message, data: null };
+        }
+    },
+
+    async saveMyAreaNotificationSettings(payload = {}) {
+        try {
+            const {
+                telegram_bot_token = '',
+                smtp_host = '',
+                smtp_port = null,
+                smtp_user = '',
+                smtp_pass = '',
+                smtp_from_name = '',
+                meta_access_token = '',
+                meta_phone_number_id = '',
+            } = payload;
+
+            const { data, error } = await supabase.rpc('upsert_my_notification_area_settings', {
+                p_telegram_bot_token: telegram_bot_token,
+                p_smtp_host: smtp_host,
+                p_smtp_port: smtp_port ? Number(smtp_port) : null,
+                p_smtp_user: smtp_user,
+                p_smtp_pass: smtp_pass,
+                p_smtp_from_name: smtp_from_name,
+                p_meta_access_token: meta_access_token,
+                p_meta_phone_number_id: meta_phone_number_id,
+            });
+
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            console.error('Error saving area notification settings:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    async applyMyAreaNotificationSetupCode(setupCode) {
+        try {
+            const raw = String(setupCode || '').trim();
+            if (!raw) {
+                return { success: false, error: 'Código vacío.' };
+            }
+
+            let parsed = null;
+
+            // Formato 1: JSON directo
+            if (raw.startsWith('{') && raw.endsWith('}')) {
+                try {
+                    parsed = JSON.parse(raw);
+                } catch {
+                    return { success: false, error: 'JSON inválido en el código de configuración.' };
+                }
+            }
+
+            // Formato 2: prefijo setup:BASE64...
+            let encodedChunk = raw;
+            const prefixed = raw.match(/^setup\s*:\s*(.+)$/i);
+            if (prefixed?.[1]) encodedChunk = prefixed[1].trim();
+
+            // Formato 3: Base64/Base64URL
+            if (!parsed) {
+                const normalized = encodedChunk.replace(/-/g, '+').replace(/_/g, '/');
+                const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+
+                let decoded;
+                try {
+                    decoded = atob(padded);
+                } catch {
+                    return { success: false, error: 'El código no es válido. Usa Base64, Base64URL o JSON.' };
+                }
+
+                try {
+                    parsed = JSON.parse(decoded);
+                } catch {
+                    return { success: false, error: 'El código decodificó pero no contiene JSON válido.' };
+                }
+            }
+
+            const payload = {
+                telegram_bot_token: parsed.telegram_bot_token || '',
+                smtp_host: parsed.smtp_host || '',
+                smtp_port: parsed.smtp_port || null,
+                smtp_user: parsed.smtp_user || '',
+                smtp_pass: parsed.smtp_pass || '',
+                smtp_from_name: parsed.smtp_from_name || '',
+                meta_access_token: parsed.meta_access_token || '',
+                meta_phone_number_id: parsed.meta_phone_number_id || '',
+            };
+
+            const hasAnyField = Object.values(payload).some((v) => v !== '' && v !== null);
+            if (!hasAnyField) {
+                return { success: false, error: 'El código no incluye campos de configuración.' };
+            }
+
+            return this.saveMyAreaNotificationSettings(payload);
+        } catch (error) {
+            console.error('Error applying setup code:', error);
+            return { success: false, error: error.message || 'No se pudo aplicar el código.' };
+        }
+    },
+
     async register(email, password, fullName, role = 'user', department = 'General') {
         try {
             // 1. Verificar si el perfil ya existe para evitar duplicados

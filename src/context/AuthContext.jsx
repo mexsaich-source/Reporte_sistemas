@@ -119,6 +119,10 @@ export default function AuthProvider({ children }) {
                 }
 
                 if (currentUser) {
+                    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+                        notificationService.syncPushForUser(currentUser.id).catch(() => {});
+                    }
+
                     if (!profileRef.current && !isFetchingRef.current) {
                         setLoading(true);
                         fetchProfile(currentUser.id, isMounted);
