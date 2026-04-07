@@ -129,8 +129,32 @@ function getTelegramChatId(profile: ProfileRow): string | null {
   return legacy.replace(/\D/g, "");
 }
 
+function extractTelegramBotToken(input: unknown): string {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+
+  const tokenRe = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
+  if (tokenRe.test(raw)) return raw;
+
+  const inline = raw.match(/bot(\d{5,}:[A-Za-z0-9_-]{20,})/i)?.[1] || "";
+  if (inline && tokenRe.test(inline)) return inline;
+
+  try {
+    const parsed = new URL(raw);
+    const fromPath = parsed.pathname.match(/\/bot(\d{5,}:[A-Za-z0-9_-]{20,})(?:\/|$)/i)?.[1] || "";
+    if (fromPath && tokenRe.test(fromPath)) return fromPath;
+
+    const fromQuery = parsed.searchParams.get("token") || "";
+    if (fromQuery && tokenRe.test(fromQuery)) return fromQuery;
+  } catch {
+    // no-op: no es URL valida
+  }
+
+  return "";
+}
+
 async function sendTelegramMessage(chatId: string, text: string) {
-  const tgToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
+  const tgToken = extractTelegramBotToken(Deno.env.get("TELEGRAM_BOT_TOKEN"));
   if (!tgToken) {
     return { channel: "telegram", status: "skipped", reason: "missing_telegram_token" };
   }
@@ -154,8 +178,9 @@ async function sendTelegramMessage(chatId: string, text: string) {
 }
 
 async function sendTelegramMessageWithSettings(chatId: string, text: string, settings: AreaSettings | null) {
-  const settingsToken = String(settings?.telegram_bot_token || "").trim();
-  const tgToken = settingsToken || Deno.env.get("TELEGRAM_BOT_TOKEN");
+  const settingsToken = extractTelegramBotToken(settings?.telegram_bot_token || "");
+  const fallbackToken = extractTelegramBotToken(Deno.env.get("TELEGRAM_BOT_TOKEN"));
+  const tgToken = settingsToken || fallbackToken;
   if (!tgToken) {
     return { channel: "telegram", status: "skipped", reason: "missing_telegram_token" };
   }

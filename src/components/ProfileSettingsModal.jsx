@@ -4,6 +4,29 @@ import { useAuth } from '../context/authStore';
 import { userService } from '../services/userService';
 import { supabase } from '../lib/supabaseClient';
 
+const TELEGRAM_TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
+
+function extractTelegramBotToken(input) {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+    if (TELEGRAM_TOKEN_RE.test(raw)) return raw;
+
+    const fromInline = raw.match(/bot(\d{5,}:[A-Za-z0-9_-]{20,})/i)?.[1];
+    if (fromInline && TELEGRAM_TOKEN_RE.test(fromInline)) return fromInline;
+
+    try {
+        const parsed = new URL(raw);
+        const fromPath = parsed.pathname.match(/\/bot(\d{5,}:[A-Za-z0-9_-]{20,})(?:\/|$)/i)?.[1];
+        if (fromPath && TELEGRAM_TOKEN_RE.test(fromPath)) return fromPath;
+        const fromQuery = parsed.searchParams.get('token') || '';
+        if (fromQuery && TELEGRAM_TOKEN_RE.test(fromQuery)) return fromQuery;
+    } catch {
+        // Ignorar: no es URL válida.
+    }
+
+    return '';
+}
+
 const ProfileSettingsModal = ({ isOpen, onClose }) => {
     const { user, profile } = useAuth();
     const [testing, setTesting] = useState(false);
@@ -168,10 +191,16 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
     const handleQuickSetupSave = async () => {
         const smtpUser = quickSetup.smtp_user.trim();
         const smtpPass = quickSetup.smtp_pass.trim();
-        const botUrl = quickSetup.bot_url.trim();
+        const botInput = quickSetup.bot_url.trim();
+        const parsedBotToken = extractTelegramBotToken(botInput);
 
         if (!smtpUser || !smtpPass) {
             setErrorMsg('Completa correo remitente y contraseña de aplicación.');
+            return;
+        }
+
+        if (botInput && !parsedBotToken) {
+            setErrorMsg('El dato del bot no es válido. Pega token (123456:AA...) o URL oficial de Telegram Bot API.');
             return;
         }
 
@@ -182,7 +211,7 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
         try {
             const defaultFromName = smtpUser.includes('@') ? smtpUser.split('@')[0] : 'Notificaciones';
             const result = await userService.saveMyAreaNotificationSettings({
-                telegram_bot_token: botUrl || areaSettings.telegram_bot_token || '',
+                telegram_bot_token: parsedBotToken || areaSettings.telegram_bot_token || '',
                 smtp_host: 'smtp.gmail.com',
                 smtp_port: 465,
                 smtp_user: smtpUser,
@@ -311,10 +340,10 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">URL del bot (envío por área)</label>
+                                        <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Bot por área (token o URL)</label>
                                         <input
                                             type="text"
-                                            placeholder="https://..."
+                                            placeholder="123456:AA... o https://api.telegram.org/bot..."
                                             className="w-full bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white outline-none"
                                             value={quickSetup.bot_url}
                                             onChange={(e) => setQuickSetup((prev) => ({ ...prev, bot_url: e.target.value }))}
