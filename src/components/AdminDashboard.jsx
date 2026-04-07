@@ -314,7 +314,7 @@ const AdminDashboard = () => {
     const renderView = () => {
         // Bloqueo de acceso: Redirigir si intenta entrar a áreas no permitidas
         const isBoss = isMaint && ['admin', 'jefe_mantenimiento'].includes(role);
-        const canManageNews = ['admin', 'jefe_mantenimiento'].includes(role);
+        const canManageNews = (['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'].includes(role)) && !isMaint;
         const restrictedViews = ['Tickets', 'Inventory', 'Activities', 'Reports', 'Import', 'Requests'];
         
         // Si es de mantenimiento pero NO es jefe, también bloqueamos 'Users'

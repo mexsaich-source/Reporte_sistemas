@@ -46,7 +46,7 @@ const Sidebar = ({ activeItem, onSelectItem, onSettingsClick }) => {
         if (isMaint) {
             const canManageUsers = ['admin', 'jefe_mantenimiento'].includes(role);
             if (item.id === 'Users') return canManageUsers;
-            if (item.incidentManagersOnly) return canManageUsers;
+            if (item.incidentManagersOnly) return false;
             return item.id === 'Maintenance';
         }
 

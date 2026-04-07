@@ -237,10 +237,19 @@ async function remindLoanDeadlines() {
     if (dueState === 'overdue') {
       const { data: admins } = await supabase
         .from('profiles')
-        .select('id')
-        .eq('role', 'admin');
+        .select('id, role, department, status')
+        .eq('status', true);
 
-      for (const admin of admins || []) {
+      const itAdmins = (admins || [])
+        .filter((a) => {
+          const role = String(a?.role || '').toLowerCase().trim();
+          const dept = String(a?.department || '').toLowerCase().trim();
+          const isMaintArea = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+          const itAdminRoles = ['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'];
+          return itAdminRoles.includes(role) && !isMaintArea;
+        });
+
+      for (const admin of itAdmins) {
         await createNotificationOnce({
           userId: admin.id,
           title: 'Prestamo vencido de usuario',

@@ -31,7 +31,9 @@ const priorityClass = (priority) => {
 const BotIncidentsAdmin = () => {
   const { profile, user } = useAuth();
   const role = (profile?.role || '').toLowerCase().trim();
-  const canManage = role === 'admin' || role === 'jefe_mantenimiento';
+  const department = (profile?.department || '').toLowerCase().trim();
+  const isMaint = department.includes('mantenimiento') || department.includes('ingenieria') || department.includes('ingeniería');
+  const canManage = ['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'].includes(role) && !isMaint;
 
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);

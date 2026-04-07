@@ -470,10 +470,17 @@ const MyGeneralRequestsPanel = () => {
 
             const { data: admins } = await supabase
                 .from('profiles')
-                .select('id, role')
-                .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
+                .select('id, role, department, status')
+                .eq('status', true);
 
             const recipients = (admins || [])
+                .filter((a) => {
+                    const role = String(a?.role || '').toLowerCase().trim();
+                    const dept = String(a?.department || '').toLowerCase().trim();
+                    const isMaintArea = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+                    const itAdminRoles = ['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'];
+                    return itAdminRoles.includes(role) && !isMaintArea;
+                })
                 .map((a) => a?.id)
                 .filter(Boolean);
 
