@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Wrench, Clock, CheckCircle2, FilePlus, 
-  Plus, ListFilter, X, Printer, RefreshCcw
+  Plus, ListFilter, X, Printer, RefreshCcw, BellRing
 } from 'lucide-react';
 import { maintenanceService } from '../services/maintenanceService';
 import { userService } from '../services/userService';
@@ -350,6 +350,8 @@ const MaintenanceModule = () => {
                 visibleTickets.map((ticket) => {
                   const currentStatus = toCanonicalStatus(ticket.estado);
                   const isAssignedTech = ticket.asignado_a === authProfile?.id;
+                  const isEscalated = Boolean(ticket.escalated_to_it);
+                  const canEscalateToIT = (isBoss || (isEngineer && isAssignedTech)) && currentStatus !== 'Resuelto';
                   return (
                     <tr key={ticket.id} className="group transition-all duration-300 hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
                       <td className="p-4 pl-6">
@@ -405,6 +407,28 @@ const MaintenanceModule = () => {
                               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white"
                             >
                               <CheckCircle2 size={12} /> Resolver
+                            </button>
+                          )}
+
+                          {canEscalateToIT && (
+                            <button
+                              onClick={async () => {
+                                if (isEscalated) return;
+                                const ok = window.confirm('¿Notificar a Sistemas (IT Desk) para apoyo en esta orden?');
+                                if (!ok) return;
+                                const result = await maintenanceService.notifyITDesk(ticket.id, authProfile.id);
+                                if (!result?.success) {
+                                  alert(result?.error || 'No se pudo notificar a Sistemas.');
+                                } else {
+                                  alert(`Sistemas notificado correctamente (${result.notified || 0} admins IT).`);
+                                }
+                                fetchData();
+                              }}
+                              disabled={isEscalated}
+                              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider ${isEscalated ? 'bg-slate-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                              title={isEscalated ? 'Sistemas ya fue notificado en esta orden' : 'Notificar a Sistemas'}
+                            >
+                              <BellRing size={12} /> {isEscalated ? 'IT Notificado' : 'Notificar a Sistemas'}
                             </button>
                           )}
 

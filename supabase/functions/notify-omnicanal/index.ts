@@ -81,9 +81,10 @@ function isAdminForArea(profile: ProfileRow, area: Area): boolean {
   const role = normalize(profile.role);
   const dept = normalize(profile.department);
   const isMaint = dept.includes("mantenimiento") || dept.includes("ingenieria") || dept.includes("ingeniería");
+  const isITAdminRole = ["admin", "jefe_it", "jefe area it", "jefe_area_it"].includes(role);
 
   if (area === "IT") {
-    return role === "admin" && !isMaint;
+    return isITAdminRole && !isMaint;
   }
   // ING
   return (role === "admin" && isMaint) || role === "jefe_mantenimiento";

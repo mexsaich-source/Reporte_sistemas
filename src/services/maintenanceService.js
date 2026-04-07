@@ -21,14 +21,42 @@ async function getMaintenanceSupervisors(excludeUserId = null) {
         const role = normalize(user.role);
         const department = normalize(user.department);
         const isMaintenanceAdmin = role === 'jefe_mantenimiento';
-        const isGlobalAdmin = role === 'admin';
+        const isAreaAdmin = role === 'admin';
         const isMaintenanceDept = department.includes('mantenimiento') || department.includes('ingenieria') || department.includes('ingeniería');
-        return isGlobalAdmin || (isMaintenanceAdmin && isMaintenanceDept);
+        return (isMaintenanceAdmin && isMaintenanceDept) || (isAreaAdmin && isMaintenanceDept);
       })
       .map((user) => user.id)
       .filter((id) => id && id !== excludeUserId);
   } catch (error) {
     console.warn('Error getting maintenance supervisors:', error?.message || error);
+    return [];
+  }
+}
+
+async function getITDeskAdmins(excludeUserId = null) {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, role, department, status, full_name')
+      .eq('status', true);
+
+    if (error) {
+      console.warn('Error loading IT admins:', error.message || error);
+      return [];
+    }
+
+    return (data || [])
+      .filter((user) => {
+        const role = normalize(user.role);
+        const dept = normalize(user.department);
+        const isMaintDept = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+        const isITAdminRole = ['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'].includes(role);
+        return isITAdminRole && !isMaintDept;
+      })
+      .map((user) => ({ id: user.id, full_name: user.full_name || 'Admin IT' }))
+      .filter((u) => u.id && u.id !== excludeUserId);
+  } catch (error) {
+    console.warn('Error getting IT admins:', error?.message || error);
     return [];
   }
 }
@@ -275,6 +303,53 @@ export const maintenanceService = {
         success: false,
         error: error?.message || 'No fue posible resolver la orden. Verifica permisos y estado del ticket.'
       };
+    }
+  },
+
+  async notifyITDesk(ticketId, actorId) {
+    try {
+      const { data: ticket, error } = await supabase
+        .from('maintenance_tickets')
+        .select('id, title_falla, ubicacion, estado, creado_por, asignado_a')
+        .eq('id', ticketId)
+        .single();
+
+      if (error || !ticket) throw error || new Error('Orden no encontrada.');
+
+      const itAdmins = await getITDeskAdmins(actorId);
+      if (!itAdmins.length) {
+        return { success: false, error: 'No se encontraron admins IT activos para notificar.' };
+      }
+
+      await Promise.all(
+        itAdmins.map((admin) =>
+          workNotificationService.createNotification(
+            admin.id,
+            'Escalación de mantenimiento a IT',
+            `La orden "${ticket.title_falla || ticket.id}" (${ticket.ubicacion || 'sin ubicación'}) fue escalada a Sistemas para apoyo.`
+          )
+        )
+      );
+
+      // Intento de trazabilidad (si las columnas existen, se actualizan; si no, se ignora).
+      await supabase
+        .from('maintenance_tickets')
+        .update({
+          escalated_to_it: true,
+          escalated_at: new Date().toISOString(),
+          escalated_by: actorId,
+        })
+        .eq('id', ticketId);
+
+      await auditService.log(actorId, 'ESCALATE_MAINTENANCE_TO_IT', 'maintenance_tickets', ticketId, {
+        title: ticket.title_falla,
+        notified_admins: itAdmins.map((a) => a.id),
+      });
+
+      return { success: true, notified: itAdmins.length };
+    } catch (error) {
+      console.error('Error escalating maintenance ticket to IT:', error);
+      return { success: false, error: error?.message || 'No fue posible notificar a Sistemas.' };
     }
   }
 };

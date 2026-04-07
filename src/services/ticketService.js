@@ -95,13 +95,23 @@ export const ticketService = {
                     `Se te asigno el ticket "${data.title || `#${data.id}`}".`
                 );
             } else {
-                // Si aun no hay tecnico asignado, avisar a staff de gestion para toma del ticket.
+                // Si aun no hay tecnico asignado, avisar SOLO a admins de IT.
+                // Mantenimiento/Ingenieria se atiende por su modulo aparte.
                 const { data: admins } = await supabase
                     .from('profiles')
-                    .select('id')
-                    .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
+                    .select('id, role, department, status')
+                    .eq('status', true);
+
+                const isITAdmin = (p) => {
+                    const role = String(p?.role || '').toLowerCase().trim();
+                    const dept = String(p?.department || '').toLowerCase().trim();
+                    const isMaintArea = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+                    const adminRoles = ['admin', 'jefe_it', 'jefe_area_it'];
+                    return adminRoles.includes(role) && !isMaintArea;
+                };
 
                 const recipients = (admins || [])
+                    .filter((a) => isITAdmin(a))
                     .map((a) => a?.id)
                     .filter(Boolean)
                     .filter((id) => id !== data.reported_by);
