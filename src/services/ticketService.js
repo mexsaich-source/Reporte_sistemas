@@ -125,6 +125,22 @@ export const ticketService = {
                         )
                     )
                 );
+
+                // Refuerzo omnicanal: evento dedicado para asegurar Telegram a TODOS los admins IT.
+                // Regla de negocio: tickets del modulo general se enrutan a IT (excepto flujo de mantenimiento aparte).
+                try {
+                    await supabase.functions.invoke('notify-omnicanal', {
+                        body: {
+                            event: 'NEW_TICKET_CREATED',
+                            ticket_id: data.id,
+                            area: 'IT',
+                            title: data.title || `Ticket #${data.id}`,
+                            reporter_id: data.reported_by || null,
+                        }
+                    });
+                } catch (omniErr) {
+                    console.warn('Omnicanal NEW_TICKET_CREATED failed:', omniErr?.message || omniErr);
+                }
             }
 
             return data;
