@@ -1,9 +1,9 @@
 import React from 'react';
-import { X, Clock, MessageSquare, Send, Printer, ImagePlus, Loader2 } from 'lucide-react';
+import { X, Clock, MessageSquare, Send, Printer, ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import { TicketStatusBadge } from './TicketsModule';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
-import { uploadTicketChatImage } from '../services/ticketChatStorage';
+import { uploadTicketChatImage, deleteTicketChatFileByUrl } from '../services/ticketChatStorage';
 import { workNotificationService } from '../services/workNotificationService';
 
 const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateTicket }) => {
@@ -15,6 +15,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     const [newMessage, setNewMessage] = React.useState('');
     const [isSending, setIsSending] = React.useState(false);
     const [uploadingImage, setUploadingImage] = React.useState(false);
+    const [deletingAttachmentId, setDeletingAttachmentId] = React.useState(null);
     const messagesEndRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
 
@@ -236,6 +237,43 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             alert(err.message || 'Error al subir la imagen. Revisa el bucket Storage y políticas RLS.');
         } finally {
             setUploadingImage(false);
+        }
+    };
+
+    const handleDeleteAttachment = async (msg) => {
+        if (!isAdmin || !msg?.attachment_url || !ticketId) return;
+        const ok = window.confirm('¿Eliminar este adjunto del chat? Esta acción no se puede deshacer.');
+        if (!ok) return;
+
+        setDeletingAttachmentId(msg.id);
+        try {
+            await deleteTicketChatFileByUrl(ticketId, msg.attachment_url);
+
+            const previous = String(msg.message || '').trim();
+            const nextMessage = previous && previous !== '(Imagen adjunta)'
+                ? previous
+                : 'Adjunto eliminado por administrador.';
+
+            const { error } = await supabase
+                .from('ticket_messages')
+                .update({
+                    attachment_url: null,
+                    message: nextMessage,
+                })
+                .eq('id', msg.id);
+
+            if (error) throw error;
+
+            setMessages((prev) => prev.map((m) => (
+                m.id === msg.id
+                    ? { ...m, attachment_url: null, message: nextMessage }
+                    : m
+            )));
+        } catch (err) {
+            console.error('Error deleting attachment:', err);
+            alert('No se pudo eliminar el adjunto. Revisa permisos de Storage y RLS de ticket_messages.');
+        } finally {
+            setDeletingAttachmentId(null);
         }
     };
 
@@ -546,9 +584,22 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                         return (
                                             <div key={msg.id} className="bg-blue-600 text-white border border-blue-500 p-4 rounded-2xl shadow-sm rounded-tr-none ml-8 relative before:absolute before:content-[''] before:right-[-6px] before:top-4 before:w-3 before:h-3 before:bg-blue-600 before:border-r before:border-t before:border-blue-500 before:rotate-45 transition-colors">
                                                 {msg.attachment_url && (
-                                                    <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="block mb-2">
-                                                        <img src={msg.attachment_url} alt="" className="rounded-xl max-h-52 max-w-full object-contain border border-white/20 bg-black/10" />
-                                                    </a>
+                                                    <div className="relative mb-2">
+                                                        <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="block">
+                                                            <img src={msg.attachment_url} alt="" className="rounded-xl max-h-52 max-w-full object-contain border border-white/20 bg-black/10" />
+                                                        </a>
+                                                        {isAdmin && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteAttachment(msg)}
+                                                                disabled={deletingAttachmentId === msg.id}
+                                                                className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-600/90 hover:bg-red-700 text-white disabled:opacity-50"
+                                                                title="Eliminar adjunto"
+                                                            >
+                                                                {deletingAttachmentId === msg.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 )}
                                                 <p className="text-white text-sm whitespace-pre-wrap">{msg.message}</p>
                                                 <span className="text-[10px] text-blue-200 font-bold mt-2 block w-full text-right">{time} - Tú</span>
@@ -558,9 +609,22 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                         return (
                                             <div key={msg.id} className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl shadow-sm rounded-tl-none mr-8 relative before:absolute before:content-[''] before:left-[-6px] before:top-4 before:w-3 before:h-3 before:bg-slate-100 dark:before:bg-slate-800 before:border-l before:border-b before:border-slate-200 dark:before:border-slate-700 before:rotate-45 transition-colors">
                                                 {msg.attachment_url && (
-                                                    <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="block mb-2">
-                                                        <img src={msg.attachment_url} alt="" className="rounded-xl max-h-52 max-w-full object-contain border border-slate-200/80 dark:border-slate-600 bg-white/50 dark:bg-black/20" />
-                                                    </a>
+                                                    <div className="relative mb-2">
+                                                        <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" className="block">
+                                                            <img src={msg.attachment_url} alt="" className="rounded-xl max-h-52 max-w-full object-contain border border-slate-200/80 dark:border-slate-600 bg-white/50 dark:bg-black/20" />
+                                                        </a>
+                                                        {isAdmin && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteAttachment(msg)}
+                                                                disabled={deletingAttachmentId === msg.id}
+                                                                className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-600/90 hover:bg-red-700 text-white disabled:opacity-50"
+                                                                title="Eliminar adjunto"
+                                                            >
+                                                                {deletingAttachmentId === msg.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 )}
                                                 <p className="text-slate-800 dark:text-slate-200 text-sm whitespace-pre-wrap">{msg.message}</p>
                                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-2 block w-full">{time} - {senderName}</span>

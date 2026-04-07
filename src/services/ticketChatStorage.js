@@ -43,4 +43,30 @@ export async function deleteAllTicketChatFiles(ticketId) {
     return true;
 }
 
+function extractStoragePathFromPublicUrl(fileUrl) {
+    const raw = String(fileUrl || '').trim();
+    if (!raw) return null;
+    const marker = `/object/public/${BUCKET}/`;
+    const idx = raw.indexOf(marker);
+    if (idx === -1) return null;
+    const path = raw.slice(idx + marker.length).split('?')[0];
+    if (!path) return null;
+    try {
+        return decodeURIComponent(path);
+    } catch {
+        return path;
+    }
+}
+
+export async function deleteTicketChatFileByUrl(ticketId, fileUrl) {
+    const path = extractStoragePathFromPublicUrl(fileUrl);
+    if (!path) return false;
+
+    const prefix = `${String(ticketId || '').trim()}/`;
+    if (prefix !== '/' && !path.startsWith(prefix)) return false;
+
+    const { error } = await supabase.storage.from(BUCKET).remove([path]);
+    return !error;
+}
+
 export { BUCKET as TICKET_CHAT_BUCKET };
