@@ -1,6 +1,16 @@
 import { supabase, supabaseAdmin } from '../lib/supabaseClient';
 import { auditService } from './auditService';
 
+const isMaintenanceArea = (value = '') => {
+    const dep = String(value || '').trim().toLowerCase();
+    return dep.includes('mantenimiento') || dep.includes('ingenieria') || dep.includes('ingeniería');
+};
+
+const isAllowedMaintDepartment = (value = '') => {
+    const dep = String(value || '').trim().toLowerCase();
+    return dep === 'mantenimiento' || dep === 'ingenieria' || dep === 'ingeniería';
+};
+
 export const userService = {
     async getAll() {
         try {
@@ -101,6 +111,19 @@ export const userService = {
 
     async assignAssetToUser(assetId, userId, actorId = null) {
         try {
+            if (actorId) {
+                const { data: actor } = await supabase
+                    .from('profiles')
+                    .select('department')
+                    .eq('id', actorId)
+                    .single();
+
+                if (isMaintenanceArea(actor?.department)) {
+                    console.warn('Bloqueado: mantenimiento no puede asignar equipos de inventario IT.');
+                    return false;
+                }
+            }
+
             const { error } = await supabase
                 .from('assets')
                 .update({ assigned_to: userId, status: 'active' })
@@ -123,6 +146,19 @@ export const userService = {
 
     async unassignAssetFromUser(assetId, actorId = null) {
         try {
+            if (actorId) {
+                const { data: actor } = await supabase
+                    .from('profiles')
+                    .select('department')
+                    .eq('id', actorId)
+                    .single();
+
+                if (isMaintenanceArea(actor?.department)) {
+                    console.warn('Bloqueado: mantenimiento no puede desasignar equipos de inventario IT.');
+                    return false;
+                }
+            }
+
             const { error } = await supabase
                 .from('assets')
                 .update({ assigned_to: null, status: 'available' })
@@ -178,8 +214,8 @@ export const userService = {
             // 2. Seguridad de Área: Si el actor es de Mantenimiento, forzamos el departamento
             let finalDept = department;
             const { data: actor } = await supabase.from('profiles').select('department').eq('id', actorId).single();
-            if (actor?.department === 'Mantenimiento') {
-                finalDept = 'Mantenimiento';
+            if (isMaintenanceArea(actor?.department)) {
+                finalDept = isAllowedMaintDepartment(department) ? department : 'Mantenimiento';
             }
 
             // 3. Actualizar la tabla profiles
@@ -387,8 +423,26 @@ export const userService = {
         }
     },
 
-    async register(email, password, fullName, role = 'user', department = 'General') {
+    async register(email, password, fullName, role = 'user', department = 'General', actorId = null) {
         try {
+            let finalRole = role;
+            let finalDepartment = department;
+
+            if (actorId) {
+                const { data: actor } = await supabase
+                    .from('profiles')
+                    .select('department')
+                    .eq('id', actorId)
+                    .single();
+
+                if (isMaintenanceArea(actor?.department)) {
+                    finalDepartment = isAllowedMaintDepartment(department) ? department : 'Mantenimiento';
+                    if (String(role || '').toLowerCase().trim() === 'admin') {
+                        finalRole = 'user';
+                    }
+                }
+            }
+
             // 1. Verificar si el perfil ya existe para evitar duplicados
             const { data: existingProfile } = await supabase
                 .from('profiles')
@@ -407,8 +461,8 @@ export const userService = {
                 options: {
                     data: {
                         full_name: fullName,
-                        role: role.toLowerCase(),
-                        department: department
+                        role: String(finalRole || 'user').toLowerCase(),
+                        department: finalDepartment
                     }
                 }
             });

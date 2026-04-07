@@ -4,6 +4,11 @@ import { userService } from '../services/userService';
 import { useAuth } from '../context/authStore';
 import StatCard from './StatCard';
 
+const isMaintenanceArea = (value = '') => {
+    const dep = String(value || '').trim().toLowerCase();
+    return dep.includes('mantenimiento') || dep.includes('ingenieria') || dep.includes('ingeniería');
+};
+
 // --- SUBCOMPONENTE: Status Badge ---
 const UserStatusBadge = ({ status }) => {
     const isActive = status === true;
@@ -41,8 +46,9 @@ const UserRoleBadge = ({ role }) => {
 const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus, onAssetsChanged }) => {
     const { profile } = useAuth();
     const isAdmin = profile?.role === 'admin';
-    const isMaint = profile?.department?.trim() === 'Mantenimiento';
-    const canEdit = isAdmin || (isMaint && user?.department === profile?.department);
+    const isMaint = isMaintenanceArea(profile?.department);
+    const canEdit = isAdmin || (isMaint && isMaintenanceArea(user?.department));
+    const canManageAssets = !isMaint;
     const [assignableAssets, setAssignableAssets] = useState([]);
     const [selectedAssetId, setSelectedAssetId] = useState('');
     const [loadingAssets, setLoadingAssets] = useState(false);
@@ -202,6 +208,8 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                     />
                                 </div>
 
+                                {canManageAssets && (
+                                <>
                                 <div className="space-y-1.5">
                                     <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Máquinas / Equipos Asignados</label>
                                     <textarea 
@@ -273,6 +281,8 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                         </div>
                                     )}
                                 </div>
+                                </>
+                                )}
 
                                 <div className="flex flex-col gap-2">
                                     <select 
@@ -290,11 +300,12 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
 
                                 <button 
                                     onClick={async () => {
+                                        const equipEl = document.getElementById(`equip_${user?.id}`);
                                         const profileData = {
                                             telegram_chat_id: document.getElementById(`telegram_${user?.id}`).value,
                                             department: document.getElementById(`dept_${user?.id}`).value,
                                             location: document.getElementById(`loc_${user?.id}`).value,
-                                            assigned_equipment: document.getElementById(`equip_${user?.id}`).value,
+                                            assigned_equipment: equipEl ? equipEl.value : (user?.assigned_equipment || ''),
                                             role: document.getElementById(`role_${user?.id}`).value
                                         };
                                         const success = await userService.updateAdminUserInfo(user.id, profileData, profile.id);
@@ -333,7 +344,7 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
 // --- SUBCOMPONENTE: Slider para Agregar Usuario ---
 const AddUserSlider = ({ isOpen, onClose, onSave }) => {
     const { profile } = useAuth();
-    const isMaint = profile?.department?.trim() === 'Mantenimiento';
+    const isMaint = isMaintenanceArea(profile?.department);
 
     const [formData, setFormData] = useState({
         full_name: '',
@@ -424,7 +435,11 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
                             >
                                 <option value="user">Usuario (Lectura)</option>
                                 <option value="tech">Técnico (Soporte)</option>
-                                <option value="admin">Administrador</option>
+                                {isMaint ? (
+                                    <option value="jefe_mantenimiento">Jefe de Área</option>
+                                ) : (
+                                    <option value="admin">Administrador</option>
+                                )}
                             </select>
                         </div>
                         <div className="space-y-2">
@@ -433,14 +448,22 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
                                 name="department"
                                 value={formData.department}
                                 onChange={handleChange}
-                                disabled={isMaint}
                                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 transition-all disabled:opacity-50"
                             >
-                                <option value="General">General</option>
-                                <option value="Sistemas">Sistemas</option>
-                                <option value="Recursos Humanos">RRHH</option>
-                                <option value="Finanzas">Finanzas</option>
-                                <option value="Mantenimiento">Mantenimiento</option>
+                                {isMaint ? (
+                                    <>
+                                        <option value="Mantenimiento">Mantenimiento</option>
+                                        <option value="Ingeniería">Ingeniería</option>
+                                    </>
+                                ) : (
+                                    <>
+                                        <option value="General">General</option>
+                                        <option value="Sistemas">Sistemas</option>
+                                        <option value="Recursos Humanos">RRHH</option>
+                                        <option value="Finanzas">Finanzas</option>
+                                        <option value="Mantenimiento">Mantenimiento</option>
+                                    </>
+                                )}
                             </select>
                         </div>
                     </div>
@@ -463,7 +486,7 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
 const UsersView = ({ searchTerm = '' }) => {
     const { profile } = useAuth();
     const role = (profile?.role || '').toLowerCase();
-    const isMaint = profile?.department?.trim() === 'Mantenimiento';
+    const isMaint = isMaintenanceArea(profile?.department);
     const canManageStatus = role === 'admin' || role === 'jefe_mantenimiento';
 
     const [selectedUser, setSelectedUser] = useState(null);
@@ -479,7 +502,7 @@ const UsersView = ({ searchTerm = '' }) => {
             
             // FILTRO DE ÁREA: Si es de mantenimiento, solo ve su área
             if (isMaint) {
-                data = data.filter(u => u.department === 'Mantenimiento');
+                data = data.filter(u => isMaintenanceArea(u.department));
             }
 
             setUsers(data);
@@ -519,7 +542,8 @@ const UsersView = ({ searchTerm = '' }) => {
             formData.password,
             formData.full_name,
             formData.role,
-            formData.department
+            formData.department,
+            profile?.id
         );
 
         if (result.success) {
@@ -698,16 +722,18 @@ const UsersView = ({ searchTerm = '' }) => {
                                                 <p className="text-[10px] text-slate-500 dark:text-slate-400 max-w-[180px] truncate" title={equipment.breakdown}>
                                                     {equipment.breakdown}
                                                 </p>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedUser(user);
-                                                    }}
-                                                    className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white"
-                                                >
-                                                    Asignar equipo
-                                                </button>
+                                                {!isMaint && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedUser(user);
+                                                        }}
+                                                        className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white"
+                                                    >
+                                                        Asignar equipo
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-4">
