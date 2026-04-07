@@ -6,6 +6,26 @@ import {
     Send, Laptop, Calendar, FileText, User as UserIcon, Tag, Building, Briefcase
 } from 'lucide-react';
 
+const normalize = (value = '') => value.toString().trim().toLowerCase();
+
+async function getITAdminRecipients() {
+    const { data } = await supabase
+        .from('profiles')
+        .select('id, role, department, status')
+        .eq('status', true);
+
+    return (data || [])
+        .filter((p) => {
+            const role = normalize(p.role);
+            const dept = normalize(p.department);
+            const isMaintArea = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+            const itAdminRoles = ['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'];
+            return itAdminRoles.includes(role) && !isMaintArea;
+        })
+        .map((p) => p.id)
+        .filter(Boolean);
+}
+
 const GeneralRequestForm = ({ onCancel, onSuccess }) => {
     const { user, profile } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,22 +83,16 @@ const GeneralRequestForm = ({ onCancel, onSuccess }) => {
             // Notificación best-effort para admin/tech
             try {
                 const actorName = profile?.full_name || user?.email || 'Un usuario';
-                const { data: recipients } = await supabase
-                    .from('profiles')
-                    .select('id')
-                    .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
+                const recipients = await getITAdminRecipients();
 
                 const title = 'Nueva solicitud de equipo';
                 const message = `${actorName} envió una solicitud: "${formData.subject || 'Solicitud'}".`;
 
-                if (recipients?.length) {
+                if (recipients.length) {
                     await Promise.all(
-                        recipients
-                            .map(r => r?.id)
-                            .filter(Boolean)
-                            .map((recipientId) =>
-                                workNotificationService.createNotification(recipientId, title, message)
-                            )
+                        recipients.map((recipientId) =>
+                            workNotificationService.createNotification(recipientId, title, message)
+                        )
                     );
                 }
             } catch (notifyErr) {

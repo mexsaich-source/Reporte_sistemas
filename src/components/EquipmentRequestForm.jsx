@@ -10,6 +10,26 @@ import {
 } from 'lucide-react';
 import Header from './Header';
 
+const normalize = (value = '') => value.toString().trim().toLowerCase();
+
+async function getITAdminRecipients() {
+    const { data } = await supabase
+        .from('profiles')
+        .select('id, role, department, status')
+        .eq('status', true);
+
+    return (data || [])
+        .filter((p) => {
+            const role = normalize(p.role);
+            const dept = normalize(p.department);
+            const isMaintArea = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+            const itAdminRoles = ['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'];
+            return itAdminRoles.includes(role) && !isMaintArea;
+        })
+        .map((p) => p.id)
+        .filter(Boolean);
+}
+
 const EquipmentRequestForm = ({ onCancel, onSuccess }) => {
     const { user, profile } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,15 +56,12 @@ const EquipmentRequestForm = ({ onCancel, onSuccess }) => {
 
             if (error) throw error;
 
-            const { data: admins } = await supabase
-                .from('profiles')
-                .select('id')
-                .or('role.ilike.admin,role.ilike.tech,role.ilike.técnico,role.ilike.tecnico,role.ilike.jefe_mantenimiento');
+            const admins = await getITAdminRecipients();
 
             const title = 'Nueva solicitud de equipo';
             const message = `${profile?.full_name || user.email || 'Usuario'} solicitó: ${formData.equipment_type}. Revisa Solicitudes → Equipo.`;
-            for (const a of admins || []) {
-                await workNotificationService.createNotification(a.id, title, message);
+            for (const adminId of admins) {
+                await workNotificationService.createNotification(adminId, title, message);
             }
 
             onSuccess();

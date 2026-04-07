@@ -23,6 +23,24 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     const isClosed = ticket?.status === 'resolved' || ticket?.status === 'closed';
     const isAdmin = profile?.role === 'admin';
 
+    const getITAdminRecipients = React.useCallback(async () => {
+        const { data } = await supabase
+            .from('profiles')
+            .select('id, role, department, status')
+            .eq('status', true);
+
+        return (data || [])
+            .filter((p) => {
+                const role = String(p?.role || '').toLowerCase().trim();
+                const dept = String(p?.department || '').toLowerCase().trim();
+                const isMaintArea = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+                const itAdminRoles = ['admin', 'jefe_it', 'jefe_area_it', 'jefe area it'];
+                return itAdminRoles.includes(role) && !isMaintArea;
+            })
+            .map((p) => p.id)
+            .filter(Boolean);
+    }, []);
+
     const toLocalDatetimeInput = (iso) => {
         if (!iso) return '';
         const d = new Date(iso);
@@ -173,13 +191,20 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             const { data: ticketData } = await supabase.from('tickets').select('reported_by, assigned_tech').eq('id', ticketId).single();
             if (ticketData) {
                 const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
-                if (recipientId) {
-                    await workNotificationService.createNotification(
-                        recipientId,
-                        `Nuevo mensaje en Ticket #${ticketId}`,
-                        `${profile?.full_name || 'Alguien'} te ha enviado un mensaje.`
-                    );
-                }
+                const itAdmins = await getITAdminRecipients();
+                const recipients = new Set([...(itAdmins || [])]);
+                if (recipientId) recipients.add(recipientId);
+                recipients.delete(user.id);
+
+                await Promise.all(
+                    [...recipients].map((recipient) =>
+                        workNotificationService.createNotification(
+                            recipient,
+                            `Nuevo mensaje en Ticket #${ticketId}`,
+                            `${profile?.full_name || 'Alguien'} te ha enviado un mensaje.`
+                        )
+                    )
+                );
             }
         } catch (error) {
             console.error('Error sending message:', error);
@@ -224,13 +249,20 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             const { data: ticketData } = await supabase.from('tickets').select('reported_by, assigned_tech').eq('id', ticketId).single();
             if (ticketData) {
                 const recipientId = user.id === ticketData.reported_by ? ticketData.assigned_tech : ticketData.reported_by;
-                if (recipientId) {
-                    await workNotificationService.createNotification(
-                        recipientId,
-                        `Nuevo adjunto en Ticket #${ticketId}`,
-                        `${profile?.full_name || 'Alguien'} compartió una imagen en el chat.`
-                    );
-                }
+                const itAdmins = await getITAdminRecipients();
+                const recipients = new Set([...(itAdmins || [])]);
+                if (recipientId) recipients.add(recipientId);
+                recipients.delete(user.id);
+
+                await Promise.all(
+                    [...recipients].map((recipient) =>
+                        workNotificationService.createNotification(
+                            recipient,
+                            `Nuevo adjunto en Ticket #${ticketId}`,
+                            `${profile?.full_name || 'Alguien'} compartió una imagen en el chat.`
+                        )
+                    )
+                );
             }
         } catch (err) {
             console.error(err);
