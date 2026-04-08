@@ -102,6 +102,12 @@ const ImportModule = () => {
 
     const recalcErrors = (row) => {
         if (row._entityType === 'user') return importService.getUserErrors(row);
+        if (row._entityType === 'both') {
+            return [
+                ...importService.getUserErrors(row),
+                ...importService.getInventoryErrors(row),
+            ];
+        }
         if (row._entityType === 'inventory') return importService.getInventoryErrors(row);
         return row._errors || [];
     };
@@ -288,6 +294,14 @@ const ImportModule = () => {
                                             <span className="text-[10px] font-black text-slate-400 uppercase block tracking-tighter">Actualizados</span>
                                             <span className="text-lg font-black text-slate-900">{importStatus.updateCount}</span>
                                         </div>
+                                        <div className="bg-white p-3 rounded-2xl border border-amber-500/10">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase block tracking-tighter">Duplicados omitidos</span>
+                                            <span className="text-lg font-black text-amber-600">{importStatus.duplicateCount || 0}</span>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-2xl border border-rose-500/10">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase block tracking-tighter">Errores</span>
+                                            <span className="text-lg font-black text-rose-600">{importStatus.errorCount || 0}</span>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -449,12 +463,12 @@ const ImportModule = () => {
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-3 bg-slate-50/50 border-y">
-                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${row._entityType === 'user' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : row._entityType === 'inventory' ? 'bg-cyan-50 text-cyan-700 border border-cyan-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                                                                {row._entityType === 'user' ? 'Usuario' : row._entityType === 'inventory' ? 'Inventario' : 'Sin tipo'}
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${row._entityType === 'user' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : row._entityType === 'inventory' ? 'bg-cyan-50 text-cyan-700 border border-cyan-100' : row._entityType === 'both' ? 'bg-violet-50 text-violet-700 border border-violet-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                                                {row._entityType === 'user' ? 'Usuario' : row._entityType === 'inventory' ? 'Inventario' : row._entityType === 'both' ? 'Mixto' : 'Sin tipo'}
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3 bg-slate-50/50 border-y">
-                                                            {row._entityType === 'user' ? (
+                                                            {row._entityType === 'user' || row._entityType === 'both' ? (
                                                                 <input
                                                                     type="text"
                                                                     value={row.email || ''}
@@ -473,7 +487,7 @@ const ImportModule = () => {
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-3 bg-slate-50/50 border-y">
-                                                            {row._entityType === 'user' ? (
+                                                            {row._entityType === 'user' || row._entityType === 'both' ? (
                                                                 <div className="space-y-1">
                                                                     <input
                                                                         type="text"
@@ -511,7 +525,7 @@ const ImportModule = () => {
                                                         </td>
 
                                                         <td className="px-4 py-3 bg-slate-50/50 border-y">
-                                                            {row._entityType === 'inventory' ? (
+                                                            {row._entityType === 'inventory' || row._entityType === 'both' ? (
                                                                 <div className="space-y-1">
                                                                     <input
                                                                         type="text"

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabaseClient';
+import { userService } from './userService';
 
 const normalizeImportedDepartment = (rawValue = '') => {
     const raw = String(rawValue || '').trim();
@@ -62,8 +63,35 @@ const detectEntityType = (row) => {
 
     if (hasAssetSignal && !hasUserSignal) return 'inventory';
     if (hasUserSignal && !hasAssetSignal) return 'user';
-    if (hasAssetSignal && hasUserSignal) return (row.serial_number || row.asset_id) ? 'inventory' : 'user';
+    if (hasAssetSignal && hasUserSignal) return 'both';
     return 'unknown';
+};
+
+const parseUserStatusBoolean = (rawValue = '') => {
+    const value = String(rawValue || '').trim().toLowerCase();
+    if (!value) return null;
+    if (['true', '1', 'si', 'sí', 'activo', 'active', 'enabled', 'habilitado'].includes(value)) return true;
+    if (['false', '0', 'no', 'inactivo', 'inactive', 'disabled', 'suspendido'].includes(value)) return false;
+    return null;
+};
+
+const buildTempPassword = (email = '') => {
+    const seed = String(email || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6) || 'User';
+    return `${seed}#2026!`;
+};
+
+const findProfileByEmailWithRetry = async (email, maxAttempts = 5) => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const { data } = await supabase
+            .from('profiles')
+            .select('id, email')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (data?.id) return data;
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+    return null;
 };
 
 export const importService = {
@@ -170,11 +198,11 @@ export const importService = {
                 };
             }
 
-            if (entityType === 'user') {
+            if (entityType === 'user' || entityType === 'both') {
                 const duplicate = (existingUsers || []).find((u) => row.email && String(u.email || '').toLowerCase() === row.email.toLowerCase());
                 return {
                     ...row,
-                    _entityType: 'user',
+                    _entityType: entityType,
                     _status: duplicate ? 'duplicate' : 'new',
                     _existingId: duplicate ? duplicate.id : null,
                     _action: duplicate ? 'update' : 'create',
@@ -330,16 +358,23 @@ export const importService = {
             if (row._action === 'skip') { duplicateCount++; continue; }
 
             try {
-                if (type === 'users' || (type === 'mixed' && row._entityType === 'user')) {
+                const shouldProcessUser = type === 'users' || (type === 'mixed' && (row._entityType === 'user' || row._entityType === 'both'));
+                const shouldProcessInventory = type === 'inventory' || (type === 'mixed' && (row._entityType === 'inventory' || row._entityType === 'both'));
+
+                if (shouldProcessUser) {
                     const ALLOWED_IMPORT_ROLES = ['user', 'operativo', 'operador'];
                     const importedRole = (row.role || row.Rol || '').toString().toLowerCase().trim();
                     const safeRole = ALLOWED_IMPORT_ROLES.includes(importedRole) ? importedRole : 'user';
+                    const mappedStatus = parseUserStatusBoolean(row.status || row.Estado || '');
 
                     const payload = {
                         full_name: row.name || row.Name || row.Nombre,
                         email: row.email || row.Email,
                         department: normalizeImportedDepartment(row.department || row.Department || row.Departamento || 'General'),
                         role: safeRole,
+                        // Regla de negocio: usuarios creados por carga masiva quedan inactivos
+                        // hasta completar alta real de credenciales en Auth.
+                        status: row._action === 'create' ? false : (mappedStatus ?? undefined),
                         location:
                             row.location ||
                             row.Location ||
@@ -359,12 +394,47 @@ export const importService = {
                         if (error) throw error;
                         updateCount++;
                     } else {
-                        const { error } = await supabase.from('profiles').insert([payload]);
-                        if (error) throw error;
-                        newCount++;
-                    }
+                        const regResult = await userService.register(
+                            payload.email,
+                            buildTempPassword(payload.email),
+                            payload.full_name,
+                            payload.role,
+                            payload.department,
+                            adminId
+                        );
 
-                } else if (type === 'inventory' || (type === 'mixed' && row._entityType === 'inventory')) {
+                        if (!regResult.success) {
+                            throw new Error(regResult.error || `No se pudo registrar ${payload.email}`);
+                        }
+
+                        const createdProfile = await findProfileByEmailWithRetry(payload.email);
+                        if (!createdProfile?.id) {
+                            throw new Error(`El perfil de ${payload.email} no apareció tras el registro.`);
+                        }
+
+                        const { error: postCreateErr } = await supabase
+                            .from('profiles')
+                            .update({
+                                status: false,
+                                location: payload.location,
+                                assigned_equipment: payload.assigned_equipment,
+                            })
+                            .eq('id', createdProfile.id);
+
+                        if (postCreateErr) throw postCreateErr;
+                        newCount++;
+
+                        // Actualizar cache de usuarios para permitir asignaciones en filas siguientes del mismo archivo.
+                        if (payload.email) {
+                            const justCreated = await findProfileByEmailWithRetry(payload.email, 2);
+                            if (justCreated?.id && justCreated?.email) {
+                                allUsers.push({ id: justCreated.id, email: justCreated.email });
+                            }
+                        }
+                    }
+                }
+
+                if (shouldProcessInventory) {
                     const payload = this.buildInventoryPayload(row, allUsers, fileName);
 
                     if (row._action === 'update' && row._existingId) {
@@ -374,7 +444,9 @@ export const importService = {
                     } else {
                         inventoryCreates.push(payload);
                     }
-                } else if (type === 'mixed' && row._entityType === 'unknown') {
+                }
+
+                if (type === 'mixed' && row._entityType === 'unknown') {
                     errorCount++;
                 }
             } catch (err) {
