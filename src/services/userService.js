@@ -26,6 +26,13 @@ const buildTemporaryPassword = () => {
     return `Tmp_${Date.now()}_${random}!`;
 };
 
+const getAuthRedirectBase = () => {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+        return window.location.origin;
+    }
+    return 'https://it-helpdesk-mexsa.vercel.app';
+};
+
 export const userService = {
     async getAll() {
         try {
@@ -479,6 +486,7 @@ export const userService = {
             let finalRole = role;
             let finalDepartment = department;
             const finalPassword = String(password || '').trim() || buildTemporaryPassword();
+            const authBase = getAuthRedirectBase();
 
             if (actorId) {
                 const { data: actor } = await supabase
@@ -511,6 +519,7 @@ export const userService = {
                 email,
                 password: finalPassword,
                 options: {
+                    emailRedirectTo: `${authBase}/login`,
                     data: {
                         full_name: fullName,
                         role: String(finalRole || 'user').toLowerCase(),
@@ -537,7 +546,9 @@ export const userService = {
 
             let passwordSetupEmailSent = false;
             try {
-                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
+                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${authBase}/reset-password`
+                });
                 if (!resetError) {
                     passwordSetupEmailSent = true;
                 } else {

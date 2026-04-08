@@ -188,9 +188,16 @@ export default function AuthProvider({ children }) {
     const login = (email, password) => supabase.auth.signInWithPassword({ email, password });
 
     const register = (email, password, fullName, role = 'user') => {
+        const authBase = (typeof window !== 'undefined' && window.location?.origin)
+            ? window.location.origin
+            : 'https://it-helpdesk-mexsa.vercel.app';
+
         return supabase.auth.signUp({
             email, password,
-            options: { data: { full_name: fullName, role: role, department: 'General' } }
+            options: {
+                emailRedirectTo: `${authBase}/login`,
+                data: { full_name: fullName, role: role, department: 'General' }
+            }
         });
     };
 
