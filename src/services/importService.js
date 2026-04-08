@@ -20,6 +20,52 @@ const normalizeImportedDepartment = (rawValue = '') => {
     return raw;
 };
 
+const norm = (v) => String(v ?? '').trim();
+
+const getValueByKeys = (row, keys = []) => {
+    const map = Object.entries(row || {}).reduce((acc, [k, v]) => {
+        acc[String(k).toLowerCase().trim()] = v;
+        return acc;
+    }, {});
+    for (const key of keys) {
+        const value = map[String(key).toLowerCase().trim()];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return '';
+};
+
+const normalizeInputRow = (row = {}) => ({
+    employee_id: norm(getValueByKeys(row, ['employee_id', 'team_member', 'team member', 'numero team member', 'número team member', 'id_empleado'])),
+    name: norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name'])),
+    email: norm(getValueByKeys(row, ['email', 'correo', 'mail'])).toLowerCase(),
+    department: normalizeImportedDepartment(getValueByKeys(row, ['department', 'departamento', 'area', 'área'])),
+    position: norm(getValueByKeys(row, ['position', 'puesto', 'cargo'])),
+    location: norm(getValueByKeys(row, ['location', 'localizacion', 'localización', 'ubicacion', 'ubicación', 'ubicación física', 'localización física'])),
+    assigned_equipment: norm(getValueByKeys(row, ['assigned_equipment', 'equipos', 'equipos asignados'])),
+    status: norm(getValueByKeys(row, ['status', 'estado'])) || 'active',
+    role: norm(getValueByKeys(row, ['role', 'rol'])) || 'user',
+
+    asset_id: norm(getValueByKeys(row, ['asset_id', 'id_activo', 'id', 'asset id'])),
+    asset_type: norm(getValueByKeys(row, ['asset_type', 'tipo', 'type'])),
+    brand: norm(getValueByKeys(row, ['brand', 'marca'])),
+    model: norm(getValueByKeys(row, ['model', 'modelo'])),
+    serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie'])),
+    inventory_tag: norm(getValueByKeys(row, ['inventory_tag', 'placa', 'tag', 'etiqueta inventario'])),
+    hostname: norm(getValueByKeys(row, ['hostname', 'host'])),
+    purchase_date: norm(getValueByKeys(row, ['purchase_date', 'fecha compra', 'fecha de compra'])),
+    assigned_to_email: norm(getValueByKeys(row, ['assigned_to_email', 'correo asignado (opcional)', 'asignado_a', 'asignado a'])).toLowerCase(),
+});
+
+const detectEntityType = (row) => {
+    const hasUserSignal = Boolean(row.email || row.name || row.employee_id || row.position);
+    const hasAssetSignal = Boolean(row.serial_number || row.asset_id || row.asset_type || row.brand || row.model || row.inventory_tag || row.hostname);
+
+    if (hasAssetSignal && !hasUserSignal) return 'inventory';
+    if (hasUserSignal && !hasAssetSignal) return 'user';
+    if (hasAssetSignal && hasUserSignal) return (row.serial_number || row.asset_id) ? 'inventory' : 'user';
+    return 'unknown';
+};
+
 export const importService = {
     /**
      * Parse Excel file into JSON
@@ -87,6 +133,75 @@ export const importService = {
         });
     },
 
+    async previewMixed(data) {
+        const [{ data: existingUsers }, { data: existingAssets }] = await Promise.all([
+            supabase.from('profiles').select('id, email, full_name, department'),
+            supabase.from('assets').select('id, specs'),
+        ]);
+
+        const normalizedRows = data.map((raw) => normalizeInputRow(raw));
+
+        const emailsToMatch = [...new Set(normalizedRows
+            .flatMap((r) => [r.email, r.assigned_to_email])
+            .filter(Boolean)
+            .map((e) => e.toLowerCase()))];
+
+        let usersMap = {};
+        if (emailsToMatch.length > 0) {
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, email, full_name')
+                .in('email', emailsToMatch);
+            (profiles || []).forEach((p) => {
+                usersMap[String(p.email || '').toLowerCase()] = { id: p.id, name: p.full_name };
+            });
+        }
+
+        return normalizedRows.map((row) => {
+            const entityType = detectEntityType(row);
+            if (entityType === 'unknown') {
+                return {
+                    ...row,
+                    _entityType: 'unknown',
+                    _status: 'new',
+                    _existingId: null,
+                    _action: 'skip',
+                    _errors: ['No se detectó si la fila es usuario o inventario. Completa email/nombre o serial/modelo en vista previa.'],
+                };
+            }
+
+            if (entityType === 'user') {
+                const duplicate = (existingUsers || []).find((u) => row.email && String(u.email || '').toLowerCase() === row.email.toLowerCase());
+                return {
+                    ...row,
+                    _entityType: 'user',
+                    _status: duplicate ? 'duplicate' : 'new',
+                    _existingId: duplicate ? duplicate.id : null,
+                    _action: duplicate ? 'update' : 'create',
+                    _errors: this.getUserErrors(row),
+                };
+            }
+
+            const duplicate = (existingAssets || []).find((a) =>
+                (row.asset_id && String(a.id) === row.asset_id) ||
+                (row.serial_number && a.specs?.serial_number === row.serial_number)
+            );
+
+            const matched = row.assigned_to_email ? usersMap[row.assigned_to_email] : null;
+            return {
+                ...row,
+                _entityType: 'inventory',
+                _status: duplicate ? 'duplicate' : 'new',
+                _existingId: duplicate ? duplicate.id : null,
+                _action: duplicate ? 'update' : 'create',
+                _errors: this.getInventoryErrors(row),
+                _assignee_email: row.assigned_to_email || null,
+                _assignee_name: matched ? matched.name : null,
+                assigned_to: matched ? matched.id : null,
+            };
+        });
+    },
+
     getUserErrors(row) {
         const errors = [];
         if (!row.email && !row.Email) errors.push('Falta el correo (email)');
@@ -143,10 +258,8 @@ export const importService = {
 
     getInventoryErrors(row) {
         const errors = [];
-        if (!row.asset_type && !row.Type && !row.Tipo) errors.push('Falta Tipo de Equipo (asset_type)');
-        if (!row.model && !row.Model) errors.push('Falta Modelo (model)');
-        if (!row.brand && !row.Marca && !row.marca) errors.push('Falta Marca (brand)');
-        if (!row.serial_number && !row.Serial && !row.Serie) errors.push('Falta Número de Serie');
+        if (!row.serial_number && !row.Serial && !row.Serie && !row.asset_id) errors.push('Falta Número de Serie o ID de activo');
+        if (!row.asset_type && !row.Type && !row.Tipo && !row.model && !row.Model) errors.push('Falta Tipo o Modelo de equipo');
         return errors;
     },
 
@@ -206,7 +319,7 @@ export const importService = {
         let newCount = 0, updateCount = 0, errorCount = 0, duplicateCount = 0;
 
         let allUsers = [];
-        if (type === 'inventory') {
+        if (type === 'inventory' || type === 'mixed') {
             const { data: usersData } = await supabase.from('profiles').select('id, email');
             allUsers = usersData || [];
         }
@@ -217,7 +330,7 @@ export const importService = {
             if (row._action === 'skip') { duplicateCount++; continue; }
 
             try {
-                if (type === 'users') {
+                if (type === 'users' || (type === 'mixed' && row._entityType === 'user')) {
                     const ALLOWED_IMPORT_ROLES = ['user', 'operativo', 'operador'];
                     const importedRole = (row.role || row.Rol || '').toString().toLowerCase().trim();
                     const safeRole = ALLOWED_IMPORT_ROLES.includes(importedRole) ? importedRole : 'user';
@@ -251,7 +364,7 @@ export const importService = {
                         newCount++;
                     }
 
-                } else if (type === 'inventory') {
+                } else if (type === 'inventory' || (type === 'mixed' && row._entityType === 'inventory')) {
                     const payload = this.buildInventoryPayload(row, allUsers, fileName);
 
                     if (row._action === 'update' && row._existingId) {
@@ -261,6 +374,8 @@ export const importService = {
                     } else {
                         inventoryCreates.push(payload);
                     }
+                } else if (type === 'mixed' && row._entityType === 'unknown') {
+                    errorCount++;
                 }
             } catch (err) {
                 console.error(`Error importing row:`, err);

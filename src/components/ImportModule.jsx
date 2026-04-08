@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 const ImportModule = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('import');
-    const [importType, setImportType] = useState('inventory');
+    const [importType, setImportType] = useState('mixed');
     const [file, setFile] = useState(null);
     const [previewData, setPreviewData] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -48,20 +48,11 @@ const ImportModule = () => {
         try {
             const data = await importService.parseExcel(selectedFile);
 
-            const validation = importType === 'users'
-                ? importService.validateUserColumns(data)
-                : importService.validateInventoryColumns(data);
-
-            if (!validation.valid) {
-                alert(`Error en columnas: faltan ${validation.missing.join(', ')}`);
-                setLoading(false);
-                setFile(null);
-                return;
-            }
-
             const preview = importType === 'users'
                 ? await importService.previewUsers(data)
-                : await importService.previewInventory(data);
+                : importType === 'inventory'
+                    ? await importService.previewInventory(data)
+                    : await importService.previewMixed(data);
 
             setPreviewData(preview);
         } catch (err) {
@@ -109,6 +100,25 @@ const ImportModule = () => {
         clearFile();
     };
 
+    const recalcErrors = (row) => {
+        if (row._entityType === 'user') return importService.getUserErrors(row);
+        if (row._entityType === 'inventory') return importService.getInventoryErrors(row);
+        return row._errors || [];
+    };
+
+    const handleEditPreviewCell = (index, field, value) => {
+        setPreviewData((prev) => {
+            const next = [...prev];
+            const row = { ...next[index], [field]: value };
+            if (field === 'assigned_to_email') {
+                row._assignee_email = String(value || '').trim().toLowerCase();
+            }
+            row._errors = recalcErrors(row);
+            next[index] = row;
+            return next;
+        });
+    };
+
     const handleToggleAction = (index) => {
         const newData = [...previewData];
         const row = newData[index];
@@ -119,7 +129,7 @@ const ImportModule = () => {
     };
 
     const assigneeSummary = useMemo(() => {
-        if (importType !== 'inventory' || !previewData.length) return [];
+        if (!previewData.length) return [];
         return importService.summarizeInventoryAssignees(previewData);
     }, [importType, previewData]);
 
@@ -216,10 +226,9 @@ const ImportModule = () => {
                                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">1. Configuración de Carga</h4>
                                 <div className="space-y-4">
                                     <label className="block">
-                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">¿Qué deseas importar?</span>
-                                        <div className="mt-2 grid grid-cols-2 gap-2">
-                                            <button onClick={() => handleTypeChange('inventory')} className={`py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${importType === 'inventory' ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-white'}`}>Inventario</button>
-                                            <button onClick={() => handleTypeChange('users')} className={`py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${importType === 'users' ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-white'}`}>Usuarios</button>
+                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-1">Importación mixta automática</span>
+                                        <div className="mt-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-700">
+                                            Puedes mezclar filas de usuarios e inventario en un solo archivo. Si falta algo, corrígelo en la vista previa.
                                         </div>
                                     </label>
 
@@ -420,10 +429,10 @@ const ImportModule = () => {
                                             <thead>
                                                 <tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                                                     <th className="px-4 py-2">Estado</th>
+                                                    <th className="px-4 py-2">Tipo</th>
                                                     <th className="px-4 py-2">Identificador</th>
                                                     <th className="px-4 py-2">Info Principal</th>
-                                                    {/* NUEVO: Columna de asignación para inventario */}
-                                                    {importType === 'inventory' && <th className="px-4 py-2">Asignado A</th>}
+                                                    <th className="px-4 py-2">Asignado / Área</th>
                                                     <th className="px-4 py-2 text-right">Acción</th>
                                                 </tr>
                                             </thead>
@@ -439,25 +448,100 @@ const ImportModule = () => {
                                                                 <div className="flex items-center gap-2 text-emerald-500 font-bold text-xs uppercase"><CheckCircle2 size={14} /> Nuevo</div>
                                                             )}
                                                         </td>
-                                                        <td className="px-4 py-3 bg-slate-50/50 border-y"><span className="font-black text-slate-900">{importType === 'users' ? (row.email || row.Email) : (row.serial_number || row.Serial || row.Serie || row.asset_id || row.Asset_ID)}</span></td>
-                                                        <td className="px-4 py-3 bg-slate-50/50 border-y"><span className="text-slate-600 font-medium truncate block max-w-[200px]">{importType === 'users' ? (row.name || row.Name || row.full_name) : (row.asset_type || row.type || row.model)}</span></td>
+                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${row._entityType === 'user' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : row._entityType === 'inventory' ? 'bg-cyan-50 text-cyan-700 border border-cyan-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                                                {row._entityType === 'user' ? 'Usuario' : row._entityType === 'inventory' ? 'Inventario' : 'Sin tipo'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
+                                                            {row._entityType === 'user' ? (
+                                                                <input
+                                                                    type="text"
+                                                                    value={row.email || ''}
+                                                                    onChange={(e) => handleEditPreviewCell(index, 'email', e.target.value)}
+                                                                    placeholder="email"
+                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                />
+                                                            ) : (
+                                                                <input
+                                                                    type="text"
+                                                                    value={row.serial_number || row.asset_id || ''}
+                                                                    onChange={(e) => handleEditPreviewCell(index, 'serial_number', e.target.value)}
+                                                                    placeholder="serie o id activo"
+                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                />
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
+                                                            {row._entityType === 'user' ? (
+                                                                <div className="space-y-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={row.name || ''}
+                                                                        onChange={(e) => handleEditPreviewCell(index, 'name', e.target.value)}
+                                                                        placeholder="nombre"
+                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        value={row.department || ''}
+                                                                        onChange={(e) => handleEditPreviewCell(index, 'department', e.target.value)}
+                                                                        placeholder="departamento"
+                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="space-y-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={row.asset_type || ''}
+                                                                        onChange={(e) => handleEditPreviewCell(index, 'asset_type', e.target.value)}
+                                                                        placeholder="tipo"
+                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        value={row.model || ''}
+                                                                        onChange={(e) => handleEditPreviewCell(index, 'model', e.target.value)}
+                                                                        placeholder="modelo"
+                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </td>
 
-                                                        {/* NUEVO: Render de la columna de asignación */}
-                                                        {importType === 'inventory' && (
-                                                            <td className="px-4 py-3 bg-slate-50/50 border-y">
-                                                                {row.assigned_to ? (
-                                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">
-                                                                        <User size={12} /> {row._assignee_name}
-                                                                    </span>
-                                                                ) : row._assignee_email ? (
-                                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold" title="El correo no existe en la BD">
-                                                                        <AlertTriangle size={12} /> No encontrado
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-[10px] text-slate-400 font-bold">Bodega / Libre</span>
-                                                                )}
-                                                            </td>
-                                                        )}
+                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
+                                                            {row._entityType === 'inventory' ? (
+                                                                <div className="space-y-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={row.assigned_to_email || row._assignee_email || ''}
+                                                                        onChange={(e) => handleEditPreviewCell(index, 'assigned_to_email', e.target.value)}
+                                                                        placeholder="correo asignado opcional"
+                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                    />
+                                                                    {row.assigned_to ? (
+                                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">
+                                                                            <User size={12} /> {row._assignee_name}
+                                                                        </span>
+                                                                    ) : row._assignee_email ? (
+                                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold" title="El correo no existe en la BD">
+                                                                            <AlertTriangle size={12} /> No encontrado
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-[10px] text-slate-400 font-bold">Bodega / Libre</span>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <input
+                                                                    type="text"
+                                                                    value={row.role || 'user'}
+                                                                    onChange={(e) => handleEditPreviewCell(index, 'role', e.target.value)}
+                                                                    placeholder="rol"
+                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                />
+                                                            )}
+                                                        </td>
 
                                                         <td className="px-4 py-3 bg-slate-50/50 rounded-r-2xl border-y border-r text-right">
                                                             {row._errors.length > 0 ? (
