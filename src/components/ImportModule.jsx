@@ -1,16 +1,14 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
     Upload, FileSpreadsheet, CheckCircle2, AlertTriangle,
-    XCircle, Info, Download, Trash2, ArrowRight, Save, Clock, History, X, User
+    XCircle, Info, Download, Trash2, ArrowRight, Save, Clock, X, User
 } from 'lucide-react';
 import { importService } from '../services/importService';
 import { useAuth } from '../context/authStore';
-import ImportLogsView from './ImportLogsView';
 import * as XLSX from 'xlsx';
 
 const ImportModule = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState('import');
     const [importType, setImportType] = useState('mixed');
     const [file, setFile] = useState(null);
     const [previewData, setPreviewData] = useState([]);
@@ -205,18 +203,9 @@ const ImportModule = () => {
                     <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Carga Masiva de Datos</h2>
                     <p className="text-slate-500 dark:text-slate-400 font-medium">Sincroniza inventario y personal mediante archivos Excel.</p>
                 </div>
-                <div className="flex gap-4 bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200/50 dark:border-slate-800">
-                    <button onClick={() => setActiveTab('import')} className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'import' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>Nueva Carga</button>
-                    <button onClick={() => setActiveTab('logs')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'logs' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                        <History size={14} /> Historial
-                    </button>
-                </div>
             </div>
 
-            {activeTab === 'logs' ? (
-                <ImportLogsView />
-            ) : (
-                <>
+            <>
                     <div className="flex justify-end gap-3 mb-2">
                         <button onClick={() => downloadTemplate('users')} className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-600 border px-5 py-3 rounded-2xl text-sm font-bold shadow-sm group">
                             <Download size={18} className="group-hover:translate-y-0.5 transition-transform" /> Plantilla Usuarios
@@ -279,26 +268,26 @@ const ImportModule = () => {
                             </div>
 
                             {importStatus && (
-                                <div className="bg-emerald-50 border border-emerald-100 rounded-[2rem] p-6 animate-in zoom-in-95 relative">
+                                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-[2rem] p-6 animate-in zoom-in-95 relative">
                                     <button onClick={() => setImportStatus(null)} className="absolute top-4 right-4 text-emerald-600 hover:text-emerald-800"><X size={16} /></button>
                                     <div className="flex items-center gap-3 mb-4">
                                         <div className="bg-emerald-500 p-2 rounded-xl text-white"><CheckCircle2 size={20} /></div>
-                                        <h5 className="font-black text-emerald-900 text-sm uppercase tracking-widest">Importación Finalizada</h5>
+                                        <h5 className="font-black text-emerald-900 dark:text-emerald-300 text-sm uppercase tracking-widest">Importación Finalizada</h5>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <div className="bg-white p-3 rounded-2xl border border-emerald-500/10">
+                                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-emerald-500/10 dark:border-emerald-500/20">
                                             <span className="text-[10px] font-black text-slate-400 uppercase block tracking-tighter">Nuevos</span>
-                                            <span className="text-lg font-black text-slate-900">{importStatus.newCount}</span>
+                                            <span className="text-lg font-black text-slate-900 dark:text-white">{importStatus.newCount}</span>
                                         </div>
-                                        <div className="bg-white p-3 rounded-2xl border border-emerald-500/10">
+                                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-emerald-500/10 dark:border-emerald-500/20">
                                             <span className="text-[10px] font-black text-slate-400 uppercase block tracking-tighter">Actualizados</span>
-                                            <span className="text-lg font-black text-slate-900">{importStatus.updateCount}</span>
+                                            <span className="text-lg font-black text-slate-900 dark:text-white">{importStatus.updateCount}</span>
                                         </div>
-                                        <div className="bg-white p-3 rounded-2xl border border-amber-500/10">
+                                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-amber-500/10 dark:border-amber-500/20">
                                             <span className="text-[10px] font-black text-slate-400 uppercase block tracking-tighter">Duplicados omitidos</span>
                                             <span className="text-lg font-black text-amber-600">{importStatus.duplicateCount || 0}</span>
                                         </div>
-                                        <div className="bg-white p-3 rounded-2xl border border-rose-500/10">
+                                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-rose-500/10 dark:border-rose-500/20">
                                             <span className="text-[10px] font-black text-slate-400 uppercase block tracking-tighter">Errores</span>
                                             <span className="text-lg font-black text-rose-600">{importStatus.errorCount || 0}</span>
                                         </div>
@@ -401,15 +390,15 @@ const ImportModule = () => {
                         </div>
 
                         <div className="xl:col-span-2 space-y-4">
-                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border shadow-xl shadow-slate-200/40 overflow-hidden flex flex-col min-h-[500px]">
-                                <div className="p-6 border-b border-slate-100 bg-slate-50/30 flex flex-col gap-3 shrink-0">
+                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200/70 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none overflow-hidden flex flex-col min-h-[500px]">
+                                <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-800/40 flex flex-col gap-3 shrink-0">
                                     <div className="flex justify-between items-center gap-3">
                                         <div className="flex items-center gap-3">
                                             <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-                                            <h3 className="font-bold text-slate-900 text-base uppercase tracking-widest">Previsualización de Datos</h3>
+                                            <h3 className="font-bold text-slate-900 dark:text-white text-base uppercase tracking-widest">Previsualización de Datos</h3>
                                         </div>
                                         {previewData.length > 0 && (
-                                            <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100">
+                                            <span className="text-[10px] font-black bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-300 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100 dark:border-blue-500/20">
                                                 {previewData.length} Registros
                                             </span>
                                         )}
@@ -419,7 +408,7 @@ const ImportModule = () => {
                                             {assigneeSummary.slice(0, 8).map((s) => (
                                                 <span
                                                     key={s.email}
-                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded-xl border ${s.matched ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-amber-50 text-amber-900 border-amber-100'}`}
+                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded-xl border ${s.matched ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-100 dark:border-emerald-500/20' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-300 border-amber-100 dark:border-amber-500/20'}`}
                                                     title={s.matched ? 'Usuario encontrado en la base' : 'Correo sin usuario en la base'}
                                                 >
                                                     {s.name || s.email} · {s.count} equipo{s.count > 1 ? 's' : ''}
@@ -453,7 +442,7 @@ const ImportModule = () => {
                                             <tbody className="text-sm">
                                                 {previewData.map((row, index) => (
                                                     <tr key={index} className="group animate-in fade-in slide-in-from-right duration-300">
-                                                        <td className="px-4 py-3 bg-slate-50/50 rounded-l-2xl border-y border-l">
+                                                        <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 rounded-l-2xl border-y border-l border-slate-200 dark:border-slate-700">
                                                             {row._errors.length > 0 ? (
                                                                 <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase" title={row._errors.join(', ')}><XCircle size={14} /> Error</div>
                                                             ) : row._status === 'duplicate' ? (
@@ -462,19 +451,19 @@ const ImportModule = () => {
                                                                 <div className="flex items-center gap-2 text-emerald-500 font-bold text-xs uppercase"><CheckCircle2 size={14} /> Nuevo</div>
                                                             )}
                                                         </td>
-                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
-                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${row._entityType === 'user' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : row._entityType === 'inventory' ? 'bg-cyan-50 text-cyan-700 border border-cyan-100' : row._entityType === 'both' ? 'bg-violet-50 text-violet-700 border border-violet-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                                        <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 border-y border-slate-200 dark:border-slate-700">
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${row._entityType === 'user' ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-500/20' : row._entityType === 'inventory' ? 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-100 dark:border-cyan-500/20' : row._entityType === 'both' ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border border-violet-100 dark:border-violet-500/20' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-600'}`}>
                                                                 {row._entityType === 'user' ? 'Usuario' : row._entityType === 'inventory' ? 'Inventario' : row._entityType === 'both' ? 'Mixto' : 'Sin tipo'}
                                                             </span>
                                                         </td>
-                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
+                                                        <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 border-y border-slate-200 dark:border-slate-700">
                                                             {row._entityType === 'user' || row._entityType === 'both' ? (
                                                                 <input
                                                                     type="text"
                                                                     value={row.email || ''}
                                                                     onChange={(e) => handleEditPreviewCell(index, 'email', e.target.value)}
                                                                     placeholder="email"
-                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                    className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs font-bold text-slate-900 dark:text-slate-100"
                                                                 />
                                                             ) : (
                                                                 <input
@@ -482,11 +471,11 @@ const ImportModule = () => {
                                                                     value={row.serial_number || row.asset_id || ''}
                                                                     onChange={(e) => handleEditPreviewCell(index, 'serial_number', e.target.value)}
                                                                     placeholder="serie o id activo"
-                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                    className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs font-bold text-slate-900 dark:text-slate-100"
                                                                 />
                                                             )}
                                                         </td>
-                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
+                                                        <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 border-y border-slate-200 dark:border-slate-700">
                                                             {row._entityType === 'user' || row._entityType === 'both' ? (
                                                                 <div className="space-y-1">
                                                                     <input
@@ -494,14 +483,14 @@ const ImportModule = () => {
                                                                         value={row.name || ''}
                                                                         onChange={(e) => handleEditPreviewCell(index, 'name', e.target.value)}
                                                                         placeholder="nombre"
-                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                        className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs font-bold text-slate-900 dark:text-slate-100"
                                                                     />
                                                                     <input
                                                                         type="text"
                                                                         value={row.department || ''}
                                                                         onChange={(e) => handleEditPreviewCell(index, 'department', e.target.value)}
                                                                         placeholder="departamento"
-                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                        className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-[11px] text-slate-900 dark:text-slate-100"
                                                                     />
                                                                 </div>
                                                             ) : (
@@ -511,20 +500,20 @@ const ImportModule = () => {
                                                                         value={row.asset_type || ''}
                                                                         onChange={(e) => handleEditPreviewCell(index, 'asset_type', e.target.value)}
                                                                         placeholder="tipo"
-                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold"
+                                                                        className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs font-bold text-slate-900 dark:text-slate-100"
                                                                     />
                                                                     <input
                                                                         type="text"
                                                                         value={row.model || ''}
                                                                         onChange={(e) => handleEditPreviewCell(index, 'model', e.target.value)}
                                                                         placeholder="modelo"
-                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                        className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-[11px] text-slate-900 dark:text-slate-100"
                                                                     />
                                                                 </div>
                                                             )}
                                                         </td>
 
-                                                        <td className="px-4 py-3 bg-slate-50/50 border-y">
+                                                        <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 border-y border-slate-200 dark:border-slate-700">
                                                             {row._entityType === 'inventory' || row._entityType === 'both' ? (
                                                                 <div className="space-y-1">
                                                                     <input
@@ -532,14 +521,14 @@ const ImportModule = () => {
                                                                         value={row.assigned_to_email || row._assignee_email || ''}
                                                                         onChange={(e) => handleEditPreviewCell(index, 'assigned_to_email', e.target.value)}
                                                                         placeholder="correo asignado opcional"
-                                                                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                        className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-[11px] text-slate-900 dark:text-slate-100"
                                                                     />
                                                                     {row.assigned_to ? (
-                                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">
+                                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-300 text-[10px] font-bold">
                                                                             <User size={12} /> {row._assignee_name}
                                                                         </span>
                                                                     ) : row._assignee_email ? (
-                                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold" title="El correo no existe en la BD">
+                                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-300 text-[10px] font-bold" title="El correo no existe en la BD">
                                                                             <AlertTriangle size={12} /> No encontrado
                                                                         </span>
                                                                     ) : (
@@ -552,14 +541,14 @@ const ImportModule = () => {
                                                                     value={row.role || 'user'}
                                                                     onChange={(e) => handleEditPreviewCell(index, 'role', e.target.value)}
                                                                     placeholder="rol"
-                                                                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                                                    className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-[11px] text-slate-900 dark:text-slate-100"
                                                                 />
                                                             )}
                                                         </td>
 
-                                                        <td className="px-4 py-3 bg-slate-50/50 rounded-r-2xl border-y border-r text-right">
+                                                        <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 rounded-r-2xl border-y border-r border-slate-200 dark:border-slate-700 text-right">
                                                             {row._errors.length > 0 ? (
-                                                                <button title={row._errors.join(', ')} className="text-rose-500 hover:text-rose-700 bg-rose-50 p-2 rounded-lg ml-auto flex"><Info size={16} /></button>
+                                                                <button title={row._errors.join(', ')} className="text-rose-500 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 p-2 rounded-lg ml-auto flex"><Info size={16} /></button>
                                                             ) : row._status === 'duplicate' ? (
                                                                 <button onClick={() => handleToggleAction(index)} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border transition-all ${row._action === 'update' ? 'bg-amber-500 border-amber-500 text-white' : 'bg-slate-200 border-transparent text-slate-400'}`}>
                                                                     {row._action === 'update' ? 'Sincronizar' : 'Ignorar'}
@@ -578,7 +567,6 @@ const ImportModule = () => {
                         </div>
                     </div>
                 </>
-            )}
         </div>
     );
 };

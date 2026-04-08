@@ -46,9 +46,9 @@ const UserRoleBadge = ({ role }) => {
 const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus, onAssetsChanged }) => {
     const { profile } = useAuth();
     const isAdmin = profile?.role === 'admin';
-    const isMaint = isMaintenanceArea(profile?.department);
-    const canEdit = isAdmin || (isMaint && isMaintenanceArea(user?.department));
-    const canManageAssets = !isMaint;
+    const isMaintScoped = !isAdmin && isMaintenanceArea(profile?.department);
+    const canEdit = isAdmin || (isMaintScoped && isMaintenanceArea(user?.department));
+    const canManageAssets = !isMaintScoped;
     const [assignableAssets, setAssignableAssets] = useState([]);
     const [selectedAssetId, setSelectedAssetId] = useState('');
     const [loadingAssets, setLoadingAssets] = useState(false);
@@ -193,7 +193,7 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                             id={`dept_${user?.id}`}
                                             className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500 disabled:opacity-50"
                                             defaultValue={user?.department || ''}
-                                            disabled={isMaint}
+                                            disabled={isMaintScoped}
                                         />
                                     </div>
                                 </div>
@@ -289,7 +289,7 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                         id={`role_${user?.id}`}
                                         className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white disabled:opacity-50"
                                         defaultValue={user?.role || 'user'}
-                                        disabled={isMaint && profile.id === user?.id}
+                                        disabled={isMaintScoped && profile.id === user?.id}
                                     >
                                         <option value="user">Usuario (Lectura)</option>
                                         <option value="tech">Ingeniero / Técnico</option>
@@ -490,7 +490,8 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
 const UsersView = ({ searchTerm = '' }) => {
     const { profile } = useAuth();
     const role = (profile?.role || '').toLowerCase();
-    const isMaint = isMaintenanceArea(profile?.department);
+    const isAdmin = role === 'admin';
+    const isMaintScoped = !isAdmin && isMaintenanceArea(profile?.department);
     const canManageStatus = role === 'admin' || role === 'jefe_mantenimiento';
 
     const [selectedUser, setSelectedUser] = useState(null);
@@ -504,8 +505,9 @@ const UsersView = ({ searchTerm = '' }) => {
         try {
             let data = await userService.getAll();
             
-            // FILTRO DE ÁREA: Si es de mantenimiento, solo ve su área
-            if (isMaint) {
+            // Solo jefatura de mantenimiento queda acotada a su área.
+            // Admin global siempre ve todo el directorio.
+            if (isMaintScoped) {
                 data = data.filter(u => isMaintenanceArea(u.department));
             }
 
@@ -523,7 +525,7 @@ const UsersView = ({ searchTerm = '' }) => {
         } finally {
             setLoading(false);
         }
-    }, [isMaint]);
+    }, [isMaintScoped]);
 
     const filteredUsers = React.useMemo(() => {
         if (!searchTerm) return users;
@@ -633,8 +635,8 @@ const UsersView = ({ searchTerm = '' }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard label="Empleados" value={stats.total} trend={isMaint ? "Mantenimiento" : "Totales"} icon={Users} color="text-slate-600" bg="bg-slate-100" />
                 <StatCard label="Activos" value={stats.active} trend="En línea" icon={UserCheck} color="text-emerald-600" bg="bg-emerald-100" />
-                <StatCard label={isMaint ? "Ingenieros" : "Técnicos"} value={stats.techs} trend="Área" icon={Shield} color="text-blue-600" bg="bg-blue-100" />
-                {!isMaint && <StatCard label="Administradores" value={stats.admins} trend="Sistemas" icon={ShieldCheck} color="text-purple-600" bg="bg-purple-100" />}
+                <StatCard label={isMaintScoped ? "Ingenieros" : "Técnicos"} value={stats.techs} trend="Área" icon={Shield} color="text-blue-600" bg="bg-blue-100" />
+                {!isMaintScoped && <StatCard label="Administradores" value={stats.admins} trend="Sistemas" icon={ShieldCheck} color="text-purple-600" bg="bg-purple-100" />}
             </div>
 
             {/* Main Table Container */}
@@ -726,7 +728,7 @@ const UsersView = ({ searchTerm = '' }) => {
                                                 <p className="text-[10px] text-slate-500 dark:text-slate-400 max-w-[180px] truncate" title={equipment.breakdown}>
                                                     {equipment.breakdown}
                                                 </p>
-                                                {!isMaint && (
+                                                {!isMaintScoped && (
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
