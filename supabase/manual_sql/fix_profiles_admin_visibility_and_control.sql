@@ -43,10 +43,25 @@ AS $$
   LIMIT 1;
 $$;
 
+CREATE OR REPLACE FUNCTION public.current_user_is_maintenance()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    coalesce(public.current_user_department(), '') LIKE '%mantenimiento%'
+    OR coalesce(public.current_user_department(), '') LIKE '%ingenieria%'
+    OR coalesce(public.current_user_department(), '') LIKE '%ingeniería%';
+$$;
+
 REVOKE ALL ON FUNCTION public.current_user_role() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.current_user_department() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.current_user_is_maintenance() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.current_user_role() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.current_user_department() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.current_user_is_maintenance() TO authenticated;
 
 CREATE POLICY "profiles_select_policy"
   ON public.profiles
@@ -54,7 +69,10 @@ CREATE POLICY "profiles_select_policy"
   TO authenticated
   USING (
     auth.uid() = id
-    OR public.current_user_role() IN ('admin', 'tech', 'técnico')
+    OR (
+      public.current_user_role() IN ('admin', 'tech', 'técnico')
+      AND public.current_user_is_maintenance() = false
+    )
     OR (
       public.current_user_role() = 'jefe_mantenimiento'
       AND lower(trim(coalesce(public.profiles.department, ''))) = public.current_user_department()
@@ -67,7 +85,10 @@ CREATE POLICY "profiles_update_policy"
   TO authenticated
   USING (
     auth.uid() = id
-    OR public.current_user_role() = 'admin'
+    OR (
+      public.current_user_role() = 'admin'
+      AND public.current_user_is_maintenance() = false
+    )
     OR (
       public.current_user_role() = 'jefe_mantenimiento'
       AND lower(trim(coalesce(public.profiles.department, ''))) = public.current_user_department()
@@ -76,7 +97,10 @@ CREATE POLICY "profiles_update_policy"
   )
   WITH CHECK (
     auth.uid() = id
-    OR public.current_user_role() = 'admin'
+    OR (
+      public.current_user_role() = 'admin'
+      AND public.current_user_is_maintenance() = false
+    )
     OR (
       public.current_user_role() = 'jefe_mantenimiento'
       AND lower(trim(coalesce(public.profiles.department, ''))) = public.current_user_department()
@@ -85,6 +109,19 @@ CREATE POLICY "profiles_update_policy"
   );
 
 COMMIT;
+
+-- OPCIONAL (recomendado): normalizar datos historicos
+-- Convierte admins en departamento de mantenimiento/ingenieria a jefe_mantenimiento.
+-- Ejecuta este bloque solo si ya validaste que esos usuarios no deben ser admin IT global.
+--
+-- UPDATE public.profiles
+-- SET role = 'jefe_mantenimiento'
+-- WHERE lower(trim(coalesce(role, ''))) = 'admin'
+--   AND (
+--     lower(trim(coalesce(department, ''))) LIKE '%mantenimiento%'
+--     OR lower(trim(coalesce(department, ''))) LIKE '%ingenieria%'
+--     OR lower(trim(coalesce(department, ''))) LIKE '%ingeniería%'
+--   );
 
 -- Verificación rápida (ejecutar autenticado como admin):
 -- select id, email, role, department, status from public.profiles order by created_at desc limit 50;

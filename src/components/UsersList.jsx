@@ -45,7 +45,7 @@ const UserRoleBadge = ({ role }) => {
 // --- SUBCOMPONENTE: Slider de Detalles del Usuario ---
 const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus, onAssetsChanged }) => {
     const { profile } = useAuth();
-    const isAdmin = profile?.role === 'admin';
+    const isAdmin = profile?.role === 'admin' && !isMaintenanceArea(profile?.department);
     const isMaintScoped = !isAdmin && isMaintenanceArea(profile?.department);
     const canEdit = isAdmin || (isMaintScoped && isMaintenanceArea(user?.department));
     const canManageAssets = !isMaintScoped;
@@ -482,7 +482,7 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
 const UsersView = ({ searchTerm = '' }) => {
     const { profile } = useAuth();
     const role = (profile?.role || '').toLowerCase();
-    const isAdmin = role === 'admin';
+    const isAdmin = role === 'admin' && !isMaintenanceArea(profile?.department);
     const isMaintScoped = !isAdmin && isMaintenanceArea(profile?.department);
     const canManageStatus = role === 'admin' || role === 'jefe_mantenimiento';
 
