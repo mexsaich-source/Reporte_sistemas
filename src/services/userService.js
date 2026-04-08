@@ -20,6 +20,12 @@ const isAllowedMaintDepartment = (value = '') => {
     return dep === 'mantenimiento' || dep === 'ingenieria' || dep === 'ingeniería';
 };
 
+const buildTemporaryPassword = () => {
+    // Supabase exige password en signUp; luego forzamos flujo por correo para que el usuario cree su propia clave.
+    const random = Math.random().toString(36).slice(-10);
+    return `Tmp_${Date.now()}_${random}!`;
+};
+
 export const userService = {
     async getAll() {
         try {
@@ -472,6 +478,7 @@ export const userService = {
         try {
             let finalRole = role;
             let finalDepartment = department;
+            const finalPassword = String(password || '').trim() || buildTemporaryPassword();
 
             if (actorId) {
                 const { data: actor } = await supabase
@@ -502,7 +509,7 @@ export const userService = {
             // 2. Registro en Auth usando el cliente secudario sin persistencia
             const { data, error } = await supabaseAdmin.auth.signUp({
                 email,
-                password,
+                password: finalPassword,
                 options: {
                     data: {
                         full_name: fullName,
@@ -528,7 +535,19 @@ export const userService = {
                 throw error;
             }
 
-            return { success: true, user: data.user };
+            let passwordSetupEmailSent = false;
+            try {
+                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
+                if (!resetError) {
+                    passwordSetupEmailSent = true;
+                } else {
+                    console.warn('No se pudo enviar correo para definir contraseña:', resetError.message);
+                }
+            } catch (mailErr) {
+                console.warn('Error enviando correo de recuperación:', mailErr?.message || mailErr);
+            }
+
+            return { success: true, user: data.user, passwordSetupEmailSent };
         } catch (error) {
             console.error("Error creating user:", error);
             return { success: false, error: error.message };

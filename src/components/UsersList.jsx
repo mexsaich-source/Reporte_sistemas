@@ -349,7 +349,6 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
-        password: '',
         role: 'user',
         department: isMaint ? 'Mantenimiento' : 'General'
     });
@@ -411,17 +410,10 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
                         />
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Contraseña Provisoria</label>
-                        <input
-                            type="password"
-                            name="password"
-                            required
-                            value={formData.password}
-                            onChange={handleChange}
-                            placeholder="Mínimo 6 caracteres"
-                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-blue-500 transition-all"
-                        />
+                    <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-3">
+                        <p className="text-xs font-bold text-blue-700 dark:text-blue-300">
+                            No necesitas capturar contraseña. Al crear el usuario se enviará correo para activar y establecer su clave.
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -545,7 +537,7 @@ const UsersView = ({ searchTerm = '' }) => {
     const handleSaveUser = async (formData) => {
         const result = await userService.register(
             formData.email,
-            formData.password,
+            null,
             formData.full_name,
             formData.role,
             formData.department,
@@ -554,7 +546,10 @@ const UsersView = ({ searchTerm = '' }) => {
 
         if (result.success) {
             await fetchUsers();
-            alert("Usuario creado exitosamente. Se ha enviado un correo de confirmación (si está habilitado en Supabase).");
+            const emailNote = result.passwordSetupEmailSent
+                ? ' También se envió correo para definir contraseña.'
+                : ' Si no llegó correo para contraseña, usa "Recuperar contraseña" en login.';
+            alert("Usuario creado exitosamente. Revisa correo de confirmación/activación." + emailNote);
         } else {
             alert("Error al crear usuario: " + result.error);
         }
