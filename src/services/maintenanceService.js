@@ -205,7 +205,7 @@ export const maintenanceService = {
     }
   },
 
-  // 4b. Comenzar trabajo (Ingeniero)
+  // 4b. Comenzar trabajo (Ingeniero o Boss)
   async startWork(ticketId, actorId) {
     try {
       const { data, error } = await supabase
@@ -214,7 +214,6 @@ export const maintenanceService = {
           estado: 'En Proceso'
         })
         .eq('id', ticketId)
-        .eq('asignado_a', actorId)
         .select('id, title_falla, creado_por, asignado_a, estado')
         .single();
 
@@ -259,7 +258,6 @@ export const maintenanceService = {
           notas_resolucion: notas
         })
         .eq('id', ticketId)
-        .eq('asignado_a', actorId)
         .select(`
           id,
           title_falla,

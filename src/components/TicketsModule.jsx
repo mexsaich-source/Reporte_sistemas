@@ -138,6 +138,7 @@ const TicketsModule = ({ searchTerm = '' }) => {
                 reportedBy: t.profiles?.full_name || t.profiles?.email || 'Desconocido',
                 issue: t.title,
                 tech: t.tech_profile?.full_name || 'Unassigned',
+                tech_department: t.tech_profile?.department || null,
                 assigned_tech: t.assigned_tech,
                 status: t.status,
                 date: new Date(t.created_at).toLocaleDateString(),

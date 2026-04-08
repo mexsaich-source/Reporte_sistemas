@@ -84,147 +84,126 @@ const MaintenanceModule = () => {
     setResolveModalOpen(true);
   };
 
+  // Template térmico reutilizable para impresoras 58 mm / 80 mm
+  const buildThermalHTML = ({ folio, titulo, ubicacion, tecnico, supervisor, estado, estadoColor, fecha, etiquetaFecha, notas }) => `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Ticket #${folio}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier Prime', 'Courier New', monospace;
+      font-size: 11px;
+      color: #000;
+      background: #fff;
+      width: 72mm;
+      padding: 4mm 3mm;
+    }
+    .center { text-align: center; }
+    .bold { font-weight: 700; }
+    .big { font-size: 16px; font-weight: 700; letter-spacing: -0.5px; }
+    .small { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: #555; }
+    .divider { border-top: 1px dashed #000; margin: 5px 0; }
+    .divider-solid { border-top: 2px solid #000; margin: 5px 0; }
+    .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 10px; }
+    .row .lbl { font-weight: 700; text-transform: uppercase; font-size: 9px; color: #333; }
+    .row .val { font-weight: 700; text-align: right; max-width: 55%; word-break: break-word; }
+    .block { margin: 5px 0; }
+    .block .lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #555; display: block; margin-bottom: 2px; }
+    .block .val { font-size: 11px; line-height: 1.4; word-break: break-word; }
+    .estado { display: inline-block; border: 1.5px solid #000; padding: 2px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .barcode { font-family: 'Libre Barcode 39', monospace; font-size: 44px; text-align: center; margin-top: 4px; line-height: 1; }
+    .sign-line { border-top: 1px solid #000; margin-top: 18px; padding-top: 3px; font-size: 9px; text-align: center; color: #444; }
+    @media print {
+      @page { size: 80mm auto; margin: 2mm; }
+      body { width: 100%; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="center" style="margin-bottom:6px">
+    <div class="big">MANTENIMIENTO</div>
+    <div class="small">Hotel Hilton Mexico City Santa Fe</div>
+  </div>
+  <div class="divider-solid"></div>
+
+  <div class="row"><span class="lbl">Folio:</span><span class="val bold">#${folio}</span></div>
+  <div class="row"><span class="lbl">${etiquetaFecha}:</span><span class="val">${fecha}</span></div>
+  <div class="row"><span class="lbl">Estado:</span><span class="val"><span class="estado" style="color:${estadoColor};border-color:${estadoColor}">${estado}</span></span></div>
+
+  <div class="divider"></div>
+
+  <div class="block"><span class="lbl">Falla / Orden:</span><span class="val">${titulo}</span></div>
+  <div class="block"><span class="lbl">Ubicación:</span><span class="val">${ubicacion}</span></div>
+
+  <div class="divider"></div>
+
+  <div class="block"><span class="lbl">Técnico:</span><span class="val bold">${tecnico}</span></div>
+  <div class="block"><span class="lbl">Supervisor:</span><span class="val">${supervisor}</span></div>
+
+  ${notas ? `<div class="divider"></div><div class="block"><span class="lbl">Notas resolución:</span><span class="val">${notas}</span></div>` : ''}
+
+  <div class="divider"></div>
+
+  <div class="barcode">*${folio}*</div>
+
+  <div class="sign-line">Firma Técnico Asignado: ${tecnico}</div>
+  <div style="border-top:1px solid #000;margin-top:18px;padding-top:3px;font-size:9px;text-align:center;color:#444">Firma Vo. Bo. Supervisor / IT Helpdesk Mexsa</div>
+
+  <div class="center small" style="margin-top:8px;font-size:8px;color:#888">Solo uso interno · Mantenimiento e Ingeniería</div>
+
+  <script>
+    window.onload = () => {
+      let l = document.createElement('link');
+      l.href = 'https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap';
+      l.rel = 'stylesheet';
+      document.head.appendChild(l);
+      setTimeout(() => { window.print(); setTimeout(() => window.close(), 500); }, 800);
+    };
+  </script>
+</body>
+</html>`;
+
+  // Imprime ticket de trabajo asignado/en proceso (para dar al técnico)
+  const handlePrintAssigned = (ticket) => {
+    if (!ticket) return;
+    const folio = ticket.id?.toString().slice(-6).toUpperCase() || 'MNT-000';
+    const html = buildThermalHTML({
+      folio,
+      titulo: ticket.title_falla || 'Sin descripción',
+      ubicacion: ticket.ubicacion || '—',
+      tecnico: ticket.asignado?.full_name || 'Sin Asignar',
+      supervisor: authProfile?.full_name || 'Supervisor',
+      estado: toCanonicalStatus(ticket.estado).toUpperCase(),
+      estadoColor: toCanonicalStatus(ticket.estado) === 'En Proceso' ? '#d97706' : '#2563eb',
+      fecha: new Date(ticket.fecha_creacion).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }),
+      etiquetaFecha: 'Asignado',
+      notas: null,
+    });
+    const w = window.open('', '_blank', 'width=400,height=700');
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  // Imprime comprobante de cierre
   const handleDownloadReceipt = (ticket) => {
     if (!ticket) return;
-
-    const printDate = new Date(ticket?.fecha_resolucion || Date.now()).toLocaleString('es-MX', {
-      dateStyle: 'long',
-      timeStyle: 'short'
+    const folio = ticket.id?.toString().slice(-6).toUpperCase() || 'MNT-000';
+    const html = buildThermalHTML({
+      folio,
+      titulo: ticket.title_falla || 'Sin descripción',
+      ubicacion: ticket.ubicacion || '—',
+      tecnico: ticket.asignado?.full_name || 'Técnico Asignado',
+      supervisor: authProfile?.full_name || 'Supervisor / Admin',
+      estado: 'RESUELTO',
+      estadoColor: '#059669',
+      fecha: new Date(ticket.fecha_resolucion || Date.now()).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }),
+      etiquetaFecha: 'Fecha Cierre',
+      notas: ticket.notas_resolucion || null,
     });
-    const reporterName = ticket?.creador?.full_name || 'Supervisor de Mantenimiento';
-    const techName = ticket?.asignado?.full_name || 'Técnico Asignado';
-    const folio = ticket?.id?.toString().substring(0, 8) || 'MNT-0000';
-
-    const receiptHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Comprobante Orden #${folio}</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
-            body {
-              font-family: 'Courier Prime', 'Courier New', monospace;
-              width: 380px;
-              margin: 0 auto;
-              padding: 30px 20px;
-              color: #1a1a1a;
-              font-size: 14px;
-              line-height: 1.5;
-              background-color: #fff;
-            }
-            .ticket-container {
-              border: 2px dashed #d1d5db;
-              border-radius: 16px;
-              padding: 24px;
-              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            }
-            .header { text-align: center; margin-bottom: 24px; }
-            .logo { font-size: 28px; font-weight: 700; letter-spacing: -1px; margin-bottom: 4px; }
-            .subtitle { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 2px; }
-            .divider { border-top: 1px dashed #d1d5db; margin: 20px 0; }
-            .row { display: flex; justify-content: space-between; margin: 8px 0; align-items: baseline; }
-            .label { font-weight: 700; color: #4b5563; font-size: 12px; text-transform: uppercase; }
-            .value { font-weight: 700; font-size: 14px; text-align: right; }
-            .badge { background: #111827; color: white; padding: 4px 12px; border-radius: 99px; font-size: 12px; }
-            .content-box { margin: 24px 0; background: #f9fafb; padding: 16px; border-radius: 12px; border: 1px solid #f3f4f6; }
-            .content-box .label { margin-bottom: 8px; display: block; color: #111827; }
-            .data-text { font-size: 14px; color: #374151; font-weight: 400; }
-            .person-row { display: flex; align-items: center; justify-content: space-between; margin: 12px 0; padding-bottom: 12px; border-bottom: 1px solid #f3f4f6; }
-            .person-row:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
-            .person-title { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
-            .person-name { font-weight: 700; font-size: 14px; }
-            .footer { text-align: center; margin-top: 32px; font-size: 12px; color: #6b7280; }
-            .barcode { margin-top: 16px; text-align: center; font-family: 'Libre Barcode 39', cursive; font-size: 48px; }
-            @media print {
-              body { width: 100%; padding: 0; background: white; }
-              .ticket-container { border: none; box-shadow: none; padding: 0; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="ticket-container">
-            <div class="header">
-              <div class="logo">IT HELPDESK</div>
-              <div class="subtitle">Comprobante de Servicio</div>
-            </div>
-
-            <div class="row" style="margin-top: 24px;">
-              <span class="label">No. Folio:</span>
-              <span class="badge">#${folio}</span>
-            </div>
-            <div class="row">
-              <span class="label">Fecha Solución:</span>
-              <span class="value">${printDate}</span>
-            </div>
-            <div class="row">
-              <span class="label">Estado Actual:</span>
-              <span class="value" style="color: #059669;">RESUELTO</span>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="content-box">
-              <span class="label">Detalle del Requerimiento:</span>
-              <div class="data-text">${ticket?.title_falla || 'Sin descripción'}</div>
-            </div>
-
-            <div class="content-box" style="margin-top: 0;">
-              <span class="label">Ubicación:</span>
-              <div class="data-text">${ticket?.ubicacion || 'Sin ubicación'}</div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="person-row">
-              <div>
-                <div class="person-title">Reportado por</div>
-                <div class="person-name">${reporterName}</div>
-              </div>
-            </div>
-
-            <div class="person-row">
-              <div>
-                <div class="person-title">Atendido y Solucionado por</div>
-                <div class="person-name">${techName}</div>
-              </div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="content-box" style="margin-top: 0;">
-              <span class="label">Notas de Resolución:</span>
-              <div class="data-text">${ticket?.notas_resolucion || 'Sin notas registradas.'}</div>
-            </div>
-
-            <div class="footer">
-              <p style="margin-bottom: 4px; font-weight: 700; color: #111827;">¡Orden Cerrada!</p>
-              <p>Este comprobante certifica la atención y solución del requerimiento técnico.</p>
-              <div class="barcode">*${folio}*</div>
-            </div>
-          </div>
-
-          <script>
-            window.onload = () => {
-              let link = document.createElement('link');
-              link.href = 'https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap';
-              link.rel = 'stylesheet';
-              document.head.appendChild(link);
-
-              setTimeout(() => {
-                window.print();
-                setTimeout(() => window.close(), 500);
-              }, 800);
-            }
-          </script>
-        </body>
-      </html>
-    `;
-
-    const printWindow = window.open('', '_blank', 'width=450,height=800');
-    if (printWindow) {
-      printWindow.document.write(receiptHTML);
-      printWindow.document.close();
-    }
+    const w = window.open('', '_blank', 'width=400,height=700');
+    if (w) { w.document.write(html); w.document.close(); }
   };
 
   const handleResolveSubmit = async (e) => {
@@ -386,7 +365,7 @@ const MaintenanceModule = () => {
                             </select>
                           )}
 
-                          {isEngineer && isAssignedTech && currentStatus === 'Asignado' && (
+                          {(isBoss || (isEngineer && isAssignedTech)) && currentStatus === 'Asignado' && (
                             <button
                               onClick={async () => {
                                 const result = await maintenanceService.startWork(ticket.id, authProfile.id);
@@ -401,7 +380,7 @@ const MaintenanceModule = () => {
                             </button>
                           )}
 
-                          {isEngineer && isAssignedTech && currentStatus === 'En Proceso' && (
+                          {(isBoss || (isEngineer && isAssignedTech)) && currentStatus === 'En Proceso' && (
                             <button
                               onClick={() => openResolveModal(ticket)}
                               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white"
@@ -429,6 +408,16 @@ const MaintenanceModule = () => {
                               title={isEscalated ? 'Sistemas ya fue notificado en esta orden' : 'Notificar a Sistemas'}
                             >
                               <BellRing size={12} /> {isEscalated ? 'IT Notificado' : 'Notificar a Sistemas'}
+                            </button>
+                          )}
+
+                          {isBoss && currentStatus !== 'Resuelto' && ticket.asignado_a && (
+                            <button
+                              onClick={() => handlePrintAssigned(ticket)}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white hover:bg-amber-600 transition-all"
+                              title="Imprimir orden para el técnico"
+                            >
+                              <Printer size={12} /> Imprimir
                             </button>
                           )}
 

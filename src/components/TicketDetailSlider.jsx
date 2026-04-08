@@ -9,6 +9,10 @@ import { workNotificationService } from '../services/workNotificationService';
 const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateTicket }) => {
     const { profile, user } = useAuth();
     const isTechOrAdmin = profile?.role === 'admin' || profile?.role === 'tech' || profile?.role === 'técnico';
+    const isMaintenanceTech = () => {
+        const dept = String(ticket?.tech_department || '').trim().toLowerCase();
+        return dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+    };
 
     const [messages, setMessages] = React.useState([]);
     const [messagesLoading, setMessagesLoading] = React.useState(true);
@@ -16,6 +20,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     const [isSending, setIsSending] = React.useState(false);
     const [uploadingImage, setUploadingImage] = React.useState(false);
     const [deletingAttachmentId, setDeletingAttachmentId] = React.useState(null);
+    const [notifyingSistemas, setNotifyingSistemas] = React.useState(false);
     const messagesEndRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
 
@@ -310,6 +315,380 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     };
 
     // ==========================================
+    // FUNCIÓN: Notificar a Sistemas IT sobre un ticket de Ing/Mant
+    // ==========================================
+    const handleNotifySistemas = async () => {
+        if (notifyingSistemas) return;
+        setNotifyingSistemas(true);
+        try {
+            const { data: allProfiles } = await supabase
+                .from('profiles')
+                .select('id, role, department, status')
+                .eq('status', true);
+
+            const itRecipients = (allProfiles || []).filter((p) => {
+                const role = String(p?.role || '').toLowerCase().trim();
+                const dept = String(p?.department || '').toLowerCase().trim();
+                const isMaint = dept.includes('mantenimiento') || dept.includes('ingenieria') || dept.includes('ingeniería');
+                return (role === 'admin' || role === 'tech' || role === 'técnico') && !isMaint;
+            }).map((p) => p.id).filter(Boolean);
+
+            await Promise.all(
+                itRecipients.map((id) =>
+                    workNotificationService.createNotification(
+                        id,
+                        `Ticket Ing/Mant #${ticket?.shortId} — Notificación`,
+                        `El ticket "${ticket?.issue || `#${ticket?.shortId}`}" asignado a ${ticket?.tech || 'un técnico'} de ${ticket?.tech_department || 'Mantenimiento/Ingeniería'} requiere atención de Sistemas IT.`
+                    )
+                )
+            );
+            alert(`Sistemas IT notificado (${itRecipients.length} destinatario${itRecipients.length !== 1 ? 's' : ''}).`);
+        } catch (err) {
+            console.error('Error notificando a Sistemas:', err);
+            alert('No se pudo enviar la notificación. Intenta de nuevo.');
+        } finally {
+            setNotifyingSistemas(false);
+        }
+    };
+    // ==========================================
+
+    // ==========================================
+    // FUNCIÓN: Orden de Trabajo (ticket asignado)
+    // ==========================================
+    const handlePrintWorkOrder = () => {
+        const printDate = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
+        const scheduledStr = ticket?.scheduled_for
+            ? new Date(ticket.scheduled_for).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })
+            : '—';
+        const statusLabel = {
+            assigned: 'ASIGNADO',
+            in_progress: 'EN PROCESO',
+            open: 'PENDIENTE',
+            pending_admin: 'PENDIENTE',
+        }[ticket?.status] || ticket?.status?.toUpperCase() || 'ASIGNADO';
+
+        const workOrderHTML = `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Orden de Trabajo #${ticket?.shortId || ticket?.id}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11pt;
+            color: #111;
+            background: #fff;
+            padding: 20px;
+        }
+        .page { max-width: 720px; margin: 0 auto; }
+        /* HEADER */
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #111; padding-bottom: 12px; margin-bottom: 14px; }
+        .header-left .brand { font-size: 18pt; font-weight: 900; letter-spacing: -1px; }
+        .header-left .sub { font-size: 8pt; text-transform: uppercase; letter-spacing: 2px; color: #555; margin-top: 3px; }
+        .header-right { text-align: right; }
+        .folio-box { border: 2px solid #111; display: inline-block; padding: 6px 18px; border-radius: 6px; }
+        .folio-box .folio-label { font-size: 7pt; text-transform: uppercase; letter-spacing: 2px; color: #666; }
+        .folio-box .folio-num { font-size: 20pt; font-weight: 900; letter-spacing: -1px; }
+        .doc-type { font-size: 8pt; text-transform: uppercase; letter-spacing: 3px; color: #555; margin-top: 6px; }
+        /* SECTION */
+        .section { margin-bottom: 12px; }
+        .section-title { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #fff; background: #111; padding: 4px 10px; display: inline-block; border-radius: 3px; margin-bottom: 8px; }
+        /* GRID */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .field { }
+        .field-label { font-size: 7pt; text-transform: uppercase; letter-spacing: 1.5px; color: #666; font-weight: 700; margin-bottom: 3px; }
+        .field-value { font-size: 10.5pt; font-weight: 700; border-bottom: 1.5px solid #ccc; padding-bottom: 4px; min-height: 22px; }
+        /* ISSUE BOX */
+        .issue-box { border: 1.5px solid #111; border-radius: 6px; padding: 10px 14px; min-height: 60px; font-size: 10.5pt; background: #f9f9f9; line-height: 1.5; }
+        /* STATUS BADGE */
+        .status-badge { display: inline-block; border: 2px solid #111; padding: 4px 14px; border-radius: 99px; font-size: 8.5pt; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; }
+        /* TASKS */
+        .task-line { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #ddd; }
+        .task-num { font-size: 9pt; font-weight: 900; min-width: 20px; color: #555; padding-top: 1px; }
+        .task-check { width: 14px; height: 14px; border: 2px solid #111; border-radius: 3px; flex-shrink: 0; margin-top: 1px; }
+        .task-write { flex: 1; border-bottom: 1px solid #bbb; min-height: 18px; }
+        /* NOTES */
+        .notes-lines { border: 1.5px solid #ccc; border-radius: 6px; padding: 8px; }
+        .note-line { border-bottom: 1px solid #e0e0e0; height: 20px; margin-bottom: 2px; }
+        /* SIGNATURES */
+        .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 10px; }
+        .sig-box { text-align: center; }
+        .sig-line { border-top: 2px solid #111; margin-top: 50px; padding-top: 6px; }
+        .sig-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 1.5px; color: #555; font-weight: 700; }
+        .sig-sub { font-size: 7.5pt; color: #888; margin-top: 2px; }
+        /* FOOTER */
+        .footer { margin-top: 14px; border-top: 1px solid #ccc; padding-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .footer-left { font-size: 7pt; color: #888; }
+        .barcode { font-family: 'Libre Barcode 39', 'Free 3 of 9', monospace; font-size: 36pt; line-height: 1; }
+        @media print {
+            body { padding: 10px; }
+            @page { margin: 15mm; size: A4 portrait; }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-left">
+            <div class="brand">IT HELPDESK</div>
+            <div class="sub">Hotel Hilton Mexico City Santa Fe</div>
+        </div>
+        <div class="header-right">
+            <div class="folio-box">
+                <div class="folio-label">Folio</div>
+                <div class="folio-num">#${ticket?.shortId || String(ticket?.id || '').padStart(4, '0')}</div>
+            </div>
+            <div class="doc-type">Orden de Trabajo</div>
+        </div>
+    </div>
+
+    <!-- DATOS GENERALES -->
+    <div class="section">
+        <div class="section-title">Datos Generales</div>
+        <div class="grid-3">
+            <div class="field">
+                <div class="field-label">Fecha emisión</div>
+                <div class="field-value">${printDate}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Fecha atención programada</div>
+                <div class="field-value">${scheduledStr}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Estado</div>
+                <div class="field-value"><span class="status-badge">${statusLabel}</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PERSONAS -->
+    <div class="section">
+        <div class="section-title">Involucrados</div>
+        <div class="grid-2">
+            <div class="field">
+                <div class="field-label">Reportado por</div>
+                <div class="field-value">${ticket?.reportedBy || '—'}</div>
+            </div>
+            <div class="field">
+                <div class="field-label">Técnico asignado</div>
+                <div class="field-value">${ticket?.tech || '—'}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DESCRIPCIÓN -->
+    <div class="section">
+        <div class="section-title">Descripción del Requerimiento / Falla</div>
+        <div class="issue-box">${ticket?.issue || 'Sin descripción'}</div>
+    </div>
+
+    <!-- TAREAS -->
+    <div class="section">
+        <div class="section-title">Tareas a Realizar (llenar en papel)</div>
+        ${[1,2,3,4,5,6].map(n => `
+        <div class="task-line">
+            <span class="task-num">${n}.</span>
+            <div class="task-check"></div>
+            <div class="task-write"></div>
+        </div>`).join('')}
+    </div>
+
+    <!-- NOTAS -->
+    <div class="section">
+        <div class="section-title">Observaciones / Notas del Técnico</div>
+        <div class="notes-lines">
+            ${[1,2,3].map(() => '<div class="note-line"></div>').join('')}
+        </div>
+    </div>
+
+    <!-- FIRMAS -->
+    <div class="section">
+        <div class="section-title">Firmas</div>
+        <div class="sig-grid">
+            <div class="sig-box">
+                <div class="sig-line"></div>
+                <div class="sig-label">Firma Técnico Responsable</div>
+                <div class="sig-sub">${ticket?.tech || 'Asignado'}</div>
+            </div>
+            <div class="sig-box">
+                <div class="sig-line"></div>
+                <div class="sig-label">Firma Vo. Bo. Gerente / Supervisor</div>
+                <div class="sig-sub">IT Helpdesk Mexsa</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <div class="footer-left">
+            Sistema IT Helpdesk — Hotel Hilton Mexico City Santa Fe<br/>
+            Impreso el ${printDate} | Solo para uso interno
+        </div>
+        <div class="barcode">*${ticket?.shortId || String(ticket?.id || '').padStart(4, '0')}*</div>
+    </div>
+
+</div>
+<script>
+    window.onload = () => {
+        let link = document.createElement('link');
+        link.href = 'https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap';
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+        setTimeout(() => { window.print(); setTimeout(() => window.close(), 600); }, 800);
+    };
+</script>
+</body>
+</html>`;
+
+        const w = window.open('', '_blank', 'width=800,height=960');
+        if (w) { w.document.write(workOrderHTML); w.document.close(); }
+    };
+    // ==========================================
+
+    // ==========================================
+    // FUNCIÓN: Ticket IT asignado (comprobante térmico de asignación)
+    // ==========================================
+    const handlePrintITTicket = () => {
+        const printDate = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
+        const reporterName = ticket?.reportedBy || 'Desconocido';
+        const techName = ticket?.tech || 'Técnico Asignado';
+        const scheduledStr = ticket?.scheduled_for
+            ? new Date(ticket.scheduled_for).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })
+            : '—';
+        const statusLabel = ticket?.status === 'in_progress' ? 'EN PROCESO' : 'ASIGNADO';
+        const statusColor = ticket?.status === 'in_progress' ? '#d97706' : '#2563eb';
+
+        const receiptHTML = `
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Ticket IT #${ticket?.shortId || ticket?.id?.toString().substring(0, 8)}</title>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
+                        body {
+                            font-family: 'Courier Prime', 'Courier New', monospace;
+                            width: 380px;
+                            margin: 0 auto;
+                            padding: 30px 20px;
+                            color: #1a1a1a;
+                            font-size: 14px;
+                            line-height: 1.5;
+                            background-color: #fff;
+                        }
+                        .ticket-container {
+                            border: 2px dashed #d1d5db;
+                            border-radius: 16px;
+                            padding: 24px;
+                            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+                        }
+                        .header { text-align: center; margin-bottom: 24px; }
+                        .logo { font-size: 28px; font-weight: 700; letter-spacing: -1px; margin-bottom: 4px; }
+                        .subtitle { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 2px; }
+                        .divider { border-top: 1px dashed #d1d5db; margin: 20px 0; }
+                        .row { display: flex; justify-content: space-between; margin: 8px 0; align-items: baseline; }
+                        .label { font-weight: 700; color: #4b5563; font-size: 12px; text-transform: uppercase; }
+                        .value { font-weight: 700; font-size: 14px; text-align: right; }
+                        .badge { background: #111827; color: white; padding: 4px 12px; border-radius: 99px; font-size: 12px; }
+                        .content-box { margin: 24px 0; background: #f9fafb; padding: 16px; border-radius: 12px; border: 1px solid #f3f4f6; }
+                        .content-box .label { margin-bottom: 8px; display: block; color: #111827; }
+                        .data-text { font-size: 14px; color: #374151; font-weight: 400; }
+                        .person-row { display: flex; align-items: center; justify-content: space-between; margin: 12px 0; padding-bottom: 12px; border-bottom: 1px solid #f3f4f6; }
+                        .person-row:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+                        .person-title { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+                        .person-name { font-weight: 700; font-size: 14px; }
+                        .footer { text-align: center; margin-top: 32px; font-size: 12px; color: #6b7280; }
+                        .barcode { margin-top: 16px; text-align: center; font-family: 'Libre Barcode 39', cursive; font-size: 48px; }
+                        @media print {
+                            body { width: 100%; padding: 0; background: white; }
+                            .ticket-container { border: none; box-shadow: none; padding: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="ticket-container">
+                        <div class="header">
+                            <div class="logo">IT HELPDESK</div>
+                            <div class="subtitle">Ticket de Servicio IT</div>
+                        </div>
+
+                        <div class="row" style="margin-top: 24px;">
+                            <span class="label">No. Folio:</span>
+                            <span class="badge">#${ticket?.shortId || ticket?.id?.toString().substring(0, 8)}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Fecha Asignación:</span>
+                            <span class="value">${printDate}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Fecha Atención:</span>
+                            <span class="value">${scheduledStr}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Estado:</span>
+                            <span class="value" style="color: ${statusColor};">${statusLabel}</span>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="content-box">
+                            <span class="label">Detalle del Requerimiento:</span>
+                            <div class="data-text">${ticket?.issue || 'Sin descripción'}</div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="person-row">
+                            <div>
+                                <div class="person-title">Reportado por</div>
+                                <div class="person-name">${reporterName}</div>
+                            </div>
+                        </div>
+
+                        <div class="person-row">
+                            <div>
+                                <div class="person-title">Técnico Asignado</div>
+                                <div class="person-name">${techName}</div>
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="footer">
+                            <p style="margin-bottom: 4px; font-weight: 700; color: #111827;">Ticket en Atención</p>
+                            <p>Este comprobante acredita la asignación del requerimiento al técnico de IT.</p>
+                            <div class="barcode">*${ticket?.shortId || ticket?.id?.toString().substring(0, 8)}*</div>
+                        </div>
+                    </div>
+
+                    <script>
+                        window.onload = () => {
+                            let link = document.createElement('link');
+                            link.href = 'https://fonts.googleapis.com/css2?family=Libre+Barcode+39&display=swap';
+                            link.rel = 'stylesheet';
+                            document.head.appendChild(link);
+                            setTimeout(() => {
+                                window.print();
+                                setTimeout(() => window.close(), 500);
+                            }, 800);
+                        }
+                    </script>
+                </body>
+            </html>
+        `;
+
+        const printWindow = window.open('', '_blank', 'width=450,height=800');
+        if (printWindow) {
+            printWindow.document.write(receiptHTML);
+            printWindow.document.close();
+        }
+    };
+    // ==========================================
+
+    // ==========================================
     // NUEVA FUNCIÓN: Generador de Recibo Térmico
     // ==========================================
     const handleDownloadReceipt = () => {
@@ -566,6 +945,28 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                         <option value="in_progress">En Proceso</option>
                                         <option value="resolved">Resuelto</option>
                                     </select>
+                                </div>
+                            )}
+
+                            {isAdmin && ticket?.assigned_tech && !isClosed && isMaintenanceTech() && (
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handlePrintWorkOrder}
+                                        className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-400 py-3 rounded-xl font-black uppercase text-[9px] tracking-widest hover:border-amber-600 dark:hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-all active:scale-95"
+                                    >
+                                        <Printer size={14} /> Imprimir Orden
+                                    </button>
+                                    <button
+                                        onClick={handleNotifySistemas}
+                                        disabled={notifyingSistemas}
+                                        className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-violet-400 dark:border-violet-600 text-violet-700 dark:text-violet-400 py-3 rounded-xl font-black uppercase text-[9px] tracking-widest hover:border-violet-600 dark:hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {notifyingSistemas
+                                            ? <span className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                                            : <MessageSquare size={14} />
+                                        }
+                                        Notificar Sistemas
+                                    </button>
                                 </div>
                             )}
                         </div>
