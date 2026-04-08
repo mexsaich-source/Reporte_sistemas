@@ -1,6 +1,25 @@
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabaseClient';
 
+const normalizeImportedDepartment = (rawValue = '') => {
+    const raw = String(rawValue || '').trim();
+    if (!raw) return 'General';
+
+    const value = raw.toLowerCase();
+    if (value.includes('ama de llav')) return 'Ama de Llaves';
+    if (value.includes('banquete')) return 'Banquetes';
+    if (value.includes('evento')) return 'Eventos';
+    if (value.includes('compra')) return 'Compras';
+    if (value.includes('mantenimiento')) return 'Mantenimiento';
+    if (value.includes('ingenieria') || value.includes('ingeniería')) return 'Ingeniería';
+    if (value.includes('sistema')) return 'Sistemas';
+    if (value.includes('recursos') || value.includes('rrhh')) return 'Recursos Humanos';
+    if (value.includes('finanza')) return 'Finanzas';
+    if (value.includes('general')) return 'General';
+
+    return raw;
+};
+
 export const importService = {
     /**
      * Parse Excel file into JSON
@@ -206,7 +225,7 @@ export const importService = {
                     const payload = {
                         full_name: row.name || row.Name || row.Nombre,
                         email: row.email || row.Email,
-                        department: row.department || row.Department || row.Departamento || 'General',
+                        department: normalizeImportedDepartment(row.department || row.Department || row.Departamento || 'General'),
                         role: safeRole,
                         location:
                             row.location ||

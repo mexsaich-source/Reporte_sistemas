@@ -459,6 +459,10 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
                                     <>
                                         <option value="General">General</option>
                                         <option value="Sistemas">Sistemas</option>
+                                        <option value="Compras">Compras</option>
+                                        <option value="Banquetes">Banquetes</option>
+                                        <option value="Eventos">Eventos</option>
+                                        <option value="Ama de Llaves">Ama de Llaves</option>
                                         <option value="Recursos Humanos">RRHH</option>
                                         <option value="Finanzas">Finanzas</option>
                                         <option value="Mantenimiento">Mantenimiento</option>
