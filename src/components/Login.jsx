@@ -378,7 +378,7 @@ const Login = () => {
 
                         <div className="mt-12 text-center">
                             <p className="text-[10px] text-slate-400 font-medium leading-relaxed max-w-xs mx-auto">
-                                Al continuar, aceptas nuestros <button type="button" onClick={() => { setTermsType('terms'); setIsTermsOpen(true); }} className="text-indigo-600 font-bold hover:underline">Términos de servicio</button> y la <button type="button" onClick={() => { setTermsType('privacy'); setIsTermsOpen(true); }} className="text-indigo-600 font-bold hover:underline">Política de privacidad</button>.
+                                Al acceder, iniciar sesión o usar esta plataforma, aceptas automáticamente nuestros <button type="button" onClick={() => { setTermsType('terms'); setIsTermsOpen(true); }} className="text-indigo-600 font-bold hover:underline">Términos de servicio</button> y la <button type="button" onClick={() => { setTermsType('privacy'); setIsTermsOpen(true); }} className="text-indigo-600 font-bold hover:underline">Política de privacidad</button>.
                             </p>
                         </div>
                     </div>

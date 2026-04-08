@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manual Admin - IT Helpdesk MEXSA</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --primary: #1d4ed8;
+      --ok: #047857;
+      --warn: #92400e;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #eaf2ff 0%, var(--bg) 45%);
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px 60px;
+    }
+    .hero {
+      background: radial-gradient(circle at top right, #dbeafe 0%, #ffffff 58%);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+    }
+    .actions { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-light { background: #e2e8f0; color: #0f172a; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 {
+      margin: 26px 0 8px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+      font-size: 20px;
+    }
+    h3 { margin: 16px 0 8px; font-size: 16px; }
+    p { margin: 8px 0; }
+    .muted { color: var(--muted); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .badge {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #f8fafc;
+    }
+    .ok { color: var(--ok); font-weight: 700; }
+    .warn { color: var(--warn); font-weight: 700; }
+    .bad { color: var(--bad); font-weight: 700; }
+    ul, ol { margin: 8px 0 8px 20px; }
+    li { margin: 4px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    code {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .footer {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 900px) {
+      .grid, .grid-3 { grid-template-columns: 1fr; }
+      h1 { font-size: 24px; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .actions { display: none !important; }
+      .hero, .card { box-shadow: none; }
+      .wrap { max-width: 100%; margin: 0; }
+      @page { size: A4; margin: 12mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Manual ADMIN - IT Helpdesk MEXSA</h1>
+      <p class="muted">
+        Runbook operativo completo para administracion del sistema web: navegacion, operacion diaria,
+        controles, incidentes y planes de respuesta.
+      </p>
+      <p class="muted">Fecha: 8 de abril de 2026 | Perfil objetivo: Admin IT / Lider de operacion</p>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="window.print()">Descargar en PDF</button>
+        <button class="btn btn-light" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">Ir al inicio</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>1. Alcance y objetivo</h2>
+      <ul>
+        <li>Operar la plataforma completa de soporte, tickets, inventario, actividades y usuarios.</li>
+        <li>Mantener continuidad operativa con trazabilidad y seguridad de roles.</li>
+        <li>Resolver incidentes funcionales y de configuracion con tiempos cortos.</li>
+      </ul>
+      <p><span class="warn">Politica clave:</span> IT y Mantenimiento tienen separacion de privilegios.</p>
+    </section>
+
+    <section class="card">
+      <h2>2. Mapa de navegacion admin</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Modulo</th>
+            <th>Objetivo</th>
+            <th>Acciones clave</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dashboard</td>
+            <td>Control ejecutivo del estado de operacion.</td>
+            <td>Revisar abiertos, pendientes, resueltos y carga por tecnico.</td>
+          </tr>
+          <tr>
+            <td>Tickets</td>
+            <td>Gestion de incidencias.</td>
+            <td>Priorizar, asignar, seguir SLA, resolver/escalar.</td>
+          </tr>
+          <tr>
+            <td>Inventory</td>
+            <td>Control de activos TI.</td>
+            <td>Altas, ediciones, estados, asignacion y prestamos.</td>
+          </tr>
+          <tr>
+            <td>Activities</td>
+            <td>Plan de trabajo tecnico.</td>
+            <td>Crear tareas, asignar responsables, cerrar pendientes.</td>
+          </tr>
+          <tr>
+            <td>Requests</td>
+            <td>Solicitudes de usuarios.</td>
+            <td>Aprobar/rechazar, registrar motivo y estado final.</td>
+          </tr>
+          <tr>
+            <td>Users</td>
+            <td>Ciclo de vida de cuentas.</td>
+            <td>Alta, suspension, reactivacion, rol, depto, ubicacion.</td>
+          </tr>
+          <tr>
+            <td>Import</td>
+            <td>Carga masiva usuarios + inventario.</td>
+            <td>Preview editable, correccion, consolidacion, diagnostico post-carga.</td>
+          </tr>
+          <tr>
+            <td>Reports</td>
+            <td>Analitica y evidencia.</td>
+            <td>Seguimiento de rendimiento y volumen por area.</td>
+          </tr>
+          <tr>
+            <td>NewsTI</td>
+            <td>Comunicacion global.</td>
+            <td>Publicar avisos, cerrar incidentes comunicados.</td>
+          </tr>
+          <tr>
+            <td>Maintenance / ITFailureReport</td>
+            <td>Canal de coordinacion con ingenieria.</td>
+            <td>Recibir y escalar reportes TI desde mantenimiento.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>3. Rutina admin de principio a fin</h2>
+      <div class="grid-3">
+        <div class="card">
+          <h3>Inicio de turno (10-15 min)</h3>
+          <ol>
+            <li>Entrar a Dashboard y revisar KPIs: abiertos, pendientes, resueltos.</li>
+            <li>Entrar a Tickets y filtrar urgentes/no asignados.</li>
+            <li>Entrar a Activities y validar backlog del equipo tecnico.</li>
+            <li>Entrar a NewsTI para revisar incidentes globales activos.</li>
+          </ol>
+        </div>
+        <div class="card">
+          <h3>Operacion continua</h3>
+          <ol>
+            <li>Asignar nuevos tickets por prioridad e impacto operacional.</li>
+            <li>Revisar Requests y prestamos por vencer.</li>
+            <li>Ajustar Inventario (asignacion, devolucion, rechazo o baja).</li>
+            <li>Monitorear notificaciones y responder bloqueos reales.</li>
+          </ol>
+        </div>
+        <div class="card">
+          <h3>Cierre de turno</h3>
+          <ol>
+            <li>Confirmar que todo ticket abierto tenga responsable.</li>
+            <li>Documentar pendientes criticos para siguiente turno.</li>
+            <li>Publicar aviso NewsTI si continua afectacion global.</li>
+            <li>Guardar evidencia operativa (reportes/exportes).</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>4. Manual completo del sidebar (paso a paso)</h2>
+
+      <h3>4.1 Dashboard</h3>
+      <ol>
+        <li>Verifica tendencia de tickets abiertos, actividades y equipos en mantenimiento.</li>
+        <li>Revisa grafica por departamento para detectar cuellos de botella.</li>
+        <li>En tabla de rendimiento, identifica tecnico saturado y rebalancea carga.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> aumento repentino de abiertos. <span class="ok">Accion:</span> abrir filtro por urgencia, asignar inmediatamente y publicar aviso si es general.</p>
+
+      <h3>4.2 Tickets</h3>
+      <ol>
+        <li>Validar que el ticket tenga asunto, descripcion clara y evidencia.</li>
+        <li>Definir prioridad real (no por orden de llegada, por impacto).</li>
+        <li>Asignar tecnico y dejar comentario inicial de atencion.</li>
+        <li>Actualizar estado: <code>open</code> -> <code>assigned</code> -> <code>in_progress</code> -> <code>resolved</code>.</li>
+        <li>Si depende de aprobacion, usar <code>pending_admin</code>.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> ticket estancado. <span class="ok">Accion:</span> reasignar tecnico, pedir evidencia adicional y registrar nuevo ETA en comentario.</p>
+
+      <h3>4.3 Inventory</h3>
+      <ol>
+        <li>Alta: capturar <strong>tipo, marca, modelo, serie, estado</strong>.</li>
+        <li>Estados validos en operacion: <code>available</code>, <code>active</code>, <code>loaned</code>, <code>request_pending</code>, <code>denied</code>, <code>decommissioned</code>.</li>
+        <li>Asignar equipos a usuarios desde la ficha del activo o del usuario.</li>
+        <li>Registrar datos de prestamo y devolucion para trazabilidad.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> activo duplicado por serie. <span class="ok">Accion:</span> consolidar registro correcto, documentar y dar baja controlada del duplicado.</p>
+
+      <h3>4.4 Activities</h3>
+      <ol>
+        <li>Crear actividad con titulo claro, prioridad y fecha objetivo.</li>
+        <li>Asignar tecnico responsable desde inicio.</li>
+        <li>Monitorear cambios de estado: <code>pending</code>, <code>assigned</code>, <code>in_progress</code>, <code>resolved</code>.</li>
+        <li>Resolver actividades bloqueadas por dependencias externas con nota administrativa.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> tecnico sin capacidad. <span class="ok">Accion:</span> redistribuir actividades por prioridad y especialidad.</p>
+
+      <h3>4.5 Requests (solicitudes)</h3>
+      <ol>
+        <li>Revisar motivo de solicitud y evidencia del usuario.</li>
+        <li>Comparar contra stock y politicas de prioridad.</li>
+        <li>Aprobar o rechazar dejando comentario claro.</li>
+        <li>Si aprobada, mover a flujo de entrega/prestamo.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> solicitud rechazada con apelacion. <span class="ok">Accion:</span> evaluar nueva evidencia y emitir resolucion final documentada.</p>
+
+      <h3>4.6 Users</h3>
+      <ol>
+        <li>Alta de usuario: sin password manual, flujo por correo de activacion.</li>
+        <li>Asignar rol y departamento correctos desde el primer alta.</li>
+        <li>Suspender/reactivar segun estatus laboral u operativo.</li>
+        <li>Gestionar datos admin: ubicacion, contacto y equipos asignados.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> usuario no aparece en listado. <span class="ok">Accion:</span> validar RLS y que exista fila en profiles ligada a Auth.</p>
+
+      <h3>4.7 Import (carga masiva)</h3>
+      <ol>
+        <li>Subir archivo xlsx (usuarios, inventario o mixto).</li>
+        <li>Corregir filas en preview editable antes de confirmar.</li>
+        <li>Confirmar y revisar resumen: nuevos, actualizados, duplicados, errores.</li>
+        <li>Ejecutar diagnostico post-carga y usar correccion rapida (asignar/liberar huerfanos).</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> import con 0 registros creados. <span class="ok">Accion:</span> revisar errores de preview, mapping de columnas y permisos del usuario que importa.</p>
+
+      <h3>4.8 Reports</h3>
+      <ol>
+        <li>Revisar tendencia semanal de tickets y tiempos de resolucion.</li>
+        <li>Cruzar reporte por area para detectar origen de incidencias repetitivas.</li>
+        <li>Exportar evidencia para direccion o auditoria interna.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> KPI inconsistente. <span class="ok">Accion:</span> validar filtros por fecha/estado y recalcular con dataset crudo.</p>
+
+      <h3>4.9 NewsTI (noticias y avisos globales)</h3>
+      <ol>
+        <li>Crear aviso cuando haya impacto general (red, correo, sistema, mantenimiento programado).</li>
+        <li>Actualizar progreso en el mismo hilo para evitar ruido.</li>
+        <li>Cerrar aviso con causa raiz y hora de restablecimiento.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> usuarios reportan mismo incidente por varios canales. <span class="ok">Accion:</span> centralizar comunicacion en NewsTI con estatus cada 15-30 min.</p>
+
+      <h3>4.10 Maintenance e ITFailureReport</h3>
+      <ol>
+        <li>Recibir reportes de falla TI desde ingenieria/mantenimiento.</li>
+        <li>Clasificar si el caso es de TI o mantenimiento local.</li>
+        <li>Escalar a tecnico IT cuando corresponda y dar seguimiento cruzado.</li>
+      </ol>
+      <p><span class="warn">Problema real:</span> cruce de responsabilidades IT vs mantenimiento. <span class="ok">Accion:</span> documentar responsable final y evitar doble atencion del mismo caso.</p>
+    </section>
+
+    <section class="card">
+      <h2>5. Prestamos, vencimientos y apelaciones (operacion completa)</h2>
+      <h3>5.1 Prestamo por expirar</h3>
+      <ol>
+        <li>Filtrar solicitudes por fecha de devolucion en ventana de 72/48/24 horas.</li>
+        <li>Notificar al usuario y supervisor con recordatorio.</li>
+        <li>Si no hay devolucion, cambiar a seguimiento y dejar trazabilidad de intento de contacto.</li>
+      </ol>
+
+      <h3>5.2 Extension de prestamo</h3>
+      <ol>
+        <li>Validar disponibilidad del activo y criticidad del solicitante.</li>
+        <li>Aprobar/rechazar con comentario obligatorio.</li>
+        <li>Actualizar nueva fecha limite si procede.</li>
+      </ol>
+
+      <h3>5.3 Apelacion</h3>
+      <ol>
+        <li>Solicitar evidencia adicional (impacto, continuidad, respaldo del area).</li>
+        <li>Revisar contra politicas de stock y prioridad.</li>
+        <li>Emitir resolucion final y cerrar con nota de auditoria.</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>6. Matriz de incidentes y respuesta</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Incidente</th>
+            <th>Senal</th>
+            <th>Accion inmediata</th>
+            <th>Cierre tecnico</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Error 500 en profiles</td>
+            <td>Mensaje de recursion/500 al cargar perfil</td>
+            <td>Aplicar SQL de fix de policies en profiles</td>
+            <td>Re-login + prueba de lectura total en Usuarios</td>
+          </tr>
+          <tr>
+            <td>Correo de activacion apunta a localhost</td>
+            <td>Link de email abre localhost</td>
+            <td>Corregir redirectTo/emailRedirectTo + config Supabase URL</td>
+            <td>Crear usuario test y validar link productivo</td>
+          </tr>
+          <tr>
+            <td>Import no inserta</td>
+            <td>Resumen con errores altos o 0 inserts</td>
+            <td>Corregir preview + revisar RLS/rol + repetir</td>
+            <td>Validar conteos en profiles/assets</td>
+          </tr>
+          <tr>
+            <td>Privilegios cruzados IT/Mantenimiento</td>
+            <td>Cuenta de mantenimiento ve alcance IT global</td>
+            <td>Aplicar hardening de roles/policies</td>
+            <td>Revalidar acceso por rol/departamento</td>
+          </tr>
+          <tr>
+            <td>Push/Telegram/SMTP sin envio</td>
+            <td>No llegan notificaciones</td>
+            <td>Probar envio test y revisar credenciales por area</td>
+            <td>Confirmar estado sent en logs y recepcion real</td>
+          </tr>
+          <tr>
+            <td>Prestamo vencido sin respuesta</td>
+            <td>Fecha limite superada</td>
+            <td>Escalar a supervisor + bloquear nuevas extensiones</td>
+            <td>Registrar devolucion o resolucion administrativa</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>7. Configuracion y salud de notificaciones</h2>
+      <ul>
+        <li>Configurar por area desde perfil admin.</li>
+        <li>IT: SMTP central habilitado para correos.</li>
+        <li>ING/Mantenimiento: bot/API segun politica vigente.</li>
+        <li>Ejecutar pruebas de canal periodicas (telegram + email).</li>
+      </ul>
+      <p class="warn">Si hay rotacion de credenciales, revalidar pruebas end-to-end el mismo dia.</p>
+    </section>
+
+    <section class="card">
+      <h2>8. Seguridad, control y gobierno</h2>
+      <ul>
+        <li>Aplicar principio de menor privilegio.</li>
+        <li>No usar cuentas compartidas.</li>
+        <li>Auditar cambios criticos de usuarios y activos.</li>
+        <li>Mantener separacion IT vs Mantenimiento en UI y RLS.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>9. Checklists admin</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Diario</h3>
+          <ul>
+            <li>Backlog de tickets actualizado.</li>
+            <li>Actividades pendientes asignadas.</li>
+            <li>Avisos globales vigentes revisados.</li>
+            <li>Prestamos por vencer detectados.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Semanal</h3>
+          <ul>
+            <li>Reporte de resueltos y tiempos de atencion.</li>
+            <li>Reconciliacion de inventario critico.</li>
+            <li>Revision de cuentas activas/suspendidas.</li>
+            <li>Prueba integral de notificaciones.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Checklist de contingencia (cuando truena algo)</h3>
+        <ol>
+          <li>Confirmar alcance: 1 usuario, 1 area o global.</li>
+          <li>Abrir ticket de incidente interno con timestamp.</li>
+          <li>Mitigar rapido (workaround temporal).</li>
+          <li>Comunicar por NewsTI si impacta operacion general.</li>
+          <li>Corregir causa raiz y validar end-to-end.</li>
+          <li>Cerrar incidente con postmortem corto (causa, accion, prevencion).</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>10. Referencias operativas de este proyecto</h2>
+      <ul>
+        <li>Manual usuario normal: <code>/manual_usuario_helpdesk.html</code></li>
+        <li>Manual admin (este): <code>/manual_admin_helpdesk.html</code></li>
+        <li>Fix RLS perfiles: <code>supabase/manual_sql/fix_profiles_admin_visibility_and_control.sql</code></li>
+        <li>Politica IT vs Mantenimiento: separar privilegios por rol + departamento.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>11. Descargar en PDF</h2>
+      <p>
+        Pulsa <strong>Descargar en PDF</strong> al inicio.
+        En el dialogo del navegador elige <strong>Guardar como PDF</strong>.
+      </p>
+      <p class="ok">Documento optimizado para hoja A4.</p>
+    </section>
+
+    <p class="footer">
+      Documento interno de operacion admin. Actualizar cuando cambien flujos, estados, politicas RLS o modulos del front.
+    </p>
+  </div>
+</body>
+</html>
