@@ -633,7 +633,7 @@ const UsersView = ({ searchTerm = '' }) => {
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 transition-colors duration-300">
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard label="Empleados" value={stats.total} trend={isMaint ? "Mantenimiento" : "Totales"} icon={Users} color="text-slate-600" bg="bg-slate-100" />
+                <StatCard label="Empleados" value={stats.total} trend={isMaintScoped ? "Mantenimiento" : "Totales"} icon={Users} color="text-slate-600" bg="bg-slate-100" />
                 <StatCard label="Activos" value={stats.active} trend="En línea" icon={UserCheck} color="text-emerald-600" bg="bg-emerald-100" />
                 <StatCard label={isMaintScoped ? "Ingenieros" : "Técnicos"} value={stats.techs} trend="Área" icon={Shield} color="text-blue-600" bg="bg-blue-100" />
                 {!isMaintScoped && <StatCard label="Administradores" value={stats.admins} trend="Sistemas" icon={ShieldCheck} color="text-purple-600" bg="bg-purple-100" />}
