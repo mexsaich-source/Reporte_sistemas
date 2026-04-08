@@ -294,6 +294,25 @@ async function getAreaSettings(supabase: any, area: Area): Promise<AreaSettings 
   return data as AreaSettings;
 }
 
+function hasSmtpConfig(settings: AreaSettings | null): boolean {
+  const host = String(settings?.smtp_host || '').trim();
+  const user = String(settings?.smtp_user || '').trim();
+  const pass = String(settings?.smtp_pass || '').trim();
+  return Boolean(host && user && pass);
+}
+
+async function resolveEmailSettingsForArea(supabase: any, area: Area, settings: AreaSettings | null): Promise<AreaSettings | null> {
+  if (hasSmtpConfig(settings)) return settings;
+
+  // Ingeniería usa SMTP central de IT cuando no tiene SMTP propio.
+  if (area === 'ING') {
+    const itSettings = await getAreaSettings(supabase, 'IT');
+    if (hasSmtpConfig(itSettings)) return itSettings;
+  }
+
+  return settings;
+}
+
 async function getProfileById(supabase: any, userId: string): Promise<ProfileRow | null> {
   if (!userId) return null;
   const { data, error } = await supabase
@@ -460,6 +479,7 @@ async function handleTicketResolved(supabase: any, payload: any) {
   const ctx = await resolveTicketContext(supabase, payload);
   if (!ctx) return { ok: false, status: 404, error: "No se pudo resolver el ticket o su area" };
   const areaSettings = await getAreaSettings(supabase, ctx.area);
+  const emailSettings = await resolveEmailSettingsForArea(supabase, ctx.area, areaSettings);
 
   const areaLabel = ctx.area === "IT" ? "IT" : "Ingeniería";
 
@@ -497,7 +517,7 @@ async function handleTicketResolved(supabase: any, payload: any) {
       toEmail,
       `Tu solicitud ha sido resuelta — Ticket #${ctx.ticketId}`,
       `Hola,\n\nTe informamos que tu solicitud "${ctx.title}" ha sido atendida y marcada como resuelta por el equipo de ${areaLabel}.\n\nSi el problema persiste o tienes alguna duda, crea un nuevo ticket desde la plataforma.\n\nGracias,\nEquipo de ${areaLabel}`,
-      areaSettings
+      emailSettings
     );
   }
 
@@ -536,6 +556,7 @@ async function handleLegacyNotification(supabase: any, payload: any) {
   const forcedArea = normalizeAreaFromString(payload?.area || payload?.department);
   if (forcedArea) area = forcedArea;
   const areaSettings = await getAreaSettings(supabase, area);
+  const emailSettings = await resolveEmailSettingsForArea(supabase, area, areaSettings);
 
   let email = profile.email;
   let chatId = getTelegramChatId(profile);
@@ -554,7 +575,7 @@ async function handleLegacyNotification(supabase: any, payload: any) {
   }
 
   if (email) {
-    jobs.push(sendEmailWithSettings(email, title || "Alerta de IT Helpdesk", message, areaSettings));
+    jobs.push(sendEmailWithSettings(email, title || "Alerta de IT Helpdesk", message, emailSettings));
   }
 
   const results = await Promise.all(jobs);

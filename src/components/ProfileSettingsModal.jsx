@@ -56,6 +56,7 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
     const isMaintArea = department.includes('mantenimiento') || department.includes('ingenieria') || department.includes('ingeniería');
     const canManageAreaSettings = role === 'admin' || role === 'jefe_mantenimiento';
     const myArea = role === 'jefe_mantenimiento' ? 'ING' : (isMaintArea ? 'ING' : 'IT');
+    const canManageSmtp = canManageAreaSettings && myArea === 'IT';
 
     useEffect(() => {
         if (isOpen && profile) {
@@ -194,7 +195,7 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
         const botInput = quickSetup.bot_url.trim();
         const parsedBotToken = extractTelegramBotToken(botInput);
 
-        if (!smtpUser || !smtpPass) {
+        if (canManageSmtp && (!smtpUser || !smtpPass)) {
             setErrorMsg('Completa correo remitente y contraseña de aplicación.');
             return;
         }
@@ -210,16 +211,29 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
 
         try {
             const defaultFromName = smtpUser.includes('@') ? smtpUser.split('@')[0] : 'Notificaciones';
-            const result = await userService.saveMyAreaNotificationSettings({
-                telegram_bot_token: parsedBotToken || areaSettings.telegram_bot_token || '',
-                smtp_host: 'smtp.gmail.com',
-                smtp_port: 465,
-                smtp_user: smtpUser,
-                smtp_pass: smtpPass,
-                smtp_from_name: areaSettings.smtp_from_name || defaultFromName,
-                meta_access_token: '',
-                meta_phone_number_id: '',
-            });
+            const result = await userService.saveMyAreaNotificationSettings(
+                canManageSmtp
+                    ? {
+                        telegram_bot_token: parsedBotToken || areaSettings.telegram_bot_token || '',
+                        smtp_host: 'smtp.gmail.com',
+                        smtp_port: 465,
+                        smtp_user: smtpUser,
+                        smtp_pass: smtpPass,
+                        smtp_from_name: areaSettings.smtp_from_name || defaultFromName,
+                        meta_access_token: '',
+                        meta_phone_number_id: '',
+                    }
+                    : {
+                        telegram_bot_token: parsedBotToken || areaSettings.telegram_bot_token || '',
+                        smtp_host: '',
+                        smtp_port: null,
+                        smtp_user: '',
+                        smtp_pass: '',
+                        smtp_from_name: '',
+                        meta_access_token: '',
+                        meta_phone_number_id: '',
+                    }
+            );
 
             if (!result.success) {
                 throw new Error(result.error || 'No se pudo guardar configuración rápida.');
@@ -242,7 +256,9 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
                 setAreaUpdatedAt(reload.data.updated_at || '');
             }
 
-            setSuccessMsg('SMTP guardado. Host y puerto quedaron configurados por defecto.');
+            setSuccessMsg(canManageSmtp
+                ? 'SMTP guardado. Host y puerto quedaron configurados por defecto.'
+                : 'Bot de Telegram guardado para Ingeniería.');
         } catch (err) {
             setErrorMsg(err.message || 'No se pudo guardar la configuración rápida.');
         } finally {
@@ -313,32 +329,38 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
                         {canManageAreaSettings && (
                             <div className="mt-1 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-3">
                                 <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-700/40 bg-emerald-50/80 dark:bg-emerald-900/10 space-y-3">
-                                    <label className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-[0.2em] block ml-1">Configuración SMTP rápida</label>
+                                    <label className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-[0.2em] block ml-1">
+                                        {canManageSmtp ? 'Configuración SMTP rápida' : 'Configuración Bot de Ingeniería'}
+                                    </label>
                                     <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 ml-1">
-                                        Solo escribe correo remitente y contraseña de aplicación. El sistema configura lo demás por defecto.
+                                        {canManageSmtp
+                                            ? 'Solo escribe correo remitente y contraseña de aplicación. El sistema configura lo demás por defecto.'
+                                            : 'Ingeniería usa SMTP central de IT. Aquí solo configuras bot/API de Telegram para notificaciones del área.'}
                                     </p>
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Correo remitente</label>
-                                            <input
-                                                type="email"
-                                                placeholder="alertas@tuempresa.com"
-                                                className="w-full bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white outline-none"
-                                                value={quickSetup.smtp_user}
-                                                onChange={(e) => setQuickSetup((prev) => ({ ...prev, smtp_user: e.target.value }))}
-                                            />
+                                    {canManageSmtp && (
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Correo remitente</label>
+                                                <input
+                                                    type="email"
+                                                    placeholder="alertas@tuempresa.com"
+                                                    className="w-full bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                                                    value={quickSetup.smtp_user}
+                                                    onChange={(e) => setQuickSetup((prev) => ({ ...prev, smtp_user: e.target.value }))}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Contraseña de aplicación</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="abcd efgh ijkl mnop"
+                                                    className="w-full bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                                                    value={quickSetup.smtp_pass}
+                                                    onChange={(e) => setQuickSetup((prev) => ({ ...prev, smtp_pass: e.target.value }))}
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Contraseña de aplicación</label>
-                                            <input
-                                                type="text"
-                                                placeholder="abcd efgh ijkl mnop"
-                                                className="w-full bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 dark:text-white outline-none"
-                                                value={quickSetup.smtp_pass}
-                                                onChange={(e) => setQuickSetup((prev) => ({ ...prev, smtp_pass: e.target.value }))}
-                                            />
-                                        </div>
-                                    </div>
+                                    )}
                                     <div>
                                         <label className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] mb-2 block ml-1">Bot por área (token o URL)</label>
                                         <input
@@ -356,7 +378,7 @@ const ProfileSettingsModal = ({ isOpen, onClose }) => {
                                             disabled={quickSaving}
                                             className="px-4 h-10 rounded-xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
                                         >
-                                            {quickSaving ? 'Guardando...' : 'Guardar SMTP'}
+                                            {quickSaving ? 'Guardando...' : (canManageSmtp ? 'Guardar SMTP' : 'Guardar Bot')}
                                         </button>
                                     </div>
                                 </div>
