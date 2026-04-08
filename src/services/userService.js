@@ -1,6 +1,15 @@
 import { supabase, supabaseAdmin } from '../lib/supabaseClient';
 import { auditService } from './auditService';
 
+const formatRpcError = (error) => {
+    if (!error) return 'Error desconocido';
+    const code = error.code ? `[${error.code}] ` : '';
+    const msg = error.message || 'Error en RPC';
+    const details = error.details ? ` Detalle: ${error.details}` : '';
+    const hint = error.hint ? ` Sugerencia: ${error.hint}` : '';
+    return `${code}${msg}${details}${hint}`.trim();
+};
+
 const isMaintenanceArea = (value = '') => {
     const dep = String(value || '').trim().toLowerCase();
     return dep.includes('mantenimiento') || dep.includes('ingenieria') || dep.includes('ingeniería');
@@ -339,22 +348,58 @@ export const userService = {
                 meta_phone_number_id = '',
             } = payload;
 
-            const { data, error } = await supabase.rpc('upsert_my_notification_area_settings', {
+            const normalizedPort = smtp_port === '' || smtp_port === null || smtp_port === undefined
+                ? null
+                : Number(smtp_port);
+
+            if (normalizedPort !== null && Number.isNaN(normalizedPort)) {
+                return { success: false, error: 'El puerto SMTP no es numérico.' };
+            }
+
+            // Intento 1: firma actual (8 parámetros)
+            const argsV2 = {
                 p_telegram_bot_token: telegram_bot_token,
                 p_smtp_host: smtp_host,
-                p_smtp_port: smtp_port ? Number(smtp_port) : null,
+                p_smtp_port: normalizedPort,
                 p_smtp_user: smtp_user,
                 p_smtp_pass: smtp_pass,
                 p_smtp_from_name: smtp_from_name,
                 p_meta_access_token: meta_access_token,
                 p_meta_phone_number_id: meta_phone_number_id,
-            });
+            };
+
+            let { data, error } = await supabase.rpc('upsert_my_notification_area_settings', argsV2);
+
+            // Intento 2 (compat): firma antigua sin campos Meta
+            if (error && /function|No function matches|does not exist|PGRST202/i.test(formatRpcError(error))) {
+                const argsV1 = {
+                    p_telegram_bot_token: telegram_bot_token,
+                    p_smtp_host: smtp_host,
+                    p_smtp_port: normalizedPort,
+                    p_smtp_user: smtp_user,
+                    p_smtp_pass: smtp_pass,
+                    p_smtp_from_name: smtp_from_name,
+                };
+                ({ data, error } = await supabase.rpc('upsert_my_notification_area_settings', argsV1));
+            }
+
+            // Intento 3 (compat extrema): sin puerto (si la función no lo soporta)
+            if (error && /function|No function matches|does not exist|PGRST202/i.test(formatRpcError(error))) {
+                const argsLegacy = {
+                    p_telegram_bot_token: telegram_bot_token,
+                    p_smtp_host: smtp_host,
+                    p_smtp_user: smtp_user,
+                    p_smtp_pass: smtp_pass,
+                    p_smtp_from_name: smtp_from_name,
+                };
+                ({ data, error } = await supabase.rpc('upsert_my_notification_area_settings', argsLegacy));
+            }
 
             if (error) throw error;
             return { success: true, data };
         } catch (error) {
             console.error('Error saving area notification settings:', error);
-            return { success: false, error: error.message };
+            return { success: false, error: formatRpcError(error) };
         }
     },
 
