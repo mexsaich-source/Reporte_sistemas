@@ -1,6 +1,30 @@
 import { supabase } from '../lib/supabaseClient';
 import { auditService } from './auditService';
 
+const stripAccents = (value = '') =>
+    String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+const normalizeAssetStatus = (value = '') => {
+    const raw = stripAccents(String(value || '').trim().toLowerCase());
+    const compact = raw.replace(/[^a-z0-9]/g, '');
+    if (!raw) return 'available';
+
+    if (
+        ['available', 'disponible', 'libre', 'stock', 'bodega'].includes(raw) ||
+        ['available', 'disponible', 'libre', 'stock', 'bodega'].includes(compact) ||
+        compact.startsWith('dispon')
+    ) return 'available';
+    if (['active', 'activo', 'asignado', 'enuso', 'inuse'].includes(compact)) return 'active';
+    if (['loaned', 'prestado', 'prestamo'].includes(compact)) return 'loaned';
+    if (['requestpending', 'pendiente', 'solicitado', 'ensolicitud'].includes(compact)) return 'request_pending';
+    if (['denied', 'rechazado', 'rechazada', 'negado'].includes(compact)) return 'denied';
+    if (['decommissioned', 'baja', 'retirado', 'descontinuado'].includes(compact)) return 'decommissioned';
+
+    return raw;
+};
+
 const normalizeDeviceCategory = (type = '', model = '') => {
     const source = `${type} ${model}`.toLowerCase();
     if (/laptop|notebook/.test(source)) return 'Laptop';
@@ -55,6 +79,7 @@ export const inventoryService = {
 
             return (data || []).map(asset => {
                 const specs = asset.specs || {};
+                const normalizedStatus = normalizeAssetStatus(asset.status);
                 const assignedProfile = asset.assigned_to ? assignedUsersMap[asset.assigned_to] : null;
                 const assignedToName =
                     assignedProfile?.full_name ||
@@ -69,7 +94,7 @@ export const inventoryService = {
                 const storageLocation = specs.storage_location || specs.location || specs.department || '';
                 const currentLocation = asset.assigned_to
                     ? (assignedToLocation || assignedToDepartment || 'Con usuario')
-                    : (storageLocation || (asset.status === 'available' ? 'Bodega' : 'Infraestructura TI'));
+                    : (storageLocation || (normalizedStatus === 'available' ? 'Bodega' : 'Infraestructura TI'));
                 
                 return {
                     id: String(asset.id), 
@@ -90,7 +115,7 @@ export const inventoryService = {
                     location: storageLocation,
                     assigned_to: asset.assigned_to || null,
                     department: specs.department || '',
-                    status: asset.status || 'available', 
+                    status: normalizedStatus,
                     condition: asset.condition || 'good',
                     loanDate: specs.loan_date || '',
                     returnDate: specs.return_date || '',
@@ -122,7 +147,7 @@ export const inventoryService = {
                 id: finalId,
                 type: item.type || 'General',
                 model: item.model || '',
-                status: item.status || 'available',
+                status: normalizeAssetStatus(item.status),
                 assigned_to: item.assignedTo ?? item.assigned_to ?? null,
                 condition: item.condition || 'good',
                 specs: {
@@ -185,7 +210,7 @@ export const inventoryService = {
             const dbUpdates = {
                 type: updates.type,
                 model: updates.model,
-                status: updates.status,
+                status: updates.status !== undefined ? normalizeAssetStatus(updates.status) : undefined,
                 condition: updates.condition,
                 specs: mergedSpecs
             };

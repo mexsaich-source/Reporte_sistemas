@@ -74,17 +74,29 @@ const normalizeSerialValue = (value = '') =>
         .toUpperCase();
 
 const normalizeAssetStatus = (value = '') => {
-    const raw = String(value || '').trim().toLowerCase();
+    const raw = stripAccents(String(value || '').trim().toLowerCase());
+    const compact = raw.replace(/[^a-z0-9]/g, '');
     if (!raw) return '';
 
-    if (['available', 'disponible', 'libre', 'stock', 'bodega'].includes(raw)) return 'available';
-    if (['active', 'activo', 'asignado', 'enuso', 'en uso', 'in_use'].includes(raw)) return 'active';
-    if (['loaned', 'prestado', 'prestamo', 'préstamo'].includes(raw)) return 'loaned';
-    if (['request_pending', 'pendiente', 'solicitado', 'en solicitud'].includes(raw)) return 'request_pending';
-    if (['denied', 'rechazado', 'rechazada', 'negado'].includes(raw)) return 'denied';
-    if (['decommissioned', 'baja', 'retirado', 'descontinuado'].includes(raw)) return 'decommissioned';
+    if (
+        ['available', 'disponible', 'libre', 'stock', 'bodega'].includes(raw) ||
+        ['available', 'disponible', 'libre', 'stock', 'bodega'].includes(compact) ||
+        compact.startsWith('dispon')
+    ) return 'available';
+
+    if (['active', 'activo', 'asignado', 'enuso', 'en uso', 'in_use'].includes(raw) || ['active', 'activo', 'asignado', 'enuso', 'inuse'].includes(compact)) return 'active';
+    if (['loaned', 'prestado', 'prestamo', 'préstamo'].includes(raw) || ['loaned', 'prestado', 'prestamo'].includes(compact)) return 'loaned';
+    if (['request_pending', 'pendiente', 'solicitado', 'en solicitud'].includes(raw) || ['requestpending', 'pendiente', 'solicitado', 'ensolicitud'].includes(compact)) return 'request_pending';
+    if (['denied', 'rechazado', 'rechazada', 'negado'].includes(raw) || ['denied', 'rechazado', 'rechazada', 'negado'].includes(compact)) return 'denied';
+    if (['decommissioned', 'baja', 'retirado', 'descontinuado'].includes(raw) || ['decommissioned', 'baja', 'retirado', 'descontinuado'].includes(compact)) return 'decommissioned';
 
     return raw;
+};
+
+const isDisponibleLike = (value = '') => {
+    const compact = normalizeLookupKey(value);
+    if (!compact) return false;
+    return compact === 'disponible' || compact.startsWith('dispon');
 };
 
 const levenshteinDistance = (a = '', b = '') => {
@@ -244,7 +256,7 @@ const normalizeInputRow = (row = {}) => {
         'responsable',
         'nombre responsable',
     ]));
-    const isDisponible = userDisplayName.toLowerCase() === 'disponible';
+    const isDisponible = isDisponibleLike(userDisplayName);
 
     // Para filas de inventario: si no hay columna explícita de asignación pero sí
     // hay una columna "email", asumir que ese email es el destinatario del equipo.
@@ -695,14 +707,30 @@ export const importService = {
         const fixedAssetId = rawId ? String(rawId).trim() : '';
 
         let assignedUserId = row.assigned_to || null;
-        let status = normalizeAssetStatus(row.status) || 'available';
+        const explicitStatus = normalizeAssetStatus(row.status);
+        const hasExplicitStatus = Boolean(explicitStatus);
+        let status = explicitStatus || '';
         const assignedEmail = sanitizeImportedEmail(row.assigned_to_email || row['Correo Asignado (Opcional)'] || row.Asignado_A || '');
         if (!assignedUserId && assignedEmail) {
             const foundUser = allUsers.find((u) => u.email.toLowerCase() === assignedEmail);
             if (foundUser) {
                 assignedUserId = foundUser.id;
-                if (!row.status) status = 'active';
+                if (!hasExplicitStatus) status = 'active';
             }
+        }
+
+        if (!status) {
+            const looksAvailable = isDisponibleLike(row.user_display_name) || isDisponibleLike(row.assigned_to_name);
+            const hasAssigneeHint = Boolean(
+                assignedUserId ||
+                assignedEmail ||
+                (row.assigned_to_name && !isDisponibleLike(row.assigned_to_name)) ||
+                (row.user_display_name && !isDisponibleLike(row.user_display_name))
+            );
+
+            // Si no viene estado en archivo: inferimos en uso cuando hay señales de usuario.
+            // Si no, lo dejamos en bodega.
+            status = looksAvailable ? 'available' : (hasAssigneeHint ? 'active' : 'available');
         }
 
         return {
@@ -827,6 +855,7 @@ export const importService = {
 
                 if (shouldProcessInventory) {
                     const payload = this.buildInventoryPayload(row, allUsers, fileName);
+                    const hasExplicitStatus = Boolean(normalizeAssetStatus(row.status));
 
                     if (!payload.assigned_to) {
                         const cacheMatch = resolveProfileIdFromCache(allUsers, {
@@ -835,7 +864,7 @@ export const importService = {
                         });
                         if (cacheMatch) {
                             payload.assigned_to = cacheMatch;
-                            if (!payload.status || payload.status === 'available') payload.status = 'active';
+                            if (!hasExplicitStatus && (!payload.status || payload.status === 'available')) payload.status = 'active';
                         }
                     }
 
@@ -844,7 +873,7 @@ export const importService = {
                         const resolvedId = await resolveProfileIdByEmail(payload.specs.assigned_to_email);
                         if (resolvedId) {
                             payload.assigned_to = resolvedId;
-                            if (!payload.status || payload.status === 'available') {
+                            if (!hasExplicitStatus && (!payload.status || payload.status === 'available')) {
                                 payload.status = 'active';
                             }
                         }
@@ -858,7 +887,7 @@ export const importService = {
                         });
                         if (resolvedByIdentity) {
                             payload.assigned_to = resolvedByIdentity;
-                            if (!payload.status || payload.status === 'available') {
+                            if (!hasExplicitStatus && (!payload.status || payload.status === 'available')) {
                                 payload.status = 'active';
                             }
                         }
