@@ -252,9 +252,9 @@ const normalizeInputRow = (row = {}) => {
         brand: norm(getValueByKeys(row, ['brand', 'marca'])),
         model: norm(getValueByKeys(row, ['model', 'modelo'])),
         // NS, N/S, Serie, serial, serial_number — todas apuntan al mismo campo
-        serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s', 'no serie', 'no. serie', 'n serie'])),
+        serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s', 'no serie', 'no. serie', 'n serie', 'num serie', 'num. serie', 'serial no', 'serial number', 'sn', 's/n'])),
         inventory_tag: norm(getValueByKeys(row, ['inventory_tag', 'placa', 'tag', 'etiqueta inventario', 'placa inventario'])),
-        hostname: norm(getValueByKeys(row, ['hostname', 'host'])),
+        hostname: norm(getValueByKeys(row, ['hostname', 'host', 'host name', 'nombre host', 'nombre de host', 'nombre equipo', 'nombre de equipo', 'computer name', 'pc name'])),
         purchase_date: norm(getValueByKeys(row, ['purchase_date', 'fecha compra', 'fecha de compra'])),
         assigned_to_email: resolvedAssignedEmail,
         assigned_to_name: resolvedAssignedName,
@@ -276,6 +276,52 @@ const detectEntityType = (row) => {
     if (hasUserSignal && !hasAssetSignal) return 'user';
     if (hasAssetSignal && hasUserSignal) return 'both';
     return 'unknown';
+};
+
+const COLUMN_ALIASES = {
+    email: ['email', 'correo', 'mail', 'e-mail', 'correo electronico', 'correo electrónico'],
+    name: ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador'],
+    department: ['department', 'departamento', 'depto', 'dpto', 'dept', 'area', 'área'],
+    role: ['role', 'rol', 'perfil', 'tipo usuario', 'tipo de usuario'],
+    asset_id: ['asset_id', 'id_activo', 'id', 'asset id'],
+    asset_type: ['asset_type', 'tipo', 'type', 'tipo equipo', 'tipo de equipo'],
+    model: ['model', 'modelo'],
+    serial_number: ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s', 'no serie', 'no. serie', 'n serie', 'num serie', 'num. serie', 'serial no', 'serial number', 'sn', 's/n'],
+    hostname: ['hostname', 'host', 'host name', 'nombre host', 'nombre de host', 'nombre equipo', 'nombre de equipo', 'computer name', 'pc name'],
+    assigned_to_email: ['assigned_to_email', 'correo asignado (opcional)', 'asignado_a', 'asignado a', 'correo asignado', 'email asignado'],
+};
+
+const detectBestHeaderMatch = (headers = [], aliases = []) => {
+    const normalizedHeaders = headers.map((h) => ({ raw: h, norm: normalizeLookupKey(h) }));
+    const normalizedAliases = aliases.map((a) => normalizeLookupKey(a)).filter(Boolean);
+
+    for (const alias of normalizedAliases) {
+        const hit = normalizedHeaders.find((h) => h.norm === alias);
+        if (hit) return { header: hit.raw, confidence: 'alta', mode: 'exact' };
+    }
+
+    for (const alias of normalizedAliases) {
+        if (alias.length < 4) continue;
+        const hit = normalizedHeaders.find((h) => h.norm.includes(alias) || alias.includes(h.norm));
+        if (hit) return { header: hit.raw, confidence: 'media', mode: 'contains' };
+    }
+
+    let best = null;
+    for (const alias of normalizedAliases) {
+        if (alias.length < 5) continue;
+        for (const header of normalizedHeaders) {
+            const distance = levenshteinDistance(header.norm, alias);
+            const maxDistance = alias.length >= 10 ? 3 : 2;
+            if (distance <= maxDistance) {
+                if (!best || distance < best.distance) {
+                    best = { distance, header: header.raw };
+                }
+            }
+        }
+    }
+
+    if (best) return { header: best.header, confidence: 'baja', mode: 'fuzzy' };
+    return { header: null, confidence: 'sin match', mode: 'none' };
 };
 
 const parseUserStatusBoolean = (rawValue = '') => {
@@ -327,6 +373,27 @@ export const importService = {
             reader.onerror = (err) => reject(err);
             reader.readAsArrayBuffer(file);
         });
+    },
+
+    analyzeColumnMapping(data = []) {
+        const headers = data.length > 0 ? Object.keys(data[0] || {}) : [];
+        const mappings = Object.entries(COLUMN_ALIASES).map(([field, aliases]) => {
+            const match = detectBestHeaderMatch(headers, aliases);
+            return {
+                field,
+                aliases,
+                detectedHeader: match.header,
+                confidence: match.confidence,
+                mode: match.mode,
+            };
+        });
+
+        return {
+            headers,
+            mappings,
+            matched: mappings.filter((m) => !!m.detectedHeader).length,
+            total: mappings.length,
+        };
     },
 
     /**
@@ -640,7 +707,36 @@ export const importService = {
                     const payload = this.buildInventoryPayload(row, allUsers, fileName);
 
                     if (row._action === 'update' && row._existingId) {
-                        const { error } = await supabase.from('assets').update(payload).eq('id', row._existingId);
+                        const { data: existingAsset, error: fetchAssetError } = await supabase
+                            .from('assets')
+                            .select('id, type, model, status, assigned_to, specs')
+                            .eq('id', row._existingId)
+                            .maybeSingle();
+
+                        if (fetchAssetError) throw fetchAssetError;
+
+                        const existingSpecs = existingAsset?.specs || {};
+                        const incomingSpecs = payload.specs || {};
+                        const mergedSpecs = {
+                            ...existingSpecs,
+                            ...incomingSpecs,
+                            // Evitar vaciar campos críticos cuando vienen en blanco en el archivo
+                            serial_number: incomingSpecs.serial_number || existingSpecs.serial_number || existingSpecs.serial || '',
+                            hostname: incomingSpecs.hostname || existingSpecs.hostname || '',
+                        };
+
+                        const updatePayload = {
+                            type: payload.type || existingAsset?.type || null,
+                            model: payload.model || existingAsset?.model || null,
+                            status: payload.status || existingAsset?.status || 'available',
+                            assigned_to: payload.assigned_to ?? existingAsset?.assigned_to ?? null,
+                            specs: mergedSpecs,
+                        };
+
+                        const { error } = await supabase
+                            .from('assets')
+                            .update(updatePayload)
+                            .eq('id', row._existingId);
                         if (error) throw error;
                         updateCount++;
                     } else {

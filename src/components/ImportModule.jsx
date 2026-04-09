@@ -22,6 +22,7 @@ const ImportModule = () => {
     const [applyingFix, setApplyingFix] = useState(false);
     const [repairing, setRepairing] = useState(false);
     const [repairResult, setRepairResult] = useState(null);
+    const [columnAnalysis, setColumnAnalysis] = useState(null);
 
     const loadDiagnostics = useCallback(async () => {
         setLoadingDiagnostics(true);
@@ -48,6 +49,8 @@ const ImportModule = () => {
 
         try {
             const data = await importService.parseExcel(selectedFile);
+            const mapping = importService.analyzeColumnMapping(data);
+            setColumnAnalysis(mapping);
 
             const preview = importType === 'users'
                 ? await importService.previewUsers(data)
@@ -94,6 +97,7 @@ const ImportModule = () => {
         setFile(null);
         setPreviewData([]);
         setImportStatus(null);
+        setColumnAnalysis(null);
     };
 
     const handleTypeChange = (type) => {
@@ -462,6 +466,36 @@ const ImportModule = () => {
                                     </div>
                                 )}
                             </div>
+
+                            {columnAnalysis && (
+                                <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border shadow-xl shadow-slate-200/30 dark:shadow-none">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h5 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Mapeo Detectado de Columnas</h5>
+                                        <span className="text-[10px] font-black px-3 py-1.5 rounded-xl border border-blue-100 bg-blue-50 text-blue-700">
+                                            {columnAnalysis.matched}/{columnAnalysis.total} campos
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-64 overflow-auto pr-1">
+                                        {columnAnalysis.mappings.map((m) => (
+                                            <div key={m.field} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 dark:border-slate-700 px-3 py-2 bg-slate-50/70 dark:bg-slate-800/40">
+                                                <div>
+                                                    <p className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">{m.field}</p>
+                                                    <p className="text-[10px] text-slate-400">Alias: {m.aliases.slice(0, 4).join(', ')}{m.aliases.length > 4 ? '...' : ''}</p>
+                                                </div>
+                                                {m.detectedHeader ? (
+                                                    <div className="text-right">
+                                                        <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{m.detectedHeader}</p>
+                                                        <p className="text-[10px] text-slate-400">Confianza: {m.confidence}</p>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] font-black text-rose-600 bg-rose-50 dark:bg-rose-500/10 px-2 py-1 rounded-lg">No detectado</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="xl:col-span-2 space-y-4">
