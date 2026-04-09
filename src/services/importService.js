@@ -73,6 +73,20 @@ const normalizeSerialValue = (value = '') =>
         .replace(/\s+/g, '')
         .toUpperCase();
 
+const normalizeAssetStatus = (value = '') => {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+
+    if (['available', 'disponible', 'libre', 'stock', 'bodega'].includes(raw)) return 'available';
+    if (['active', 'activo', 'asignado', 'enuso', 'en uso', 'in_use'].includes(raw)) return 'active';
+    if (['loaned', 'prestado', 'prestamo', 'préstamo'].includes(raw)) return 'loaned';
+    if (['request_pending', 'pendiente', 'solicitado', 'en solicitud'].includes(raw)) return 'request_pending';
+    if (['denied', 'rechazado', 'rechazada', 'negado'].includes(raw)) return 'denied';
+    if (['decommissioned', 'baja', 'retirado', 'descontinuado'].includes(raw)) return 'decommissioned';
+
+    return raw;
+};
+
 const levenshteinDistance = (a = '', b = '') => {
     if (a === b) return 0;
     if (!a.length) return b.length;
@@ -251,10 +265,10 @@ const normalizeInputRow = (row = {}) => {
         position: norm(getValueByKeys(row, ['position', 'puesto', 'cargo', 'job title', 'titulo'])),
         location: norm(getValueByKeys(row, ['location', 'localizacion', 'localización', 'ubicacion', 'ubicación', 'ubicación física', 'localización física'])),
         assigned_equipment: norm(getValueByKeys(row, ['assigned_equipment', 'equipos', 'equipos asignados'])),
-        status: norm(getValueByKeys(row, ['status', 'estado'])) || 'active',
+        status: normalizeAssetStatus(getValueByKeys(row, ['status', 'estado', 'estatus'])),
         role: norm(getValueByKeys(row, ['role', 'rol', 'perfil', 'tipo usuario', 'tipo de usuario'])) || 'user',
 
-        asset_id: norm(getValueByKeys(row, ['asset_id', 'id_activo', 'id', 'asset id'])),
+        asset_id: norm(getValueByKeys(row, ['asset_id', 'assets_id', 'id_activo', 'id activo', 'activo fijo', 'id activo fijo', 'id', 'asset id', 'assetid'])),
         asset_type: norm(getValueByKeys(row, ['asset_type', 'tipo', 'type', 'tipo equipo', 'tipo de equipo'])),
         brand: norm(getValueByKeys(row, ['brand', 'marca'])),
         model: norm(getValueByKeys(row, ['model', 'modelo'])),
@@ -297,7 +311,7 @@ const COLUMN_ALIASES = {
         name: ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador', 'usuario', 'nombre usuario', 'nombre de usuario'],
     department: ['department', 'departamento', 'depto', 'dpto', 'dept', 'area', 'área'],
     role: ['role', 'rol', 'perfil', 'tipo usuario', 'tipo de usuario'],
-    asset_id: ['asset_id', 'id_activo', 'id', 'asset id'],
+    asset_id: ['asset_id', 'assets_id', 'id_activo', 'id activo', 'activo fijo', 'id activo fijo', 'id', 'asset id', 'assetid'],
     asset_type: ['asset_type', 'tipo', 'type', 'tipo equipo', 'tipo de equipo'],
     model: ['model', 'modelo'],
     serial_number: ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s', 'no serie', 'no. serie', 'n serie', 'num serie', 'num. serie', 'serial no', 'serial number', 'sn', 's/n'],
@@ -680,7 +694,7 @@ export const importService = {
         const finalId = rawId ? String(rawId) : `AST-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`;
 
         let assignedUserId = row.assigned_to || null;
-        let status = row.status || 'available';
+        let status = normalizeAssetStatus(row.status) || 'available';
         const assignedEmail = sanitizeImportedEmail(row.assigned_to_email || row['Correo Asignado (Opcional)'] || row.Asignado_A || '');
         if (!assignedUserId && assignedEmail) {
             const foundUser = allUsers.find((u) => u.email.toLowerCase() === assignedEmail);
