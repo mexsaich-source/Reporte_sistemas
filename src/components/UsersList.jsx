@@ -231,7 +231,7 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                         >
                                             <option value="">Selecciona un equipo disponible</option>
                                             {assignableAssets
-                                                .filter((a) => !a.assigned_to || a.assigned_to === user?.id)
+                                                .filter((a) => !a.assigned_to || a.assigned_to === user?.id || a.is_orphan)
                                                 .map((a) => (
                                                     <option key={a.id} value={a.id}>{a.label}</option>
                                                 ))}

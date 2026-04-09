@@ -43,22 +43,51 @@ export const userService = {
 
             if (error) throw error;
 
-            const { data: assignedAssets, error: assetsError } = await supabase
+            const { data: allAssets, error: assetsError } = await supabase
                 .from('assets')
                 .select('id, type, model, status, assigned_to, specs')
-                .not('assigned_to', 'is', null);
+                .order('created_at', { ascending: false });
 
             if (assetsError) {
                 console.warn('No se pudieron cargar equipos asignados:', assetsError.message);
                 return profiles || [];
             }
 
-            const assetsByUser = (assignedAssets || []).reduce((acc, asset) => {
-                const userId = asset.assigned_to;
+            const profilesById = (profiles || []).reduce((acc, p) => {
+                acc[p.id] = p;
+                return acc;
+            }, {});
+
+            const profilesByEmail = (profiles || []).reduce((acc, p) => {
+                const key = String(p.email || '').trim().toLowerCase();
+                if (key && !acc[key]) acc[key] = p.id;
+                return acc;
+            }, {});
+
+            const assetsByUser = (allAssets || []).reduce((acc, asset) => {
+                const specs = asset.specs || {};
+
+                let userId = asset.assigned_to || null;
+                let relationSource = userId ? 'assigned_to' : 'none';
+
+                // Fallback histórico: hay cargas donde solo se guardó assigned_to_email en specs.
+                // Eso debe reflejarse en la vista de usuarios aunque falte el UUID.
+                if (!userId) {
+                    const emailFromSpecs = String(specs.assigned_to_email || '').trim().toLowerCase();
+                    if (emailFromSpecs && profilesByEmail[emailFromSpecs]) {
+                        userId = profilesByEmail[emailFromSpecs];
+                        relationSource = 'email_meta';
+                    }
+                }
+
+                // Si assigned_to apunta a UUID inválido, no mapear aquí (quedará en diagnóstico de huérfanos).
+                if (userId && !profilesById[userId]) {
+                    userId = null;
+                }
+
                 if (!userId) return acc;
                 if (!acc[userId]) acc[userId] = [];
 
-                const specs = asset.specs || {};
                 const hostname = String(specs.hostname || '').trim();
                 const serial = specs.serial_number || specs.serial || null;
                 const fallbackLabel = [
@@ -79,6 +108,7 @@ export const userService = {
                     status: asset.status,
                     hostname,
                     assigned_to_email: specs.assigned_to_email || null,
+                    relation_source: relationSource,
                     serial_number: specs.serial_number || specs.serial || null,
                     brand: specs.brand || null,
                     label: label || `${asset.type || 'Equipo'} · ${asset.id}`,
@@ -103,27 +133,59 @@ export const userService = {
 
     async getAssignableAssets(userId = null) {
         try {
-            let query = supabase
-                .from('assets')
-                .select('id, type, model, status, assigned_to, specs')
-                .order('created_at', { ascending: false });
+            const [{ data: assets, error: assetsError }, { data: profiles, error: profilesError }] = await Promise.all([
+                supabase
+                    .from('assets')
+                    .select('id, type, model, status, assigned_to, specs')
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('profiles')
+                    .select('id, email'),
+            ]);
 
-            if (userId) {
-                query = query.or(`assigned_to.is.null,assigned_to.eq.${userId}`);
-            } else {
-                query = query.is('assigned_to', null);
-            }
+            if (assetsError) throw assetsError;
+            if (profilesError) throw profilesError;
 
-            const { data, error } = await query;
-            if (error) throw error;
+            const profileIds = new Set((profiles || []).map((p) => p.id));
+            const profileByEmail = (profiles || []).reduce((acc, p) => {
+                const key = String(p.email || '').trim().toLowerCase();
+                if (key && !acc[key]) acc[key] = p.id;
+                return acc;
+            }, {});
 
-            return (data || []).map((asset) => {
+            const userEmail = userId
+                ? String((profiles || []).find((p) => p.id === userId)?.email || '').trim().toLowerCase()
+                : '';
+
+            const filtered = (assets || []).filter((asset) => {
+                const assignedTo = asset.assigned_to;
+                const metaEmail = String(asset.specs?.assigned_to_email || '').trim().toLowerCase();
+                const metaUserId = metaEmail ? profileByEmail[metaEmail] : null;
+                const isOrphan = !!assignedTo && !profileIds.has(assignedTo);
+
+                if (!userId) {
+                    return !assignedTo || isOrphan;
+                }
+
+                return (
+                    !assignedTo ||
+                    assignedTo === userId ||
+                    isOrphan ||
+                    (metaUserId && metaUserId === userId) ||
+                    (userEmail && metaEmail === userEmail)
+                );
+            });
+
+            return filtered.map((asset) => {
                 const specs = asset.specs || {};
+                const isOrphan = !!asset.assigned_to && !profileIds.has(asset.assigned_to);
                 return {
                     ...asset,
                     serial_number: specs.serial_number || specs.serial || null,
                     brand: specs.brand || null,
+                    is_orphan: isOrphan,
                     label: [
+                        specs.hostname || null,
                         specs.brand || null,
                         asset.model || specs.model || null,
                         specs.serial_number || specs.serial || null,
