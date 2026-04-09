@@ -594,29 +594,13 @@ const UsersView = ({ searchTerm = '' }) => {
             };
         }
 
-        const counters = {
-            monitor: 0,
-            laptop: 0,
-            other: 0,
-        };
-
-        assets.forEach((asset) => {
-            const source = `${asset?.type || ''} ${asset?.label || ''}`.toLowerCase();
-            if (source.includes('monitor') || source.includes('pantalla')) {
-                counters.monitor += 1;
-                return;
-            }
-            if (source.includes('laptop') || source.includes('notebook')) {
-                counters.laptop += 1;
-                return;
-            }
-            counters.other += 1;
-        });
-
-        const parts = [];
-        if (counters.monitor > 0) parts.push(`${counters.monitor} monitor${counters.monitor > 1 ? 'es' : ''}`);
-        if (counters.laptop > 0) parts.push(`${counters.laptop} laptop${counters.laptop > 1 ? 's' : ''}`);
-        if (counters.other > 0) parts.push(`${counters.other} otro${counters.other > 1 ? 's' : ''}`);
+        const labels = assets
+            .map((asset) => asset?.hostname || asset?.label || null)
+            .filter(Boolean);
+        const parts = labels.slice(0, 3);
+        if (labels.length > 3) {
+            parts.push(`+${labels.length - 3} más`);
+        }
 
         return {
             total: assets.length,

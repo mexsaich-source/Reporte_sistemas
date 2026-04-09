@@ -59,19 +59,26 @@ export const userService = {
                 if (!acc[userId]) acc[userId] = [];
 
                 const specs = asset.specs || {};
-                const label = [
+                const hostname = String(specs.hostname || '').trim();
+                const serial = specs.serial_number || specs.serial || null;
+                const fallbackLabel = [
                     specs.brand || null,
                     asset.model || specs.model || null,
-                    specs.serial_number || specs.serial || null,
+                    serial,
                 ]
                     .filter(Boolean)
                     .join(' · ');
+                const label = hostname
+                    ? `${hostname}${serial ? ` · ${serial}` : ''}`
+                    : fallbackLabel;
 
                 acc[userId].push({
                     id: asset.id,
                     type: asset.type,
                     model: asset.model,
                     status: asset.status,
+                    hostname,
+                    assigned_to_email: specs.assigned_to_email || null,
                     serial_number: specs.serial_number || specs.serial || null,
                     brand: specs.brand || null,
                     label: label || `${asset.type || 'Equipo'} · ${asset.id}`,

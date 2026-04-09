@@ -156,7 +156,7 @@ const resolveAssigneeFromMaps = (row, maps) => {
         return { profile: maps.byEmail[email], resolvedEmail: email, resolvedName: maps.byEmail[email].name || null };
     }
 
-    const nameCandidate = normalizePersonName(row.assigned_to_name || row.user_display_name || '');
+    const nameCandidate = normalizePersonName(row.assigned_to_name || row.user_display_name || row.name || '');
     if (!nameCandidate) return { profile: null, resolvedEmail: email || null, resolvedName: null };
 
     if (maps.byName[nameCandidate]) {
@@ -182,18 +182,19 @@ const resolveAssigneeFromMaps = (row, maps) => {
         return {
             profile: best.profile,
             resolvedEmail: sanitizeImportedEmail(best.profile.email) || email || null,
-            resolvedName: best.profile.name || row.assigned_to_name || row.user_display_name || null,
+            resolvedName: best.profile.name || row.assigned_to_name || row.user_display_name || row.name || null,
         };
     }
 
     return {
         profile: null,
         resolvedEmail: email || null,
-        resolvedName: row.assigned_to_name || row.user_display_name || null,
+        resolvedName: row.assigned_to_name || row.user_display_name || row.name || null,
     };
 };
 
 const normalizeInputRow = (row = {}) => {
+    const rowName = norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador']));
     const emailRaw = sanitizeImportedEmail(getValueByKeys(row, ['email', 'correo', 'mail', 'e-mail', 'correo electronico', 'correo electrónico']));
     const assignedRaw = norm(getValueByKeys(row, [
         'assigned_to_email',
@@ -234,11 +235,11 @@ const normalizeInputRow = (row = {}) => {
 
     const resolvedAssignedName = isDisponible
         ? ''
-        : (assignedToNameRaw || (!assignedEmailRaw && assignedRaw ? assignedRaw : '') || userDisplayName);
+        : (assignedToNameRaw || (!assignedEmailRaw && assignedRaw ? assignedRaw : '') || userDisplayName || rowName);
 
     return {
         employee_id: norm(getValueByKeys(row, ['employee_id', 'team_member', 'team member', 'numero team member', 'número team member', 'id_empleado'])),
-        name: norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador'])),
+        name: rowName,
         email: emailRaw,
         department: normalizeImportedDepartment(getValueByKeys(row, ['department', 'departamento', 'depto', 'dpto', 'dept', 'area', 'área'])),
         position: norm(getValueByKeys(row, ['position', 'puesto', 'cargo', 'job title', 'titulo'])),
@@ -351,6 +352,36 @@ const findProfileByEmailWithRetry = async (email, maxAttempts = 5) => {
     return null;
 };
 
+const resolveProfileIdByEmail = async (email = '') => {
+    const cleanEmail = sanitizeImportedEmail(email);
+    if (!cleanEmail) return null;
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data?.id || null;
+};
+
+const resolveProfileIdByIdentity = async ({ email = '', name = '' } = {}) => {
+    const byEmail = await resolveProfileIdByEmail(email);
+    if (byEmail) return byEmail;
+
+    const cleanName = String(name || '').trim();
+    if (!cleanName) return null;
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('full_name', cleanName)
+        .limit(1);
+
+    if (error) throw error;
+    return data?.[0]?.id || null;
+};
 export const importService = {
     /**
      * Parse Excel file into JSON
@@ -600,7 +631,7 @@ export const importService = {
                 inventory_tag: row.inventory_tag || row.Placa || '',
                 hostname: row.hostname || '',
                 extension: row.extension || '',
-                assigned_user_name: assignedUserId ? (row._assignee_name || row.assigned_to_name || row.user_display_name || '') : '',
+                assigned_user_name: row._assignee_name || row.assigned_to_name || row.user_display_name || row.name || '',
                 // Guardar el email para poder reparar asignaciones en futuro si el UUID faltó
                 assigned_to_email: assignedEmail || '',
                 department: row.department || '',
@@ -705,6 +736,31 @@ export const importService = {
 
                 if (shouldProcessInventory) {
                     const payload = this.buildInventoryPayload(row, allUsers, fileName);
+
+                    // Fallback: asegurar asignación por correo cuando no encontró match en cache.
+                    if (!payload.assigned_to && payload.specs?.assigned_to_email) {
+                        const resolvedId = await resolveProfileIdByEmail(payload.specs.assigned_to_email);
+                        if (resolvedId) {
+                            payload.assigned_to = resolvedId;
+                            if (!payload.status || payload.status === 'available') {
+                                payload.status = 'active';
+                            }
+                        }
+                    }
+
+                    // Segundo fallback: resolver por identidad de la misma fila (email/nombre).
+                    if (!payload.assigned_to) {
+                        const resolvedByIdentity = await resolveProfileIdByIdentity({
+                            email: payload.specs?.assigned_to_email,
+                            name: row.assigned_to_name || row.user_display_name || row.name,
+                        });
+                        if (resolvedByIdentity) {
+                            payload.assigned_to = resolvedByIdentity;
+                            if (!payload.status || payload.status === 'available') {
+                                payload.status = 'active';
+                            }
+                        }
+                    }
 
                     if (row._action === 'update' && row._existingId) {
                         const { data: existingAsset, error: fetchAssetError } = await supabase
