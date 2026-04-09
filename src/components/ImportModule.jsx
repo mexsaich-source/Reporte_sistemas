@@ -4,6 +4,7 @@ import {
     XCircle, Info, Download, Trash2, ArrowRight, Save, Clock, X, User
 } from 'lucide-react';
 import { importService } from '../services/importService';
+import { inventoryService } from '../services/inventoryService';
 import { useAuth } from '../context/authStore';
 import * as XLSX from 'xlsx';
 
@@ -19,6 +20,8 @@ const ImportModule = () => {
     const [loadingDiagnostics, setLoadingDiagnostics] = useState(true);
     const [fixSelection, setFixSelection] = useState({});
     const [applyingFix, setApplyingFix] = useState(false);
+    const [repairing, setRepairing] = useState(false);
+    const [repairResult, setRepairResult] = useState(null);
 
     const loadDiagnostics = useCallback(async () => {
         setLoadingDiagnostics(true);
@@ -184,6 +187,21 @@ const ImportModule = () => {
         }
     };
 
+    const handleRepairAssignments = async () => {
+        setRepairing(true);
+        setRepairResult(null);
+        try {
+            const result = await inventoryService.repairAssignedTo();
+            setRepairResult(result);
+            await loadDiagnostics();
+        } catch (err) {
+            console.error('Repair failed:', err);
+            setRepairResult({ fixed: 0, total: 0, error: err.message });
+        } finally {
+            setRepairing(false);
+        }
+    };
+
     const downloadTemplate = (type) => {
         // NUEVO: Agregamos assigned_to_email a la plantilla de inventario
         const headers = type === 'users'
@@ -305,6 +323,14 @@ const ImportModule = () => {
                                     >
                                         Refrescar
                                     </button>
+                                    <button
+                                        onClick={handleRepairAssignments}
+                                        disabled={repairing || loadingDiagnostics || applyingFix}
+                                        className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border border-amber-300 text-amber-600 hover:bg-amber-50 disabled:opacity-50"
+                                        title="Busca activos sin asignación que tienen email guardado y los vincula al usuario correcto"
+                                    >
+                                        {repairing ? 'Reparando...' : 'Reparar asignaciones'}
+                                    </button>
                                 </div>
 
                                 {loadingDiagnostics ? (
@@ -313,6 +339,22 @@ const ImportModule = () => {
                                     <p className="text-sm text-rose-600">No se pudo cargar el diagnóstico.</p>
                                 ) : (
                                     <div className="space-y-4">
+                                        {repairResult && (
+                                            <div className={`px-4 py-3 rounded-2xl text-xs font-bold border ${
+                                                repairResult.error
+                                                    ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                                    : repairResult.fixed > 0
+                                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-500'
+                                            }`}>
+                                                {repairResult.error
+                                                    ? `Error: ${repairResult.error}`
+                                                    : repairResult.fixed > 0
+                                                        ? `✓ Se repararon ${repairResult.fixed} asignaciones de ${repairResult.total} activos sin asignar`
+                                                        : `Sin cambios: ${repairResult.total} activos sin asignar no tienen email guardado para vincular`
+                                                }
+                                            </div>
+                                        )}
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700">
                                                 <span className="text-[10px] font-black uppercase text-slate-400">Cobertura</span>

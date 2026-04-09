@@ -68,7 +68,9 @@ export const inventoryService = {
                     requestedById: specs.requested_by_id || '',
                     deliveredAt: specs.delivered_at || '',
                     receivedAt: specs.received_at || '',
-                    returnedAt: specs.returned_at || ''
+                    returnedAt: specs.returned_at || '',
+                    hostname: specs.hostname || '',
+                    extension: specs.extension || ''
                 };
             });
         } catch (error) {
@@ -182,6 +184,65 @@ export const inventoryService = {
         } catch (error) {
             if (import.meta.env.DEV) console.error("Inventory Delete Error:", error);
             return false;
+        }
+    },
+
+    /**
+     * Repara activos importados que quedaron con assigned_to = null
+     * pero tienen specs.assigned_user_name o specs.hostname con datos.
+     * Busca el perfil por email en assigned_to_email o por nombre en full_name
+     * y actualiza el campo assigned_to con el UUID correcto.
+     */
+    async repairAssignedTo() {
+        try {
+            // 1. Traer activos sin asignacion pero con nombre en specs
+            const { data: unassigned, error: fetchErr } = await supabase
+                .from('assets')
+                .select('id, specs, status')
+                .is('assigned_to', null);
+
+            if (fetchErr) throw fetchErr;
+            if (!unassigned?.length) return { fixed: 0, total: 0 };
+
+            // 2. Extraer todos los emails/nombres candidatos de los specs
+            const emailCandidates = [...new Set(
+                unassigned
+                    .map(a => String(a.specs?.assigned_to_email || '').trim().toLowerCase())
+                    .filter(Boolean)
+            )];
+
+            if (!emailCandidates.length) return { fixed: 0, total: unassigned.length };
+
+            // 3. Buscar perfiles que coincidan
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, email')
+                .in('email', emailCandidates);
+
+            if (!profiles?.length) return { fixed: 0, total: unassigned.length };
+
+            const emailToId = {};
+            profiles.forEach(p => { emailToId[p.email.toLowerCase()] = p.id; });
+
+            // 4. Actualizar los activos que tengan match
+            let fixed = 0;
+            for (const asset of unassigned) {
+                const email = String(asset.specs?.assigned_to_email || '').trim().toLowerCase();
+                const userId = email ? emailToId[email] : null;
+                if (!userId) continue;
+
+                const { error: updateErr } = await supabase
+                    .from('assets')
+                    .update({ assigned_to: userId, status: 'active' })
+                    .eq('id', asset.id);
+
+                if (!updateErr) fixed++;
+            }
+
+            return { fixed, total: unassigned.length };
+        } catch (error) {
+            console.error('repairAssignedTo error:', error);
+            return { fixed: 0, total: 0, error: error.message };
         }
     }
 };

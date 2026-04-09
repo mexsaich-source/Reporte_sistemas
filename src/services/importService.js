@@ -386,6 +386,8 @@ export const importService = {
                 hostname: row.hostname || '',
                 extension: row.extension || '',
                 assigned_user_name: assignedUserId ? (row.user_display_name || '') : '',
+                // Guardar el email para poder reparar asignaciones en futuro si el UUID faltó
+                assigned_to_email: assignedEmail || '',
                 department: row.department || '',
                 details: `Importado de ${fileName}`
             }
