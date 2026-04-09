@@ -33,6 +33,20 @@ const getAuthRedirectBase = () => {
     return 'https://it-helpdesk-mexsa.vercel.app';
 };
 
+const getAssetMetaEmail = (specs = {}) =>
+    String(specs?.assigned_to_email || specs?.assigned_user_email || '')
+        .trim()
+        .toLowerCase();
+
+const getAssetSerial = (specs = {}) =>
+    String(
+        specs?.serial_number ||
+        specs?.serial ||
+        specs?.ns ||
+        specs?.numero_serie ||
+        ''
+    ).trim();
+
 export const userService = {
     async getAll() {
         try {
@@ -73,7 +87,7 @@ export const userService = {
                 // Fallback histórico: hay cargas donde solo se guardó assigned_to_email en specs.
                 // Eso debe reflejarse en la vista de usuarios aunque falte el UUID.
                 if (!userId) {
-                    const emailFromSpecs = String(specs.assigned_to_email || '').trim().toLowerCase();
+                    const emailFromSpecs = getAssetMetaEmail(specs);
                     if (emailFromSpecs && profilesByEmail[emailFromSpecs]) {
                         userId = profilesByEmail[emailFromSpecs];
                         relationSource = 'email_meta';
@@ -89,7 +103,7 @@ export const userService = {
                 if (!acc[userId]) acc[userId] = [];
 
                 const hostname = String(specs.hostname || '').trim();
-                const serial = specs.serial_number || specs.serial || null;
+                const serial = getAssetSerial(specs) || null;
                 const fallbackLabel = [
                     specs.brand || null,
                     asset.model || specs.model || null,
@@ -107,9 +121,9 @@ export const userService = {
                     model: asset.model,
                     status: asset.status,
                     hostname,
-                    assigned_to_email: specs.assigned_to_email || null,
+                    assigned_to_email: getAssetMetaEmail(specs) || null,
                     relation_source: relationSource,
-                    serial_number: specs.serial_number || specs.serial || null,
+                    serial_number: serial,
                     brand: specs.brand || null,
                     label: label || `${asset.type || 'Equipo'} · ${asset.id}`,
                 });
@@ -159,7 +173,7 @@ export const userService = {
 
             const filtered = (assets || []).filter((asset) => {
                 const assignedTo = asset.assigned_to;
-                const metaEmail = String(asset.specs?.assigned_to_email || '').trim().toLowerCase();
+                const metaEmail = getAssetMetaEmail(asset.specs || {});
                 const metaUserId = metaEmail ? profileByEmail[metaEmail] : null;
                 const isOrphan = !!assignedTo && !profileIds.has(assignedTo);
 
@@ -181,14 +195,14 @@ export const userService = {
                 const isOrphan = !!asset.assigned_to && !profileIds.has(asset.assigned_to);
                 return {
                     ...asset,
-                    serial_number: specs.serial_number || specs.serial || null,
+                    serial_number: getAssetSerial(specs) || null,
                     brand: specs.brand || null,
                     is_orphan: isOrphan,
                     label: [
                         specs.hostname || null,
                         specs.brand || null,
                         asset.model || specs.model || null,
-                        specs.serial_number || specs.serial || null,
+                        getAssetSerial(specs) || null,
                     ]
                         .filter(Boolean)
                         .join(' · ') || `${asset.type || 'Equipo'} · ${asset.id}`,

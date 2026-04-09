@@ -67,6 +67,12 @@ const sanitizeImportedEmail = (value = '') => {
     return isProbablyEmail(email) ? email : '';
 };
 
+const normalizeSerialValue = (value = '') =>
+    String(value || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .toUpperCase();
+
 const levenshteinDistance = (a = '', b = '') => {
     if (a === b) return 0;
     if (!a.length) return b.length;
@@ -105,12 +111,12 @@ const getValueByKeys = (row, keys = []) => {
         if (hit) return hit.value;
     }
 
-    // 2) Match por inclusión (ej: "correoelectronicoempleado" vs "correoelectronico")
+        // 2) Match por inclusión para llaves largas (evita falsos positivos como hostNAME -> name)
     for (const key of candidates) {
-        if (key.length < 4) continue;
+            if (key.length < 6) continue;
         const hit = entries.find((entry) => {
             if (!nonEmpty(entry.value)) return false;
-            return entry.normalizedKey.includes(key) || key.includes(entry.normalizedKey);
+                return entry.normalizedKey.includes(key);
         });
         if (hit) return hit.value;
     }
@@ -194,7 +200,7 @@ const resolveAssigneeFromMaps = (row, maps) => {
 };
 
 const normalizeInputRow = (row = {}) => {
-    const rowName = norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador']));
+    const rowName = norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador', 'usuario', 'nombre usuario', 'nombre de usuario']));
     const emailRaw = sanitizeImportedEmail(getValueByKeys(row, ['email', 'correo', 'mail', 'e-mail', 'correo electronico', 'correo electrónico']));
     const assignedRaw = norm(getValueByKeys(row, [
         'assigned_to_email',
@@ -253,7 +259,7 @@ const normalizeInputRow = (row = {}) => {
         brand: norm(getValueByKeys(row, ['brand', 'marca'])),
         model: norm(getValueByKeys(row, ['model', 'modelo'])),
         // NS, N/S, Serie, serial, serial_number — todas apuntan al mismo campo
-        serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s', 'no serie', 'no. serie', 'n serie', 'num serie', 'num. serie', 'serial no', 'serial number', 'sn', 's/n'])),
+        serial_number: normalizeSerialValue(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s', 'no serie', 'no. serie', 'n serie', 'num serie', 'num. serie', 'serial no', 'serial number', 'sn', 's/n'])),
         inventory_tag: norm(getValueByKeys(row, ['inventory_tag', 'placa', 'tag', 'etiqueta inventario', 'placa inventario'])),
         hostname: norm(getValueByKeys(row, ['hostname', 'host', 'host name', 'nombre host', 'nombre de host', 'nombre equipo', 'nombre de equipo', 'computer name', 'pc name'])),
         purchase_date: norm(getValueByKeys(row, ['purchase_date', 'fecha compra', 'fecha de compra'])),
@@ -266,22 +272,29 @@ const normalizeInputRow = (row = {}) => {
 };
 
 const detectEntityType = (row) => {
-    // email solo NO es señal de usuario — puede ser solo para asignación de equipo.
-    // Se usa un set de señales para tolerar plantillas mixtas con columnas variables.
-    const hasUserIdentity = Boolean(row.email || row.employee_id || row.name);
-    const hasUserDetails = Boolean(row.position || row.department || row.role || row.location || row.assigned_equipment);
-    const hasUserSignal = Boolean(hasUserIdentity && hasUserDetails);
     const hasAssetSignal = Boolean(row.serial_number || row.asset_id || row.asset_type || row.brand || row.model || row.inventory_tag || row.hostname);
 
-    if (hasAssetSignal && !hasUserSignal) return 'inventory';
-    if (hasUserSignal && !hasAssetSignal) return 'user';
-    if (hasAssetSignal && hasUserSignal) return 'both';
+    // En cargas mixtas de inventario suelen venir nombre/email del usuario en la misma fila.
+    // Eso NO debe convertir la fila en alta/edición de usuario por sí solo.
+    const hasUserIdentity = Boolean(row.email || row.employee_id || row.name);
+    const hasExplicitUserPayload = Boolean(
+        row.employee_id ||
+        row.position ||
+        row.assigned_equipment ||
+        (row.role && String(row.role).toLowerCase().trim() !== 'user')
+    );
+
+    if (hasAssetSignal) {
+        return hasExplicitUserPayload ? 'both' : 'inventory';
+    }
+
+    if (hasUserIdentity) return 'user';
     return 'unknown';
 };
 
 const COLUMN_ALIASES = {
     email: ['email', 'correo', 'mail', 'e-mail', 'correo electronico', 'correo electrónico'],
-    name: ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador'],
+        name: ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador', 'usuario', 'nombre usuario', 'nombre de usuario'],
     department: ['department', 'departamento', 'depto', 'dpto', 'dept', 'area', 'área'],
     role: ['role', 'rol', 'perfil', 'tipo usuario', 'tipo de usuario'],
     asset_id: ['asset_id', 'id_activo', 'id', 'asset id'],
@@ -382,6 +395,66 @@ const resolveProfileIdByIdentity = async ({ email = '', name = '' } = {}) => {
     if (error) throw error;
     return data?.[0]?.id || null;
 };
+
+const resolveProfileIdFromCache = (allUsers = [], { email = '', name = '' } = {}) => {
+    const cleanEmail = sanitizeImportedEmail(email);
+    if (cleanEmail) {
+        const byEmail = (allUsers || []).find((u) => sanitizeImportedEmail(u.email) === cleanEmail);
+        if (byEmail?.id) return byEmail.id;
+    }
+
+    const targetName = normalizePersonName(name);
+    if (!targetName) return null;
+
+    const candidates = (allUsers || []).filter((u) => u?.full_name);
+    for (const u of candidates) {
+        if (normalizePersonName(u.full_name) === targetName) return u.id;
+    }
+
+    let best = null;
+    for (const u of candidates) {
+        const current = normalizePersonName(u.full_name);
+        if (!current) continue;
+        const distance = levenshteinDistance(targetName, current);
+        const maxDistance = targetName.length >= 12 ? 3 : 2;
+        if (distance <= maxDistance) {
+            if (!best || distance < best.distance) {
+                best = { distance, id: u.id };
+            }
+        }
+    }
+
+    return best?.id || null;
+};
+
+const getAssetMetaEmail = (specs = {}) =>
+    String(specs?.assigned_to_email || specs?.assigned_user_email || '')
+        .trim()
+        .toLowerCase();
+
+const getNormalizedSerial = (row = {}, specs = {}) => {
+    const rowSerial = normalizeSerialValue(
+        row.serial_number ||
+        row.Serial ||
+        row.Serie ||
+        row.NS ||
+        row.ns ||
+        ''
+    );
+
+    if (rowSerial) return rowSerial;
+
+    const specSerial = normalizeSerialValue(
+        specs.serial_number ||
+        specs.serial ||
+        specs.ns ||
+        specs.numero_serie ||
+        ''
+    );
+
+    return specSerial;
+};
+
 export const importService = {
     /**
      * Parse Excel file into JSON
@@ -515,7 +588,7 @@ export const importService = {
 
             const duplicate = (existingAssets || []).find((a) =>
                 (row.asset_id && String(a.id) === row.asset_id) ||
-                (row.serial_number && a.specs?.serial_number === row.serial_number)
+                (row.serial_number && normalizeSerialValue(a.specs?.serial_number || a.specs?.serial || a.specs?.ns) === normalizeSerialValue(row.serial_number))
             );
             const assignee = resolveAssigneeFromMaps(row, profileMaps);
             const matched = assignee.profile;
@@ -559,7 +632,7 @@ export const importService = {
 
             const duplicate = (existingAssets || []).find(a =>
                 (assetId && String(a.id) === assetId) ||
-                (serial && a.specs?.serial_number === serial)
+                (serial && normalizeSerialValue(a.specs?.serial_number || a.specs?.serial || a.specs?.ns) === normalizeSerialValue(serial))
             );
             const assignee = resolveAssigneeFromMaps(row, profileMaps);
             const matchedUser = assignee.profile;
@@ -624,7 +697,7 @@ export const importService = {
             status,
             assigned_to: assignedUserId,
             specs: {
-                serial_number: String(row.serial_number || row.Serial || row.Serie || '').trim(),
+                serial_number: getNormalizedSerial(row),
                 brand: row.brand || row.Marca || 'Desconocida',
                 category: row.asset_type || row.Type || 'Hardware',
                 model: row.model || row.Model || '',
@@ -634,6 +707,8 @@ export const importService = {
                 assigned_user_name: row._assignee_name || row.assigned_to_name || row.user_display_name || row.name || '',
                 // Guardar el email para poder reparar asignaciones en futuro si el UUID faltó
                 assigned_to_email: assignedEmail || '',
+                // Compatibilidad con cargas históricas que usaban "ns" en specs.
+                ns: getNormalizedSerial(row),
                 department: row.department || '',
                 details: `Importado de ${fileName}`
             }
@@ -737,6 +812,17 @@ export const importService = {
                 if (shouldProcessInventory) {
                     const payload = this.buildInventoryPayload(row, allUsers, fileName);
 
+                    if (!payload.assigned_to) {
+                        const cacheMatch = resolveProfileIdFromCache(allUsers, {
+                            email: payload.specs?.assigned_to_email,
+                            name: row.assigned_to_name || row.user_display_name || row.name,
+                        });
+                        if (cacheMatch) {
+                            payload.assigned_to = cacheMatch;
+                            if (!payload.status || payload.status === 'available') payload.status = 'active';
+                        }
+                    }
+
                     // Fallback: asegurar asignación por correo cuando no encontró match en cache.
                     if (!payload.assigned_to && payload.specs?.assigned_to_email) {
                         const resolvedId = await resolveProfileIdByEmail(payload.specs.assigned_to_email);
@@ -773,11 +859,16 @@ export const importService = {
 
                         const existingSpecs = existingAsset?.specs || {};
                         const incomingSpecs = payload.specs || {};
+                        const mergedSerial = getNormalizedSerial(row, {
+                            ...existingSpecs,
+                            ...incomingSpecs,
+                        });
                         const mergedSpecs = {
                             ...existingSpecs,
                             ...incomingSpecs,
                             // Evitar vaciar campos críticos cuando vienen en blanco en el archivo
-                            serial_number: incomingSpecs.serial_number || existingSpecs.serial_number || existingSpecs.serial || '',
+                            serial_number: mergedSerial,
+                            ns: mergedSerial,
                             hostname: incomingSpecs.hostname || existingSpecs.hostname || '',
                         };
 
@@ -850,6 +941,11 @@ export const importService = {
         );
 
         const userIdSet = new Set(profileRows.map((u) => u.id));
+        const userByEmail = profileRows.reduce((acc, u) => {
+            const key = String(u.email || '').trim().toLowerCase();
+            if (key && !acc[key]) acc[key] = u.id;
+            return acc;
+        }, {});
         const assignedByUser = new Map();
         const orphanAssets = [];
         const availableAssets = [];
@@ -862,7 +958,13 @@ export const importService = {
                     assignedByUser.set(asset.assigned_to, (assignedByUser.get(asset.assigned_to) || 0) + 1);
                 }
             } else {
-                availableAssets.push(asset);
+                const metaEmail = getAssetMetaEmail(asset.specs || {});
+                const matchedUserId = metaEmail ? userByEmail[metaEmail] : null;
+                if (matchedUserId) {
+                    assignedByUser.set(matchedUserId, (assignedByUser.get(matchedUserId) || 0) + 1);
+                } else {
+                    availableAssets.push(asset);
+                }
             }
         }
 
@@ -871,6 +973,7 @@ export const importService = {
         const toAssetLabel = (asset) => {
             const specs = asset.specs || {};
             const label = [
+                specs.hostname || null,
                 specs.brand || null,
                 asset.model || specs.model || null,
                 specs.serial_number || specs.serial || null,
