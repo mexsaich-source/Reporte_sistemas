@@ -692,6 +692,7 @@ export const importService = {
     buildInventoryPayload(row, allUsers, fileName) {
         const rawId = row.asset_id || row.id || row.ID;
         const finalId = rawId ? String(rawId) : `AST-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`;
+        const fixedAssetId = rawId ? String(rawId).trim() : '';
 
         let assignedUserId = row.assigned_to || null;
         let status = normalizeAssetStatus(row.status) || 'available';
@@ -721,6 +722,7 @@ export const importService = {
                 assigned_user_name: row._assignee_name || row.assigned_to_name || row.user_display_name || row.name || '',
                 // Guardar el email para poder reparar asignaciones en futuro si el UUID faltó
                 assigned_to_email: assignedEmail || '',
+                asset_fixed_id: fixedAssetId,
                 // Compatibilidad con cargas históricas que usaban "ns" en specs.
                 ns: getNormalizedSerial(row),
                 department: row.department || '',
@@ -884,6 +886,7 @@ export const importService = {
                             serial_number: mergedSerial,
                             ns: mergedSerial,
                             hostname: incomingSpecs.hostname || existingSpecs.hostname || '',
+                            asset_fixed_id: incomingSpecs.asset_fixed_id || existingSpecs.asset_fixed_id || '',
                         };
 
                         const updatePayload = {

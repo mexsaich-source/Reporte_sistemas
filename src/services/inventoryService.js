@@ -1,6 +1,21 @@
 import { supabase } from '../lib/supabaseClient';
 import { auditService } from './auditService';
 
+const normalizeDeviceCategory = (type = '', model = '') => {
+    const source = `${type} ${model}`.toLowerCase();
+    if (/laptop|notebook/.test(source)) return 'Laptop';
+    if (/workstation|desktop|pc|all in one/.test(source)) return 'Workstation';
+    if (/monitor|pantalla/.test(source)) return 'Monitor';
+    if (/mouse|teclado|keyboard|periferico|perif[eé]rico/.test(source)) return 'Teclado / Mouse';
+    if (/switch|router|firewall|ap|access point|red/.test(source)) return 'Switch / Red';
+    if (/server|servidor/.test(source)) return 'Servidor';
+    if (/phone|smartphone|celular|movil|m[oó]vil/.test(source)) return 'Smartphone';
+    if (/printer|impresora/.test(source)) return 'Impresora';
+    return 'Otros';
+};
+
+const getAssetSerial = (specs = {}) => String(specs.serial_number || specs.serial || specs.ns || '').trim();
+
 export const inventoryService = {
     /**
      * Get all assets with unified mapping
@@ -22,7 +37,7 @@ export const inventoryService = {
             if (assignedUserIds.length > 0) {
                 const { data: profilesData, error: profilesError } = await supabase
                     .from('profiles')
-                    .select('id, full_name, email')
+                    .select('id, full_name, email, location, department')
                     .in('id', assignedUserIds);
 
                 if (!profilesError && profilesData) {
@@ -30,6 +45,8 @@ export const inventoryService = {
                         acc[p.id] = {
                             full_name: p.full_name || '',
                             email: p.email || '',
+                            location: p.location || '',
+                            department: p.department || '',
                         };
                         return acc;
                     }, {});
@@ -43,19 +60,34 @@ export const inventoryService = {
                     assignedProfile?.full_name ||
                     specs.assigned_user_name ||
                     (asset.assigned_to ? 'Usuario asignado' : '');
+                const fixedAssetId = String(specs.asset_fixed_id || '').trim();
+                const deviceType = asset.type || specs.asset_type || specs.type || 'General';
+                const deviceModel = asset.model || specs.model || '';
+                const serial = getAssetSerial(specs);
+                const assignedToLocation = assignedProfile?.location || specs.assigned_location || '';
+                const assignedToDepartment = assignedProfile?.department || specs.assigned_department || '';
+                const storageLocation = specs.storage_location || specs.location || specs.department || '';
+                const currentLocation = asset.assigned_to
+                    ? (assignedToLocation || assignedToDepartment || 'Con usuario')
+                    : (storageLocation || (asset.status === 'available' ? 'Bodega' : 'Infraestructura TI'));
                 
                 return {
                     id: String(asset.id), 
+                    displayId: fixedAssetId || String(asset.id),
                     // Priority: Column -> Specs -> Default
-                    type: asset.type || specs.asset_type || specs.type || 'General', 
-                    model: asset.model || specs.model || '',
+                    type: deviceType,
+                    model: deviceModel,
                     brand: specs.brand || '',
-                    serial: String(specs.serial_number || specs.serial || '').trim(), 
-                    category: specs.category || '',
+                    serial,
+                    category: normalizeDeviceCategory(deviceType, deviceModel),
                     specsDetails: specs.details || '',
                     user: assignedToName,
                     assignedToName,
                     assignedToEmail: assignedProfile?.email || '',
+                    assignedToLocation,
+                    assignedToDepartment,
+                    currentLocation,
+                    location: storageLocation,
                     assigned_to: asset.assigned_to || null,
                     department: specs.department || '',
                     status: asset.status || 'available', 
@@ -98,10 +130,12 @@ export const inventoryService = {
                     brand: item.brand || '',
                     model: item.model || '',
                     serial_number: String(item.serial || '').trim(),
+                    ns: String(item.serial || '').trim(),
                     category: item.category || '',
                     details: item.specsDetails || '',
                     assigned_user_name: item.user || '',
                     department: item.department || '',
+                    storage_location: item.location || '',
                     loan_date: item.loanDate || '',
                     return_date: item.returnDate || '',
                     loan_user: item.loanUser || ''
@@ -131,10 +165,12 @@ export const inventoryService = {
                 brand: updates.brand !== undefined ? updates.brand : currentSpecs.brand,
                 model: updates.model !== undefined ? updates.model : currentSpecs.model,
                 serial_number: updates.serial !== undefined ? String(updates.serial).trim() : currentSpecs.serial_number,
+                ns: updates.serial !== undefined ? String(updates.serial).trim() : currentSpecs.ns,
                 category: updates.category !== undefined ? updates.category : currentSpecs.category,
                 details: updates.specsDetails !== undefined ? updates.specsDetails : currentSpecs.details,
                 assigned_user_name: updates.user !== undefined ? updates.user : currentSpecs.assigned_user_name,
                 department: updates.department !== undefined ? updates.department : currentSpecs.department,
+                storage_location: updates.location !== undefined ? updates.location : currentSpecs.storage_location,
                 loan_date: updates.loanDate !== undefined ? updates.loanDate : currentSpecs.loan_date,
                 return_date: updates.returnDate !== undefined ? updates.returnDate : currentSpecs.return_date,
                 loan_user: updates.loanUser !== undefined ? updates.loanUser : currentSpecs.loan_user,

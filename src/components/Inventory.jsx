@@ -9,10 +9,33 @@ const STATUS_MAP = {
     'active': { label: 'En Uso', style: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20', icon: CheckCircle2 },
     'available': { label: 'En Bodega', style: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10 border-blue-100/50 dark:border-blue-500/20', icon: Package },
     'loaned': { label: 'Prestado', style: 'text-purple-600 bg-purple-50 dark:bg-purple-500/10 border-purple-100/50 dark:border-purple-500/20', icon: Clock },
+    'request_pending': { label: 'Pendiente', style: 'text-amber-700 bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20', icon: AlertCircle },
+    'denied': { label: 'Denegado', style: 'text-rose-700 bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20', icon: AlertTriangle },
     'decommissioned': { label: 'Obsoleto', style: 'text-slate-600 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700', icon: Trash2 },
 };
 
 const DEVICE_TYPES = ['Todos', 'Laptop', 'Workstation', 'Monitor', 'Teclado / Mouse', 'Switch / Red', 'Servidor', 'Smartphone', 'Impresora', 'Otros'];
+
+const STATUS_FILTERS = [
+    { value: 'Todos', label: 'Estatus (Todos)' },
+    { value: 'active', label: 'En Uso' },
+    { value: 'available', label: 'En Bodega' },
+    { value: 'loaned', label: 'Prestado' },
+    { value: 'request_pending', label: 'Pendiente Solicitud' },
+    { value: 'denied', label: 'Denegado' },
+    { value: 'decommissioned', label: 'Obsoleto' },
+];
+
+const TYPE_FILTER_KEYWORDS = {
+    'Laptop': ['laptop', 'notebook'],
+    'Workstation': ['workstation', 'desktop', 'pc', 'all in one'],
+    'Monitor': ['monitor', 'pantalla'],
+    'Teclado / Mouse': ['teclado', 'keyboard', 'mouse', 'periferico', 'periférico'],
+    'Switch / Red': ['switch', 'router', 'firewall', 'red', 'access point', 'ap'],
+    'Servidor': ['server', 'servidor'],
+    'Smartphone': ['smartphone', 'phone', 'celular', 'movil', 'móvil'],
+    'Impresora': ['impresora', 'printer'],
+};
 
 const getDeviceIcon = (type) => {
     const t = (type || '').toLowerCase();
@@ -148,7 +171,7 @@ const ImportModal = ({ isOpen, onClose, onImportSuccess }) => {
 // --- DEVICE SLIDER ---
 const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
     const [formData, setFormData] = useState({ 
-        id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', 
+        id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', location: '',
         status: 'available', specsDetails: '', loanDate: '', returnDate: '', loanUser: '' 
     });
     useEffect(() => {
@@ -160,6 +183,7 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                 model: editingDevice.model || '',
                 serial: editingDevice.serial || '',
                 category: editingDevice.category || '',
+                location: editingDevice.location || editingDevice.currentLocation || '',
                 status: editingDevice.status || 'available',
                 specsDetails: editingDevice.specsDetails || '',
                 loanDate: editingDevice.loanDate || '',
@@ -174,7 +198,7 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
             });
         } else {
             setFormData({ 
-                id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', 
+                id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', location: '',
                 status: 'available', specsDetails: '', loanDate: '', returnDate: '', loanUser: '',
                 rejectReason: '', requestReason: '', requestedById: '', deliveredAt: '', receivedAt: '', returnedAt: ''
             });
@@ -264,6 +288,10 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Número de Serial</label>
                             <input type="text" name="serial" value={formData.serial} onChange={handleChange} placeholder="S/N..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ubicación</label>
+                            <input type="text" name="location" value={formData.location || ''} onChange={handleChange} placeholder="Ej. Site, Bodega TI, Piso 3" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
+                        </div>
                     </div>
                     <div className="pt-8 flex gap-4">
                         <button type="button" onClick={onClose} className="flex-1 py-4 px-6 rounded-xl text-[10px] font-black uppercase text-slate-500 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100">Cancelar</button>
@@ -309,11 +337,19 @@ const InventoryView = ({ searchTerm = '' }) => {
 
     const filteredList = inventoryList.filter(d => {
         const matchesTab = activeTab === 'inventory' ? (d.status !== 'decommissioned') : (d.status === 'decommissioned');
-        const matchesType = filterType === 'Todos' || d.type.toLowerCase().includes(filterType.toLowerCase().split(' ')[0]);
-        const matchesStatus = filterStatus === 'Todos' || (filterStatus === 'En Uso' ? d.status === 'active' : d.status === 'available');
+        const typeSource = `${d.type || ''} ${d.category || ''}`.toLowerCase();
+        const typeKeywords = TYPE_FILTER_KEYWORDS[filterType] || [];
+        const matchesType = filterType === 'Todos' || typeKeywords.some((kw) => typeSource.includes(kw));
+        const matchesStatus = filterStatus === 'Todos' || d.status === filterStatus;
         const search = (localSearchTerm || '').toLowerCase();
         const assignedSearch = (d.assignedToName || d.user || '').toLowerCase();
-        const matchesSearch = d.id.toLowerCase().includes(search) || d.model.toLowerCase().includes(search) || d.brand.toLowerCase().includes(search) || d.serial.toLowerCase().includes(search) || assignedSearch.includes(search);
+        const displayId = (d.displayId || d.id || '').toLowerCase();
+        const hostname = (d.hostname || '').toLowerCase();
+        const serial = (d.serial || '').toLowerCase();
+        const model = (d.model || '').toLowerCase();
+        const brand = (d.brand || '').toLowerCase();
+        const locationSearch = (d.currentLocation || d.location || d.assignedToDepartment || '').toLowerCase();
+        const matchesSearch = displayId.includes(search) || d.id.toLowerCase().includes(search) || model.includes(search) || brand.includes(search) || serial.includes(search) || hostname.includes(search) || assignedSearch.includes(search) || locationSearch.includes(search);
         
         return matchesTab && matchesType && matchesStatus && matchesSearch;
     });
@@ -361,16 +397,16 @@ const InventoryView = ({ searchTerm = '' }) => {
                         </div>
                         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 px-6 py-5 rounded-[2rem]">
                             <Filter size={18} className="text-slate-400" />
-                            <select className="bg-transparent border-none outline-none font-bold text-sm w-full text-slate-600 dark:text-slate-300" value={filterType} onChange={(e)=>setFilterType(e.target.value)}>
-                                {DEVICE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                            <select className="bg-transparent border-none outline-none font-bold text-sm w-full text-slate-600 dark:text-slate-300 dark:[color-scheme:dark]" value={filterType} onChange={(e)=>setFilterType(e.target.value)}>
+                                {DEVICE_TYPES.map(t=><option key={t} value={t} className="bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-100">{t}</option>)}
                             </select>
                         </div>
                         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 px-6 py-5 rounded-[2rem]">
                             <ArrowRightLeft size={18} className="text-slate-400" />
-                            <select className="bg-transparent border-none outline-none font-bold text-sm w-full text-slate-600 dark:text-slate-300" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
-                                <option value="Todos">Ubicación (Todas)</option>
-                                <option value="En Uso">En Uso</option>
-                                <option value="Bodega">En Bodega</option>
+                            <select className="bg-transparent border-none outline-none font-bold text-sm w-full text-slate-600 dark:text-slate-300 dark:[color-scheme:dark]" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
+                                {STATUS_FILTERS.map((s) => (
+                                    <option key={s.value} value={s.value} className="bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-100">{s.label}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -383,7 +419,7 @@ const InventoryView = ({ searchTerm = '' }) => {
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Dispositivo</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Identificadores</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Marca</th>
-                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Asignado / Uso</th>
+                                <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Asignado / Ubicación</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest">Estado Actual</th>
                                 <th className="p-5 px-8 font-black text-[10px] uppercase text-slate-400 tracking-widest text-right">Acciones</th>
                             </tr>
@@ -403,7 +439,7 @@ const InventoryView = ({ searchTerm = '' }) => {
                                         </div>
                                     </td>
                                     <td className="p-5 px-8">
-                                        <div className="font-black text-slate-900 dark:text-white text-xs">{item.id}</div>
+                                        <div className="font-black text-slate-900 dark:text-white text-xs">{item.displayId || item.id}</div>
                                         <div className="text-[9px] text-blue-500 font-bold uppercase tracking-[0.15em] mt-0.5">SN: {item.serial || 'NO REGISTRADO'}</div>
                                     </td>
                                     <td className="p-5 px-8"><span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-xl text-[9px] font-black uppercase text-slate-600 dark:text-slate-300">{item.brand || 'Personalizado'}</span></td>
@@ -416,14 +452,15 @@ const InventoryView = ({ searchTerm = '' }) => {
                                                 {item.assignedToEmail && (
                                                     <p className="text-[10px] text-slate-500 truncate">{item.assignedToEmail}</p>
                                                 )}
+                                                <p className="text-[10px] text-slate-500 truncate">{item.currentLocation || item.assignedToLocation || item.assignedToDepartment || 'Con usuario'}</p>
                                             </div>
                                         ) : item.status === 'active' ? (
                                             <span className="inline-flex items-center px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-200">
-                                                Infraestructura TI
+                                                {item.currentLocation || 'Infraestructura TI'}
                                             </span>
                                         ) : (
                                             <span className="inline-flex items-center px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 border border-slate-200">
-                                                Sin asignar
+                                                {item.currentLocation || 'Sin asignar'}
                                             </span>
                                         )}
                                     </td>
