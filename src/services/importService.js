@@ -6,17 +6,39 @@ const normalizeImportedDepartment = (rawValue = '') => {
     const raw = String(rawValue || '').trim();
     if (!raw) return 'General';
 
-    const value = raw.toLowerCase();
-    if (value.includes('ama de llav')) return 'Ama de Llaves';
+    const value = raw.toLowerCase().replace(/[.\s]/g, '');
+
+    // Abreviaciones de hotel (excel de inventario)
+    if (value === 'bqt') return 'Banquetes';
+    if (value === 'mkt') return 'Marketing';
+    if (value === 'fin') return 'Finanzas';
+    if (value === 'sec') return 'Seguridad';
+    if (value === 'eng') return 'Ingeniería';
+    if (value === 'fo') return 'Front Office';
+    if (value === 'fro') return 'Front Office';
+    if (value === 'fom') return 'FOM';
+    if (value === 'mz') return 'Mezzanine';
+    if (value === 'site') return 'Sistemas';
+    if (value === 'rsv') return 'Reservaciones';
+    if (value === 'prc') return 'Compras';
+    if (value === 'hsk') return 'Ama de Llaves';
+    if (value === 'f&b' || value === 'f&') return 'F&B';
+    if (value === 'rrhh' || value === 'rr.hh') return 'Recursos Humanos';
+
+    // Palabras completas
+    if (value.includes('amadellav')) return 'Ama de Llaves';
     if (value.includes('banquete')) return 'Banquetes';
     if (value.includes('evento')) return 'Eventos';
     if (value.includes('compra')) return 'Compras';
     if (value.includes('mantenimiento')) return 'Mantenimiento';
     if (value.includes('ingenieria') || value.includes('ingeniería')) return 'Ingeniería';
     if (value.includes('sistema')) return 'Sistemas';
-    if (value.includes('recursos') || value.includes('rrhh')) return 'Recursos Humanos';
+    if (value.includes('recursos') || value.includes('recursoshumanos')) return 'Recursos Humanos';
     if (value.includes('finanza')) return 'Finanzas';
     if (value.includes('general')) return 'General';
+    if (value.includes('marketing')) return 'Marketing';
+    if (value.includes('seguridad')) return 'Seguridad';
+    if (value.includes('reserva')) return 'Reservaciones';
 
     return raw;
 };
@@ -35,30 +57,50 @@ const getValueByKeys = (row, keys = []) => {
     return '';
 };
 
-const normalizeInputRow = (row = {}) => ({
-    employee_id: norm(getValueByKeys(row, ['employee_id', 'team_member', 'team member', 'numero team member', 'número team member', 'id_empleado'])),
-    name: norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name'])),
-    email: norm(getValueByKeys(row, ['email', 'correo', 'mail'])).toLowerCase(),
-    department: normalizeImportedDepartment(getValueByKeys(row, ['department', 'departamento', 'area', 'área'])),
-    position: norm(getValueByKeys(row, ['position', 'puesto', 'cargo'])),
-    location: norm(getValueByKeys(row, ['location', 'localizacion', 'localización', 'ubicacion', 'ubicación', 'ubicación física', 'localización física'])),
-    assigned_equipment: norm(getValueByKeys(row, ['assigned_equipment', 'equipos', 'equipos asignados'])),
-    status: norm(getValueByKeys(row, ['status', 'estado'])) || 'active',
-    role: norm(getValueByKeys(row, ['role', 'rol'])) || 'user',
+const normalizeInputRow = (row = {}) => {
+    const emailRaw = norm(getValueByKeys(row, ['email', 'correo', 'mail'])).toLowerCase();
+    const assignedEmailRaw = norm(getValueByKeys(row, ['assigned_to_email', 'correo asignado (opcional)', 'asignado_a', 'asignado a'])).toLowerCase();
+    const userDisplayName = norm(getValueByKeys(row, ['usuario', 'user', 'nombre usuario', 'nombre de usuario']));
+    const isDisponible = userDisplayName.toLowerCase() === 'disponible';
 
-    asset_id: norm(getValueByKeys(row, ['asset_id', 'id_activo', 'id', 'asset id'])),
-    asset_type: norm(getValueByKeys(row, ['asset_type', 'tipo', 'type'])),
-    brand: norm(getValueByKeys(row, ['brand', 'marca'])),
-    model: norm(getValueByKeys(row, ['model', 'modelo'])),
-    serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie'])),
-    inventory_tag: norm(getValueByKeys(row, ['inventory_tag', 'placa', 'tag', 'etiqueta inventario'])),
-    hostname: norm(getValueByKeys(row, ['hostname', 'host'])),
-    purchase_date: norm(getValueByKeys(row, ['purchase_date', 'fecha compra', 'fecha de compra'])),
-    assigned_to_email: norm(getValueByKeys(row, ['assigned_to_email', 'correo asignado (opcional)', 'asignado_a', 'asignado a'])).toLowerCase(),
-});
+    // Para filas de inventario: si no hay columna explícita de asignación pero sí
+    // hay una columna "email", asumir que ese email es el destinatario del equipo.
+    // Si el usuario es "DISPONIBLE", no asignar.
+    const resolvedAssignedEmail = isDisponible
+        ? ''
+        : (assignedEmailRaw || emailRaw);
+
+    return {
+        employee_id: norm(getValueByKeys(row, ['employee_id', 'team_member', 'team member', 'numero team member', 'número team member', 'id_empleado'])),
+        name: norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name'])),
+        email: emailRaw,
+        department: normalizeImportedDepartment(getValueByKeys(row, ['department', 'departamento', 'area', 'área'])),
+        position: norm(getValueByKeys(row, ['position', 'puesto', 'cargo'])),
+        location: norm(getValueByKeys(row, ['location', 'localizacion', 'localización', 'ubicacion', 'ubicación', 'ubicación física', 'localización física'])),
+        assigned_equipment: norm(getValueByKeys(row, ['assigned_equipment', 'equipos', 'equipos asignados'])),
+        status: norm(getValueByKeys(row, ['status', 'estado'])) || 'active',
+        role: norm(getValueByKeys(row, ['role', 'rol'])) || 'user',
+
+        asset_id: norm(getValueByKeys(row, ['asset_id', 'id_activo', 'id', 'asset id'])),
+        asset_type: norm(getValueByKeys(row, ['asset_type', 'tipo', 'type'])),
+        brand: norm(getValueByKeys(row, ['brand', 'marca'])),
+        model: norm(getValueByKeys(row, ['model', 'modelo'])),
+        // NS, N/S, Serie, serial, serial_number — todas apuntan al mismo campo
+        serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s'])),
+        inventory_tag: norm(getValueByKeys(row, ['inventory_tag', 'placa', 'tag', 'etiqueta inventario'])),
+        hostname: norm(getValueByKeys(row, ['hostname', 'host'])),
+        purchase_date: norm(getValueByKeys(row, ['purchase_date', 'fecha compra', 'fecha de compra'])),
+        assigned_to_email: resolvedAssignedEmail,
+        // Campos extras del Excel de inventario de hotel
+        user_display_name: isDisponible ? '' : userDisplayName,
+        extension: norm(getValueByKeys(row, ['if', 'ext', 'extension', 'extensión', 'interno', 'ext.'])),
+    };
+};
 
 const detectEntityType = (row) => {
-    const hasUserSignal = Boolean(row.email || row.name || row.employee_id || row.position);
+    // email solo NO es señal de usuario — puede ser solo para asignación de equipo.
+    // Se necesita nombre O puesto para considerar que la fila crea/actualiza un usuario.
+    const hasUserSignal = Boolean((row.email || row.employee_id) && (row.name || row.position));
     const hasAssetSignal = Boolean(row.serial_number || row.asset_id || row.asset_type || row.brand || row.model || row.inventory_tag || row.hostname);
 
     if (hasAssetSignal && !hasUserSignal) return 'inventory';
@@ -134,10 +176,13 @@ export const importService = {
      */
     validateInventoryColumns(data) {
         if (data.length === 0) return { valid: false, error: 'El archivo está vacío' };
-        const headers = Object.keys(data[0]);
+        const headers = Object.keys(data[0]).map(h => h.toLowerCase().trim());
 
-        if (!headers.some(h => h.toLowerCase().includes('serial'))) {
-            return { valid: false, missing: ['serial_number (Número de Serie)'] };
+        // Acepta: serial, serial_number, serie, ns, n/s, n.s.
+        const serialAliases = ['serial', 'serie', 'ns', 'n/s', 'n.s', 'n.s.', 'numero de serie', 'número de serie'];
+        const hasSerial = headers.some(h => serialAliases.some(alias => h === alias || h.includes('serial')));
+        if (!hasSerial) {
+            return { valid: false, missing: ['serial_number / NS (Número de Serie)'] };
         }
         return { valid: true, headers: headers };
     },
@@ -240,11 +285,16 @@ export const importService = {
     /**
      * Duplicate detection and preview for Inventory (CON BÚSQUEDA DE USUARIOS)
      */
-    async previewInventory(data) {
+    async previewInventory(rawData) {
+        // Normalizar todas las filas primero para reconocer NS, email → assigned_to, Area abreviada, etc.
+        const data = rawData.map((r) => normalizeInputRow(r));
+
         const { data: existingAssets } = await supabase.from('assets').select('id, specs');
 
-        // NUEVO: Extraer correos del Excel para previsualizar si existen en la BD
-        const emails = [...new Set(data.map(r => r.assigned_to_email || r['Correo Asignado (Opcional)'] || r.Asignado_A).filter(Boolean).map(e => String(e).trim().toLowerCase()))];
+        // Extraer correos para buscar usuarios en la BD
+        const emails = [...new Set(
+            data.map(r => r.assigned_to_email).filter(Boolean)
+        )];
         let usersMap = {};
 
         if (emails.length > 0) {
@@ -257,17 +307,15 @@ export const importService = {
         }
 
         return data.map(row => {
-            const serial = String(row.serial_number || row.Serial || row.Serie || '').trim();
-            const assetId = String(row.asset_id || row.id || '').trim();
+            const serial = row.serial_number;
+            const assetId = row.asset_id;
 
             const duplicate = (existingAssets || []).find(a =>
                 (assetId && String(a.id) === assetId) ||
                 (serial && a.specs?.serial_number === serial)
             );
 
-            // NUEVO: Verificamos si el correo del excel coincide con algún usuario
-            const emailRaw = row.assigned_to_email || row['Correo Asignado (Opcional)'] || row.Asignado_A;
-            const email = emailRaw ? String(emailRaw).trim().toLowerCase() : null;
+            const email = row.assigned_to_email || null;
             const matchedUser = email ? usersMap[email] : null;
 
             return {
@@ -276,9 +324,8 @@ export const importService = {
                 _existingId: duplicate ? duplicate.id : null,
                 _action: duplicate ? 'update' : 'create',
                 _errors: this.getInventoryErrors(row),
-                // Variables para la UI:
                 _assignee_email: email,
-                _assignee_name: matchedUser ? matchedUser.name : null,
+                _assignee_name: matchedUser ? matchedUser.name : (row.user_display_name || null),
                 assigned_to: matchedUser ? matchedUser.id : null
             };
         });
@@ -286,8 +333,9 @@ export const importService = {
 
     getInventoryErrors(row) {
         const errors = [];
-        if (!row.serial_number && !row.Serial && !row.Serie && !row.asset_id) errors.push('Falta Número de Serie o ID de activo');
-        if (!row.asset_type && !row.Type && !row.Tipo && !row.model && !row.Model) errors.push('Falta Tipo o Modelo de equipo');
+        // row ya está normalizado cuando viene de previewInventory/previewMixed
+        if (!row.serial_number && !row.asset_id) errors.push('Falta Número de Serie o ID de activo');
+        if (!row.asset_type && !row.brand && !row.model && !row.hostname) errors.push('Falta Tipo, Marca o Modelo de equipo');
         return errors;
     },
 
@@ -325,8 +373,8 @@ export const importService = {
 
         return {
             id: finalId,
-            type: row.asset_type || row.Type || row.Tipo || 'Equipment',
-            model: row.model || row.Model || 'Desconocido',
+            type: row.asset_type || row.Type || row.Tipo || 'Computer',
+            model: row.model || row.Model || row.brand || row.Marca || 'Desconocido',
             status,
             assigned_to: assignedUserId,
             specs: {
@@ -335,6 +383,10 @@ export const importService = {
                 category: row.asset_type || row.Type || 'Hardware',
                 model: row.model || row.Model || '',
                 inventory_tag: row.inventory_tag || row.Placa || '',
+                hostname: row.hostname || '',
+                extension: row.extension || '',
+                assigned_user_name: assignedUserId ? (row.user_display_name || '') : '',
+                department: row.department || '',
                 details: `Importado de ${fileName}`
             }
         };
