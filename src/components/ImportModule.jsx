@@ -187,6 +187,28 @@ const ImportModule = () => {
         }
     };
 
+    const handleClearAllOrphans = async () => {
+        if (!diagnostics?.orphanAssets?.length) return;
+
+        setApplyingFix(true);
+        setRepairResult(null);
+        try {
+            const ids = diagnostics.orphanAssets.map((a) => a.id);
+            const result = await importService.clearOrphanAssetsBulk(ids);
+            setRepairResult({
+                fixed: 0,
+                cleared: result.cleared || ids.length,
+                total: ids.length,
+            });
+            await loadDiagnostics();
+        } catch (err) {
+            console.error('Bulk clear orphan failed:', err);
+            setRepairResult({ fixed: 0, cleared: 0, total: 0, error: err.message });
+        } finally {
+            setApplyingFix(false);
+        }
+    };
+
     const handleRepairAssignments = async () => {
         setRepairing(true);
         setRepairResult(null);
@@ -327,7 +349,7 @@ const ImportModule = () => {
                                         onClick={handleRepairAssignments}
                                         disabled={repairing || loadingDiagnostics || applyingFix}
                                         className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border border-amber-300 text-amber-600 hover:bg-amber-50 disabled:opacity-50"
-                                        title="Busca activos sin asignación que tienen email guardado y los vincula al usuario correcto"
+                                        title="Reconciliar activos sin asignación y activos huérfanos usando assigned_to_email"
                                     >
                                         {repairing ? 'Reparando...' : 'Reparar asignaciones'}
                                     </button>
@@ -343,15 +365,15 @@ const ImportModule = () => {
                                             <div className={`px-4 py-3 rounded-2xl text-xs font-bold border ${
                                                 repairResult.error
                                                     ? 'bg-rose-50 border-rose-200 text-rose-700'
-                                                    : repairResult.fixed > 0
+                                                    : (repairResult.fixed > 0 || (repairResult.cleared || 0) > 0)
                                                         ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                                                         : 'bg-slate-50 border-slate-200 text-slate-500'
                                             }`}>
                                                 {repairResult.error
                                                     ? `Error: ${repairResult.error}`
-                                                    : repairResult.fixed > 0
-                                                        ? `✓ Se repararon ${repairResult.fixed} asignaciones de ${repairResult.total} activos sin asignar`
-                                                        : `Sin cambios: ${repairResult.total} activos sin asignar no tienen email guardado para vincular`
+                                                    : (repairResult.fixed > 0 || (repairResult.cleared || 0) > 0)
+                                                        ? `✓ Reparadas ${repairResult.fixed} asignaciones y liberados ${repairResult.cleared || 0} huérfanos de ${repairResult.total} activos revisados`
+                                                        : `Sin cambios: ${repairResult.total} activos revisados no tenían datos suficientes para reconciliar`
                                                 }
                                             </div>
                                         )}
@@ -407,7 +429,18 @@ const ImportModule = () => {
 
                                         {diagnostics.orphanAssets.length > 0 && (
                                             <div className="space-y-2">
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Corrección rápida: liberar huérfanos</p>
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Corrección rápida: liberar huérfanos</p>
+                                                    <button
+                                                        type="button"
+                                                        disabled={applyingFix}
+                                                        onClick={handleClearAllOrphans}
+                                                        className="px-3 py-2 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                                                        title="Liberar todos los activos huérfanos detectados"
+                                                    >
+                                                        Liberar todos ({diagnostics.orphanAssets.length})
+                                                    </button>
+                                                </div>
                                                 {diagnostics.orphanAssets.slice(0, 6).map((a) => (
                                                     <div key={a.id} className="flex items-center justify-between gap-2 p-3 rounded-2xl border border-rose-100 bg-rose-50/60 dark:bg-rose-500/10 dark:border-rose-500/20">
                                                         <div>

@@ -188,58 +188,64 @@ export const inventoryService = {
     },
 
     /**
-     * Repara activos importados que quedaron con assigned_to = null
-     * pero tienen specs.assigned_user_name o specs.hostname con datos.
-     * Busca el perfil por email en assigned_to_email o por nombre en full_name
-     * y actualiza el campo assigned_to con el UUID correcto.
+     * Repara asignaciones de activos importados:
+     * - activos sin asignacion pero con specs.assigned_to_email
+     * - activos con assigned_to invalido (usuario ya no existe)
+     *
+     * Si no se puede reconciliar por email, en activos huérfanos se libera
+     * el equipo para evitar referencias rotas.
      */
     async repairAssignedTo() {
         try {
-            // 1. Traer activos sin asignacion pero con nombre en specs
-            const { data: unassigned, error: fetchErr } = await supabase
-                .from('assets')
-                .select('id, specs, status')
-                .is('assigned_to', null);
+            const [{ data: assets, error: assetsError }, { data: profiles, error: profilesError }] = await Promise.all([
+                supabase.from('assets').select('id, specs, status, assigned_to'),
+                supabase.from('profiles').select('id, email'),
+            ]);
 
-            if (fetchErr) throw fetchErr;
-            if (!unassigned?.length) return { fixed: 0, total: 0 };
+            if (assetsError) throw assetsError;
+            if (profilesError) throw profilesError;
 
-            // 2. Extraer todos los emails/nombres candidatos de los specs
-            const emailCandidates = [...new Set(
-                unassigned
-                    .map(a => String(a.specs?.assigned_to_email || '').trim().toLowerCase())
-                    .filter(Boolean)
-            )];
+            const allAssets = assets || [];
+            const allProfiles = profiles || [];
+            const validUserIds = new Set(allProfiles.map((p) => p.id));
+            const emailToId = allProfiles.reduce((acc, p) => {
+                const key = String(p.email || '').trim().toLowerCase();
+                if (key) acc[key] = p.id;
+                return acc;
+            }, {});
 
-            if (!emailCandidates.length) return { fixed: 0, total: unassigned.length };
+            const candidates = allAssets.filter((a) => !a.assigned_to || !validUserIds.has(a.assigned_to));
+            if (!candidates.length) return { fixed: 0, cleared: 0, total: 0 };
 
-            // 3. Buscar perfiles que coincidan
-            const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, email')
-                .in('email', emailCandidates);
-
-            if (!profiles?.length) return { fixed: 0, total: unassigned.length };
-
-            const emailToId = {};
-            profiles.forEach(p => { emailToId[p.email.toLowerCase()] = p.id; });
-
-            // 4. Actualizar los activos que tengan match
             let fixed = 0;
-            for (const asset of unassigned) {
+            let cleared = 0;
+
+            for (const asset of candidates) {
                 const email = String(asset.specs?.assigned_to_email || '').trim().toLowerCase();
                 const userId = email ? emailToId[email] : null;
-                if (!userId) continue;
 
-                const { error: updateErr } = await supabase
-                    .from('assets')
-                    .update({ assigned_to: userId, status: 'active' })
-                    .eq('id', asset.id);
+                if (userId) {
+                    const { error: updateErr } = await supabase
+                        .from('assets')
+                        .update({ assigned_to: userId, status: 'active' })
+                        .eq('id', asset.id);
 
-                if (!updateErr) fixed++;
+                    if (!updateErr) fixed++;
+                    continue;
+                }
+
+                // Solo liberar cuando realmente hay referencia huérfana (ID inválido)
+                if (asset.assigned_to && !validUserIds.has(asset.assigned_to)) {
+                    const { error: clearErr } = await supabase
+                        .from('assets')
+                        .update({ assigned_to: null, status: 'available' })
+                        .eq('id', asset.id);
+
+                    if (!clearErr) cleared++;
+                }
             }
 
-            return { fixed, total: unassigned.length };
+            return { fixed, cleared, total: candidates.length };
         } catch (error) {
             console.error('repairAssignedTo error:', error);
             return { fixed: 0, total: 0, error: error.message };

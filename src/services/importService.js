@@ -45,22 +45,184 @@ const normalizeImportedDepartment = (rawValue = '') => {
 
 const norm = (v) => String(v ?? '').trim();
 
-const getValueByKeys = (row, keys = []) => {
-    const map = Object.entries(row || {}).reduce((acc, [k, v]) => {
-        acc[String(k).toLowerCase().trim()] = v;
-        return acc;
-    }, {});
-    for (const key of keys) {
-        const value = map[String(key).toLowerCase().trim()];
-        if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+const stripAccents = (value = '') =>
+    String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+const normalizeLookupKey = (value = '') =>
+    stripAccents(String(value || '').toLowerCase().trim())
+        .replace(/[^a-z0-9]/g, '');
+
+const normalizePersonName = (value = '') =>
+    stripAccents(String(value || '').toLowerCase().trim())
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+const isProbablyEmail = (value = '') => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+
+const sanitizeImportedEmail = (value = '') => {
+    const email = String(value || '').trim().toLowerCase();
+    return isProbablyEmail(email) ? email : '';
+};
+
+const levenshteinDistance = (a = '', b = '') => {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+
+    const matrix = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+    for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+        }
     }
+    return matrix[a.length][b.length];
+};
+
+const getValueByKeys = (row, keys = []) => {
+    const entries = Object.entries(row || {}).map(([k, v]) => ({
+        rawKey: String(k),
+        normalizedKey: normalizeLookupKey(k),
+        value: v,
+    }));
+
+    const nonEmpty = (value) => value !== undefined && value !== null && String(value).trim() !== '';
+    const candidates = keys.map((k) => normalizeLookupKey(k)).filter(Boolean);
+
+    // 1) Match exacto normalizado
+    for (const key of candidates) {
+        const hit = entries.find((entry) => entry.normalizedKey === key && nonEmpty(entry.value));
+        if (hit) return hit.value;
+    }
+
+    // 2) Match por inclusión (ej: "correoelectronicoempleado" vs "correoelectronico")
+    for (const key of candidates) {
+        if (key.length < 4) continue;
+        const hit = entries.find((entry) => {
+            if (!nonEmpty(entry.value)) return false;
+            return entry.normalizedKey.includes(key) || key.includes(entry.normalizedKey);
+        });
+        if (hit) return hit.value;
+    }
+
+    // 3) Match fuzzy para typos en encabezados (ej: "ususarios" vs "usuarios")
+    let best = null;
+    for (const key of candidates) {
+        if (key.length < 5) continue;
+        for (const entry of entries) {
+            if (!entry.normalizedKey || !nonEmpty(entry.value)) continue;
+            const distance = levenshteinDistance(entry.normalizedKey, key);
+            const maxDistance = key.length >= 10 ? 3 : 2;
+            if (distance <= maxDistance) {
+                if (!best || distance < best.distance) {
+                    best = { distance, value: entry.value };
+                }
+            }
+        }
+    }
+
+    if (best) return best.value;
+
     return '';
 };
 
+const buildProfileMaps = (profiles = []) => {
+    const byEmail = {};
+    const byName = {};
+
+    (profiles || []).forEach((p) => {
+        const emailKey = sanitizeImportedEmail(p.email);
+        const nameKey = normalizePersonName(p.full_name || '');
+        if (emailKey) byEmail[emailKey] = { id: p.id, name: p.full_name || null, email: p.email || null };
+        if (nameKey && !byName[nameKey]) byName[nameKey] = { id: p.id, name: p.full_name || null, email: p.email || null };
+    });
+
+    return { byEmail, byName };
+};
+
+const resolveAssigneeFromMaps = (row, maps) => {
+    const email = sanitizeImportedEmail(row.assigned_to_email);
+    if (email && maps.byEmail[email]) {
+        return { profile: maps.byEmail[email], resolvedEmail: email, resolvedName: maps.byEmail[email].name || null };
+    }
+
+    const nameCandidate = normalizePersonName(row.assigned_to_name || row.user_display_name || '');
+    if (!nameCandidate) return { profile: null, resolvedEmail: email || null, resolvedName: null };
+
+    if (maps.byName[nameCandidate]) {
+        const profile = maps.byName[nameCandidate];
+        return {
+            profile,
+            resolvedEmail: sanitizeImportedEmail(profile.email) || email || null,
+            resolvedName: profile.name || null,
+        };
+    }
+
+    // Fuzzy para nombres abreviados o con typo menor
+    let best = null;
+    for (const [nameKey, profile] of Object.entries(maps.byName)) {
+        const distance = levenshteinDistance(nameCandidate, nameKey);
+        const maxDistance = nameCandidate.length >= 12 ? 3 : 2;
+        if (distance <= maxDistance) {
+            if (!best || distance < best.distance) best = { distance, profile };
+        }
+    }
+
+    if (best?.profile) {
+        return {
+            profile: best.profile,
+            resolvedEmail: sanitizeImportedEmail(best.profile.email) || email || null,
+            resolvedName: best.profile.name || row.assigned_to_name || row.user_display_name || null,
+        };
+    }
+
+    return {
+        profile: null,
+        resolvedEmail: email || null,
+        resolvedName: row.assigned_to_name || row.user_display_name || null,
+    };
+};
+
 const normalizeInputRow = (row = {}) => {
-    const emailRaw = norm(getValueByKeys(row, ['email', 'correo', 'mail'])).toLowerCase();
-    const assignedEmailRaw = norm(getValueByKeys(row, ['assigned_to_email', 'correo asignado (opcional)', 'asignado_a', 'asignado a'])).toLowerCase();
-    const userDisplayName = norm(getValueByKeys(row, ['usuario', 'user', 'nombre usuario', 'nombre de usuario']));
+    const emailRaw = sanitizeImportedEmail(getValueByKeys(row, ['email', 'correo', 'mail', 'e-mail', 'correo electronico', 'correo electrónico']));
+    const assignedRaw = norm(getValueByKeys(row, [
+        'assigned_to_email',
+        'correo asignado (opcional)',
+        'asignado_a',
+        'asignado a',
+        'correo asignado',
+        'email asignado',
+    ]));
+    const assignedEmailRaw = sanitizeImportedEmail(assignedRaw);
+    const userDisplayName = norm(getValueByKeys(row, [
+        'usuario',
+        'usuarios',
+        'ususario',
+        'ususarios',
+        'user',
+        'users',
+        'nombre usuario',
+        'nombre de usuario',
+        'colaborador',
+        'responsable',
+    ]));
+    const assignedToNameRaw = norm(getValueByKeys(row, [
+        'assigned_to_name',
+        'nombre asignado',
+        'asignado a nombre',
+        'responsable',
+        'nombre responsable',
+    ]));
     const isDisponible = userDisplayName.toLowerCase() === 'disponible';
 
     // Para filas de inventario: si no hay columna explícita de asignación pero sí
@@ -70,27 +232,32 @@ const normalizeInputRow = (row = {}) => {
         ? ''
         : (assignedEmailRaw || emailRaw);
 
+    const resolvedAssignedName = isDisponible
+        ? ''
+        : (assignedToNameRaw || (!assignedEmailRaw && assignedRaw ? assignedRaw : '') || userDisplayName);
+
     return {
         employee_id: norm(getValueByKeys(row, ['employee_id', 'team_member', 'team member', 'numero team member', 'número team member', 'id_empleado'])),
-        name: norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name'])),
+        name: norm(getValueByKeys(row, ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador'])),
         email: emailRaw,
-        department: normalizeImportedDepartment(getValueByKeys(row, ['department', 'departamento', 'area', 'área'])),
-        position: norm(getValueByKeys(row, ['position', 'puesto', 'cargo'])),
+        department: normalizeImportedDepartment(getValueByKeys(row, ['department', 'departamento', 'depto', 'dpto', 'dept', 'area', 'área'])),
+        position: norm(getValueByKeys(row, ['position', 'puesto', 'cargo', 'job title', 'titulo'])),
         location: norm(getValueByKeys(row, ['location', 'localizacion', 'localización', 'ubicacion', 'ubicación', 'ubicación física', 'localización física'])),
         assigned_equipment: norm(getValueByKeys(row, ['assigned_equipment', 'equipos', 'equipos asignados'])),
         status: norm(getValueByKeys(row, ['status', 'estado'])) || 'active',
-        role: norm(getValueByKeys(row, ['role', 'rol'])) || 'user',
+        role: norm(getValueByKeys(row, ['role', 'rol', 'perfil', 'tipo usuario', 'tipo de usuario'])) || 'user',
 
         asset_id: norm(getValueByKeys(row, ['asset_id', 'id_activo', 'id', 'asset id'])),
-        asset_type: norm(getValueByKeys(row, ['asset_type', 'tipo', 'type'])),
+        asset_type: norm(getValueByKeys(row, ['asset_type', 'tipo', 'type', 'tipo equipo', 'tipo de equipo'])),
         brand: norm(getValueByKeys(row, ['brand', 'marca'])),
         model: norm(getValueByKeys(row, ['model', 'modelo'])),
         // NS, N/S, Serie, serial, serial_number — todas apuntan al mismo campo
-        serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s'])),
-        inventory_tag: norm(getValueByKeys(row, ['inventory_tag', 'placa', 'tag', 'etiqueta inventario'])),
+        serial_number: norm(getValueByKeys(row, ['serial_number', 'serial', 'serie', 'numero de serie', 'número de serie', 'ns', 'n/s', 'n.s.', 'n.s', 'no serie', 'no. serie', 'n serie'])),
+        inventory_tag: norm(getValueByKeys(row, ['inventory_tag', 'placa', 'tag', 'etiqueta inventario', 'placa inventario'])),
         hostname: norm(getValueByKeys(row, ['hostname', 'host'])),
         purchase_date: norm(getValueByKeys(row, ['purchase_date', 'fecha compra', 'fecha de compra'])),
         assigned_to_email: resolvedAssignedEmail,
+        assigned_to_name: resolvedAssignedName,
         // Campos extras del Excel de inventario de hotel
         user_display_name: isDisponible ? '' : userDisplayName,
         extension: norm(getValueByKeys(row, ['if', 'ext', 'extension', 'extensión', 'interno', 'ext.'])),
@@ -99,8 +266,10 @@ const normalizeInputRow = (row = {}) => {
 
 const detectEntityType = (row) => {
     // email solo NO es señal de usuario — puede ser solo para asignación de equipo.
-    // Se necesita nombre O puesto para considerar que la fila crea/actualiza un usuario.
-    const hasUserSignal = Boolean((row.email || row.employee_id) && (row.name || row.position));
+    // Se usa un set de señales para tolerar plantillas mixtas con columnas variables.
+    const hasUserIdentity = Boolean(row.email || row.employee_id || row.name);
+    const hasUserDetails = Boolean(row.position || row.department || row.role || row.location || row.assigned_equipment);
+    const hasUserSignal = Boolean(hasUserIdentity && hasUserDetails);
     const hasAssetSignal = Boolean(row.serial_number || row.asset_id || row.asset_type || row.brand || row.model || row.inventory_tag || row.hostname);
 
     if (hasAssetSignal && !hasUserSignal) return 'inventory';
@@ -166,9 +335,12 @@ export const importService = {
     validateUserColumns(data) {
         if (data.length === 0) return { valid: false, error: 'El archivo está vacío' };
         const headers = Object.keys(data[0]);
-        const required = ['email', 'name'];
-        const missing = required.filter(h => !headers.some(header => header.toLowerCase() === h.toLowerCase()));
-        return { valid: missing.length === 0, missing: missing, headers: headers };
+        const email = getValueByKeys(data[0], ['email', 'correo', 'mail', 'correo electronico', 'correo electrónico']);
+        const name = getValueByKeys(data[0], ['name', 'nombre', 'full_name', 'full name', 'empleado', 'colaborador']);
+        const missing = [];
+        if (!email) missing.push('email/correo');
+        if (!name) missing.push('name/nombre');
+        return { valid: missing.length === 0, missing, headers };
     },
 
     /**
@@ -176,15 +348,17 @@ export const importService = {
      */
     validateInventoryColumns(data) {
         if (data.length === 0) return { valid: false, error: 'El archivo está vacío' };
-        const headers = Object.keys(data[0]).map(h => h.toLowerCase().trim());
+        const headers = Object.keys(data[0]).map((h) => normalizeLookupKey(h));
 
-        // Acepta: serial, serial_number, serie, ns, n/s, n.s.
-        const serialAliases = ['serial', 'serie', 'ns', 'n/s', 'n.s', 'n.s.', 'numero de serie', 'número de serie'];
-        const hasSerial = headers.some(h => serialAliases.some(alias => h === alias || h.includes('serial')));
+        // Acepta: serial, serial_number, serie, ns, n/s, n.s., no serie
+        const serialAliases = ['serial', 'serialnumber', 'serie', 'ns', 'numerodeserie', 'numeroserie', 'noserie'];
+        const hasSerial = headers.some((h) =>
+            serialAliases.some((alias) => h === alias || h.includes(alias) || levenshteinDistance(h, alias) <= 2)
+        );
         if (!hasSerial) {
             return { valid: false, missing: ['serial_number / NS (Número de Serie)'] };
         }
-        return { valid: true, headers: headers };
+        return { valid: true, headers };
     },
 
     /**
@@ -192,8 +366,9 @@ export const importService = {
      */
     async previewUsers(data) {
         const { data: existingUsers } = await supabase.from('profiles').select('id, email, full_name, department');
-        return data.map(row => {
-            const email = row.email || row.Email;
+        return data.map((rawRow) => {
+            const row = normalizeInputRow(rawRow);
+            const email = row.email;
             const duplicate = (existingUsers || []).find(u => email && u.email.toLowerCase() === email.toLowerCase());
 
             return {
@@ -213,22 +388,7 @@ export const importService = {
         ]);
 
         const normalizedRows = data.map((raw) => normalizeInputRow(raw));
-
-        const emailsToMatch = [...new Set(normalizedRows
-            .flatMap((r) => [r.email, r.assigned_to_email])
-            .filter(Boolean)
-            .map((e) => e.toLowerCase()))];
-
-        let usersMap = {};
-        if (emailsToMatch.length > 0) {
-            const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, email, full_name')
-                .in('email', emailsToMatch);
-            (profiles || []).forEach((p) => {
-                usersMap[String(p.email || '').toLowerCase()] = { id: p.id, name: p.full_name };
-            });
-        }
+        const profileMaps = buildProfileMaps(existingUsers || []);
 
         return normalizedRows.map((row) => {
             const entityType = detectEntityType(row);
@@ -259,8 +419,8 @@ export const importService = {
                 (row.asset_id && String(a.id) === row.asset_id) ||
                 (row.serial_number && a.specs?.serial_number === row.serial_number)
             );
-
-            const matched = row.assigned_to_email ? usersMap[row.assigned_to_email] : null;
+            const assignee = resolveAssigneeFromMaps(row, profileMaps);
+            const matched = assignee.profile;
             return {
                 ...row,
                 _entityType: 'inventory',
@@ -268,7 +428,7 @@ export const importService = {
                 _existingId: duplicate ? duplicate.id : null,
                 _action: duplicate ? 'update' : 'create',
                 _errors: this.getInventoryErrors(row),
-                _assignee_email: row.assigned_to_email || null,
+                _assignee_email: assignee.resolvedEmail || null,
                 _assignee_name: matched ? matched.name : null,
                 assigned_to: matched ? matched.id : null,
             };
@@ -289,22 +449,11 @@ export const importService = {
         // Normalizar todas las filas primero para reconocer NS, email → assigned_to, Area abreviada, etc.
         const data = rawData.map((r) => normalizeInputRow(r));
 
-        const { data: existingAssets } = await supabase.from('assets').select('id, specs');
-
-        // Extraer correos para buscar usuarios en la BD
-        const emails = [...new Set(
-            data.map(r => r.assigned_to_email).filter(Boolean)
-        )];
-        let usersMap = {};
-
-        if (emails.length > 0) {
-            const { data: profiles } = await supabase.from('profiles').select('id, email, full_name').in('email', emails);
-            if (profiles) {
-                profiles.forEach(p => {
-                    usersMap[p.email.toLowerCase()] = { id: p.id, name: p.full_name };
-                });
-            }
-        }
+        const [{ data: existingAssets }, { data: profiles }] = await Promise.all([
+            supabase.from('assets').select('id, specs'),
+            supabase.from('profiles').select('id, email, full_name'),
+        ]);
+        const profileMaps = buildProfileMaps(profiles || []);
 
         return data.map(row => {
             const serial = row.serial_number;
@@ -314,9 +463,8 @@ export const importService = {
                 (assetId && String(a.id) === assetId) ||
                 (serial && a.specs?.serial_number === serial)
             );
-
-            const email = row.assigned_to_email || null;
-            const matchedUser = email ? usersMap[email] : null;
+            const assignee = resolveAssigneeFromMaps(row, profileMaps);
+            const matchedUser = assignee.profile;
 
             return {
                 ...row,
@@ -324,8 +472,8 @@ export const importService = {
                 _existingId: duplicate ? duplicate.id : null,
                 _action: duplicate ? 'update' : 'create',
                 _errors: this.getInventoryErrors(row),
-                _assignee_email: email,
-                _assignee_name: matchedUser ? matchedUser.name : (row.user_display_name || null),
+                _assignee_email: assignee.resolvedEmail,
+                _assignee_name: matchedUser ? matchedUser.name : (assignee.resolvedName || null),
                 assigned_to: matchedUser ? matchedUser.id : null
             };
         });
@@ -360,10 +508,10 @@ export const importService = {
         const rawId = row.asset_id || row.id || row.ID;
         const finalId = rawId ? String(rawId) : `AST-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`;
 
-        let assignedUserId = null;
+        let assignedUserId = row.assigned_to || null;
         let status = row.status || 'available';
-        const assignedEmail = (row.assigned_to_email || row['Correo Asignado (Opcional)'] || row.Asignado_A || '').toString().trim().toLowerCase();
-        if (assignedEmail) {
+        const assignedEmail = sanitizeImportedEmail(row.assigned_to_email || row['Correo Asignado (Opcional)'] || row.Asignado_A || '');
+        if (!assignedUserId && assignedEmail) {
             const foundUser = allUsers.find((u) => u.email.toLowerCase() === assignedEmail);
             if (foundUser) {
                 assignedUserId = foundUser.id;
@@ -385,7 +533,7 @@ export const importService = {
                 inventory_tag: row.inventory_tag || row.Placa || '',
                 hostname: row.hostname || '',
                 extension: row.extension || '',
-                assigned_user_name: assignedUserId ? (row.user_display_name || '') : '',
+                assigned_user_name: assignedUserId ? (row._assignee_name || row.assigned_to_name || row.user_display_name || '') : '',
                 // Guardar el email para poder reparar asignaciones en futuro si el UUID faltó
                 assigned_to_email: assignedEmail || '',
                 department: row.department || '',
@@ -402,7 +550,7 @@ export const importService = {
 
         let allUsers = [];
         if (type === 'inventory' || type === 'mixed') {
-            const { data: usersData } = await supabase.from('profiles').select('id, email');
+            const { data: usersData } = await supabase.from('profiles').select('id, email, full_name');
             allUsers = usersData || [];
         }
 
@@ -534,20 +682,22 @@ export const importService = {
 
     async getAssignmentDiagnostics() {
         const [{ data: profiles, error: profilesError }, { data: assets, error: assetsError }] = await Promise.all([
-            supabase.from('profiles').select('id, full_name, email, role, status').eq('status', true),
+            supabase.from('profiles').select('id, full_name, email, role, status'),
             supabase.from('assets').select('id, type, model, status, assigned_to, specs'),
         ]);
 
         if (profilesError) throw profilesError;
         if (assetsError) throw assetsError;
 
-        const userRows = profiles || [];
+        const profileRows = profiles || [];
         const assetRows = assets || [];
 
         const eligibleRoles = new Set(['user', 'tech', 'operativo', 'operador', 'jefe_mantenimiento']);
-        const eligibleUsers = userRows.filter((u) => eligibleRoles.has(String(u.role || '').toLowerCase()));
+        const eligibleUsers = profileRows.filter((u) =>
+            u.status === true && eligibleRoles.has(String(u.role || '').toLowerCase())
+        );
 
-        const userIdSet = new Set(userRows.map((u) => u.id));
+        const userIdSet = new Set(profileRows.map((u) => u.id));
         const assignedByUser = new Map();
         const orphanAssets = [];
         const availableAssets = [];
@@ -636,5 +786,18 @@ export const importService = {
 
         if (error) throw error;
         return true;
+    },
+
+    async clearOrphanAssetsBulk(assetIds = []) {
+        const ids = [...new Set((assetIds || []).filter(Boolean).map((id) => String(id)))];
+        if (!ids.length) return { cleared: 0 };
+
+        const { error, count } = await supabase
+            .from('assets')
+            .update({ assigned_to: null, status: 'available' }, { count: 'exact' })
+            .in('id', ids);
+
+        if (error) throw error;
+        return { cleared: count || ids.length };
     }
 };
