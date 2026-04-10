@@ -738,17 +738,26 @@ export const importService = {
             }
         }
 
+        let isShared = false;
+        let sharedArea = '';
+
         if (!status) {
             const looksAvailable = isDisponibleLike(row.user_display_name) || isDisponibleLike(row.assigned_to_name);
+            const rawAssigneeName = row.assigned_to_name || row.user_display_name || row.name || '';
             const hasAssigneeHint = Boolean(
                 assignedUserId ||
                 assignedEmail ||
-                (row.assigned_to_name && !isDisponibleLike(row.assigned_to_name)) ||
-                (row.user_display_name && !isDisponibleLike(row.user_display_name))
+                (rawAssigneeName && !looksAvailable)
             );
 
+            // Detección de Área Compartida
+            if (!assignedUserId && rawAssigneeName && !looksAvailable) {
+                isShared = true;
+                sharedArea = rawAssigneeName;
+            }
+
             // Fuerte validación hacia Bodega
-            if (assignedUserId) {
+            if (assignedUserId || isShared) {
                 status = 'active';
             } else if (!hasExplicitStatus) {
                 status = 'available';
@@ -756,8 +765,8 @@ export const importService = {
                 status = looksAvailable ? 'available' : (hasAssigneeHint ? 'active' : 'available');
             }
         } else {
-            // Incluso si tiene estatus explicito, si esta available pero se asigno, deberia ser active
-            if ((status === 'available' || status === 'stock' || status === 'bodega') && assignedUserId) {
+            // Incluso si tiene estatus explicito, si esta available pero se asigno (a usuario o a area), deberia ser active
+            if ((status === 'available' || status === 'stock' || status === 'bodega') && (assignedUserId || isShared)) {
                 status = 'active';
             }
         }
@@ -777,12 +786,15 @@ export const importService = {
                 hostname: row.hostname || '',
                 extension: row.extension || '',
                 assigned_user_name: row._assignee_name || row.assigned_to_name || row.user_display_name || row.name || '',
+                // Identificadores de área compartida para RLS
+                is_shared: isShared,
+                shared_area: sharedArea,
                 // Guardar el email para poder reparar asignaciones en futuro si el UUID faltó
                 assigned_to_email: assignedEmail || '',
                 asset_fixed_id: fixedAssetId,
                 // Compatibilidad con cargas históricas que usaban "ns" en specs.
                 ns: getNormalizedSerial(row),
-                department: row.department || '',
+                department: normalizeImportedDepartment(row.department || row.Department || row.Departamento || ''),
                 details: `Importado de ${fileName}`
             }
         };

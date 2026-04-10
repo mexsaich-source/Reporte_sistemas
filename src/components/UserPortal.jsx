@@ -722,16 +722,31 @@ const NewTicketForm = ({ onCancel, onSuccess }) => {
                 const { data, error: qErr } = await supabase
                     .from('assets')
                     .select('id, type, model, status, specs, assigned_to')
-                    .eq('assigned_to', user.id)
+                    .or(`assigned_to.eq.${user.id},specs->>is_shared.eq.true`)
                     .order('created_at', { ascending: false });
 
                 if (qErr) throw qErr;
-                const normalized = (data || []).map((a) => {
+                
+                const userDept = (profile?.department || '').trim().toLowerCase();
+                
+                const filteredData = (data || []).filter(a => {
+                    if (a.assigned_to === user.id) return true;
+                    // Si es compartido, filtrarlo por el departamento del usuario para no saturar su UI
+                    if (a.specs?.is_shared) {
+                        const aDept = (a.specs?.department || '').trim().toLowerCase();
+                        if (!userDept || !aDept) return true; // Mostrarlo como fallback
+                        return aDept.includes(userDept) || userDept.includes(aDept);
+                    }
+                    return false;
+                });
+
+                const normalized = filteredData.map((a) => {
                     const s = a.specs || {};
                     const typeLabel = (a.type || s.category || s.asset_type || 'Equipo').toString();
+                    const extraLabel = s.is_shared ? ` (Compartido en ${s.shared_area || s.department || 'Área'})` : '';
                     return {
                         id: a.id,
-                        model: a.model || s.model || '—',
+                        model: (a.model || s.model || '—') + extraLabel,
                         brand: (s.brand || '').trim(),
                         serial_number: String(s.serial_number || s.serial || '').trim(),
                         category: typeLabel,
