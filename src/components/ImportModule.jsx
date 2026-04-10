@@ -117,6 +117,18 @@ const ImportModule = () => {
         return row._errors || [];
     };
 
+    const recalcWarnings = (row) => {
+        if (row._entityType === 'user') return importService.getUserWarnings(row);
+        if (row._entityType === 'both') {
+            return [
+                ...importService.getUserWarnings(row),
+                ...importService.getInventoryWarnings(row),
+            ];
+        }
+        if (row._entityType === 'inventory') return importService.getInventoryWarnings(row);
+        return row._warnings || [];
+    };
+
     const handleEditPreviewCell = (index, field, value) => {
         setPreviewData((prev) => {
             const next = [...prev];
@@ -125,6 +137,7 @@ const ImportModule = () => {
                 row._assignee_email = String(value || '').trim().toLowerCase();
             }
             row._errors = recalcErrors(row);
+            row._warnings = recalcWarnings(row);
             next[index] = row;
             return next;
         });
@@ -135,6 +148,8 @@ const ImportModule = () => {
         const row = newData[index];
         if (row._status === 'duplicate') {
             row._action = row._action === 'update' ? 'skip' : 'update';
+        } else {
+            row._action = row._action === 'create' ? 'skip' : 'create';
         }
         setPreviewData(newData);
     };
@@ -552,8 +567,10 @@ const ImportModule = () => {
                                                 {previewData.map((row, index) => (
                                                     <tr key={index} className="group animate-in fade-in slide-in-from-right duration-300">
                                                         <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 rounded-l-2xl border-y border-l border-slate-200 dark:border-slate-700">
-                                                            {row._errors.length > 0 ? (
-                                                                <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase" title={row._errors.join(', ')}><XCircle size={14} /> Error</div>
+                                                            {row._errors?.length > 0 ? (
+                                                                <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase" title={row._errors.join(', ')}><XCircle size={14} /> Falla</div>
+                                                            ) : row._warnings?.length > 0 ? (
+                                                                <div className="flex items-center gap-2 text-amber-500 font-bold text-xs uppercase" title={row._warnings.join(', ')}><AlertTriangle size={14} /> Aviso</div>
                                                             ) : row._status === 'duplicate' ? (
                                                                 <div className="flex items-center gap-2 text-amber-500 font-bold text-xs uppercase"><AlertTriangle size={14} /> Duplicado</div>
                                                             ) : (
@@ -656,14 +673,16 @@ const ImportModule = () => {
                                                         </td>
 
                                                         <td className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/50 rounded-r-2xl border-y border-r border-slate-200 dark:border-slate-700 text-right">
-                                                            {row._errors.length > 0 ? (
+                                                            {row._errors?.length > 0 ? (
                                                                 <button title={row._errors.join(', ')} className="text-rose-500 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 p-2 rounded-lg ml-auto flex"><Info size={16} /></button>
                                                             ) : row._status === 'duplicate' ? (
                                                                 <button onClick={() => handleToggleAction(index)} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border transition-all ${row._action === 'update' ? 'bg-amber-500 border-amber-500 text-white' : 'bg-slate-200 border-transparent text-slate-400'}`}>
                                                                     {row._action === 'update' ? 'Sincronizar' : 'Ignorar'}
                                                                 </button>
                                                             ) : (
-                                                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">Registrar</span>
+                                                                <button onClick={() => handleToggleAction(index)} className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border transition-all ${row._action === 'create' ? (row._warnings?.length > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-500 border-emerald-100') : 'bg-slate-200 border-transparent text-slate-400'}`}>
+                                                                    {row._action === 'create' ? 'Registrar' : 'Ignorar'}
+                                                                </button>
                                                             )}
                                                         </td>
                                                     </tr>

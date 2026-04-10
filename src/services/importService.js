@@ -573,7 +573,8 @@ export const importService = {
                 _status: duplicate ? 'duplicate' : 'new',
                 _existingId: duplicate ? duplicate.id : null,
                 _action: duplicate ? 'update' : 'create',
-                _errors: this.getUserErrors(row)
+                _errors: this.getUserErrors(row),
+                _warnings: this.getUserWarnings(row)
             };
         });
     },
@@ -609,6 +610,7 @@ export const importService = {
                     _existingId: duplicate ? duplicate.id : null,
                     _action: duplicate ? 'update' : 'create',
                     _errors: this.getUserErrors(row),
+                    _warnings: this.getUserWarnings(row),
                 };
             }
 
@@ -625,6 +627,7 @@ export const importService = {
                 _existingId: duplicate ? duplicate.id : null,
                 _action: duplicate ? 'update' : 'create',
                 _errors: this.getInventoryErrors(row),
+                _warnings: this.getInventoryWarnings(row),
                 _assignee_email: assignee.resolvedEmail || null,
                 _assignee_name: matched ? matched.name : null,
                 assigned_to: matched ? matched.id : null,
@@ -634,9 +637,17 @@ export const importService = {
 
     getUserErrors(row) {
         const errors = [];
-        if (!row.email && !row.Email) errors.push('Falta el correo (email)');
-        if (!row.name && !row.Name && !row.full_name) errors.push('Falta el nombre (name)');
+        if (!row.email && !row.Email && !row.name && !row.Name && !row.full_name) {
+            errors.push('Fila completamente vacía o datos insuficientes');
+        }
         return errors;
+    },
+
+    getUserWarnings(row) {
+        const warnings = [];
+        if (!row.email && !row.Email) warnings.push('Sin correo (se asignará temporal)');
+        if (!row.name && !row.Name && !row.full_name) warnings.push('Sin nombre');
+        return warnings;
     },
 
     /**
@@ -669,6 +680,7 @@ export const importService = {
                 _existingId: duplicate ? duplicate.id : null,
                 _action: duplicate ? 'update' : 'create',
                 _errors: this.getInventoryErrors(row),
+                _warnings: this.getInventoryWarnings(row),
                 _assignee_email: assignee.resolvedEmail,
                 _assignee_name: matchedUser ? matchedUser.name : (assignee.resolvedName || null),
                 assigned_to: matchedUser ? matchedUser.id : null
@@ -678,10 +690,17 @@ export const importService = {
 
     getInventoryErrors(row) {
         const errors = [];
-        // row ya está normalizado cuando viene de previewInventory/previewMixed
-        if (!row.serial_number && !row.asset_id) errors.push('Falta Número de Serie o ID de activo');
-        if (!row.asset_type && !row.brand && !row.model && !row.hostname) errors.push('Falta Tipo, Marca o Modelo de equipo');
+        if (!row.serial_number && !row.asset_id && !row.asset_type && !row.brand && !row.model && !row.hostname) {
+            errors.push('Fila de equipo vacía o irreconocible');
+        }
         return errors;
+    },
+
+    getInventoryWarnings(row) {
+        const warnings = [];
+        if (!row.serial_number && !row.asset_id) warnings.push('Se generará un ID genérico por falta de serie');
+        if (!row.asset_type && !row.brand && !row.model && !row.hostname) warnings.push('Faltan marcas y modelos principales');
+        return warnings;
     },
 
     /**
@@ -728,9 +747,19 @@ export const importService = {
                 (row.user_display_name && !isDisponibleLike(row.user_display_name))
             );
 
-            // Si no viene estado en archivo: inferimos en uso cuando hay señales de usuario.
-            // Si no, lo dejamos en bodega.
-            status = looksAvailable ? 'available' : (hasAssigneeHint ? 'active' : 'available');
+            // Fuerte validación hacia Bodega
+            if (assignedUserId) {
+                status = 'active';
+            } else if (!hasExplicitStatus) {
+                status = 'available';
+            } else {
+                status = looksAvailable ? 'available' : (hasAssigneeHint ? 'active' : 'available');
+            }
+        } else {
+            // Incluso si tiene estatus explicito, si esta available pero se asigno, deberia ser active
+            if ((status === 'available' || status === 'stock' || status === 'bodega') && assignedUserId) {
+                status = 'active';
+            }
         }
 
         return {
@@ -786,9 +815,15 @@ export const importService = {
                     const safeRole = ALLOWED_IMPORT_ROLES.includes(importedRole) ? importedRole : 'user';
                     const mappedStatus = parseUserStatusBoolean(row.status || row.Estado || '');
 
+                    let safeEmail = row.email || row.Email || '';
+                    if (!safeEmail) safeEmail = `pendiente-${Math.floor(Math.random() * 99999)}@sin-correo.com`;
+
+                    let safeName = row.name || row.Name || row.Nombre || '';
+                    if (!safeName) safeName = 'Sin Nombre';
+
                     const payload = {
-                        full_name: row.name || row.Name || row.Nombre,
-                        email: row.email || row.Email,
+                        full_name: safeName,
+                        email: safeEmail,
                         department: normalizeImportedDepartment(row.department || row.Department || row.Departamento || 'General'),
                         role: safeRole,
                         // Regla de negocio: usuarios creados por carga masiva quedan inactivos
