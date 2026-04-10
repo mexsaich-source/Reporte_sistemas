@@ -3,10 +3,30 @@ import { Plus, ListFilter, X, Users, ShieldCheck, UserCheck, Shield, ChevronRigh
 import { userService } from '../services/userService';
 import { useAuth } from '../context/authStore';
 import StatCard from './StatCard';
+import { supabase } from '../lib/supabaseClient';
 
 const isMaintenanceArea = (value = '') => {
     const dep = String(value || '').trim().toLowerCase();
     return dep.includes('mantenimiento') || dep.includes('ingenieria') || dep.includes('ingeniería');
+};
+
+const isMasterAdminProfile = (profile = null) => {
+    if (!profile) return false;
+
+    const role = String(profile?.role || '').toLowerCase();
+    if (role !== 'admin') return false;
+    if (isMaintenanceArea(profile?.department)) return false;
+
+    // Cualquier admin global puede usar captura manual de contraseña.
+    if (profile?.is_master_admin === true) return true;
+    return true;
+};
+
+const getAuthRedirectBase = () => {
+    const envBase = String(import.meta.env.VITE_AUTH_REDIRECT_BASE || '').trim();
+    if (envBase) return envBase.replace(/\/$/, '');
+    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+    return 'https://it-helpdesk-mexsa.vercel.app';
 };
 
 // --- SUBCOMPONENTE: Status Badge ---
@@ -52,6 +72,9 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
     const [assignableAssets, setAssignableAssets] = useState([]);
     const [selectedAssetId, setSelectedAssetId] = useState('');
     const [loadingAssets, setLoadingAssets] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordBusy, setPasswordBusy] = useState(false);
 
     const currentAssignedAssets = user?.assigned_assets || [];
 
@@ -298,6 +321,80 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                     </select>
                                 </div>
 
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 dark:bg-amber-500/10 p-4 space-y-3">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Contraseña nueva</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <input
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            placeholder="Nueva contraseña (opcional)"
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-amber-500"
+                                        />
+                                        <input
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="Confirmar contraseña"
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-amber-500"
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={passwordBusy}
+                                            onClick={async () => {
+                                                if (!user?.email) {
+                                                    alert('Este usuario no tiene correo válido para recuperar contraseña.');
+                                                    return;
+                                                }
+
+                                                if (profile?.id === user?.id) {
+                                                    if (!newPassword || newPassword.length < 8) {
+                                                        alert('La nueva contraseña debe tener al menos 8 caracteres.');
+                                                        return;
+                                                    }
+                                                    if (newPassword !== confirmPassword) {
+                                                        alert('Las contraseñas no coinciden.');
+                                                        return;
+                                                    }
+                                                }
+
+                                                setPasswordBusy(true);
+                                                try {
+                                                    if (profile?.id === user?.id) {
+                                                        const { error } = await supabase.auth.updateUser({ password: newPassword });
+                                                        if (error) throw error;
+                                                        setNewPassword('');
+                                                        setConfirmPassword('');
+                                                        alert('Contraseña actualizada correctamente.');
+                                                    } else {
+                                                        const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+                                                            redirectTo: `${getAuthRedirectBase()}/reset-password`,
+                                                        });
+                                                        if (error) throw error;
+                                                        setNewPassword('');
+                                                        setConfirmPassword('');
+                                                        alert('Se envió enlace para que el usuario defina nueva contraseña.');
+                                                    }
+                                                } catch (err) {
+                                                    alert(`No se pudo gestionar la contraseña: ${err?.message || 'Error desconocido.'}`);
+                                                } finally {
+                                                    setPasswordBusy(false);
+                                                }
+                                            }}
+                                            className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-600 text-white disabled:opacity-50"
+                                        >
+                                            {passwordBusy ? 'Procesando...' : (profile?.id === user?.id ? 'Guardar nueva contraseña' : 'Enviar enlace de contraseña')}
+                                        </button>
+                                    </div>
+
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
+                                        Si estás editando otro usuario, por seguridad se envía enlace de restablecimiento al correo.
+                                    </p>
+                                </div>
+
                                 <button 
                                     onClick={async () => {
                                         const equipEl = document.getElementById(`equip_${user?.id}`);
@@ -345,19 +442,45 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
 const AddUserSlider = ({ isOpen, onClose, onSave }) => {
     const { profile } = useAuth();
     const isMaint = isMaintenanceArea(profile?.department);
+    const isMasterAdmin = isMasterAdminProfile(profile);
 
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
+        password: '',
+        confirmPassword: '',
         role: 'user',
-        department: isMaint ? 'Mantenimiento' : 'General'
+        department: isMaint ? 'Mantenimiento' : 'General',
     });
     const [loading, setLoading] = useState(false);
+    const [localError, setLocalError] = useState('');
 
     if (!isOpen) return null;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setLocalError('');
+
+        const wantsManualCredentials = isMasterAdmin && (
+            String(formData.password || '').trim().length > 0 ||
+            String(formData.confirmPassword || '').trim().length > 0
+        );
+
+        if (wantsManualCredentials) {
+            if (!isMasterAdmin) {
+                setLocalError('Solo un administrador global puede crear usuarios con contraseña manual.');
+                return;
+            }
+            if (!formData.password || formData.password.length < 8) {
+                setLocalError('La contraseña manual debe tener al menos 8 caracteres.');
+                return;
+            }
+            if (formData.password !== formData.confirmPassword) {
+                setLocalError('Las contraseñas no coinciden.');
+                return;
+            }
+        }
+
         setLoading(true);
         const result = await onSave(formData);
         setLoading(false);
@@ -384,6 +507,12 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-6">
+                    {localError && (
+                        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700">
+                            {localError}
+                        </div>
+                    )}
+
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre Completo</label>
                         <input
@@ -412,9 +541,44 @@ const AddUserSlider = ({ isOpen, onClose, onSave }) => {
 
                     <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-4 py-3">
                         <p className="text-xs font-bold text-blue-700 dark:text-blue-300">
-                            No necesitas capturar contraseña. Al crear el usuario se enviará correo para activar y establecer su clave.
+                            {!isMasterAdmin || (
+                                String(formData.password || '').trim().length === 0 &&
+                                String(formData.confirmPassword || '').trim().length === 0
+                            )
+                                ? 'No necesitas capturar contraseña. Al crear el usuario se enviará correo para activar y establecer su clave.'
+                                : 'Modo admin activo: se creará con contraseña manual y sin correo de activación inicial.'}
                         </p>
                     </div>
+
+                    {isMasterAdmin && (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
+                            <p className="text-xs font-black text-amber-700 uppercase tracking-widest">Apartado de contraseña manual (por si acaso)</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Contraseña inicial</label>
+                                    <input
+                                        type="password"
+                                        name="password"
+                                        value={formData.password}
+                                        onChange={handleChange}
+                                        placeholder="Opcional. Min. 8 caracteres"
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-amber-500 transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirmar contraseña</label>
+                                    <input
+                                        type="password"
+                                        name="confirmPassword"
+                                        value={formData.confirmPassword}
+                                        onChange={handleChange}
+                                        placeholder="Opcional"
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-amber-500 transition-all"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -535,21 +699,30 @@ const UsersView = ({ searchTerm = '' }) => {
     }, [fetchUsers]);
 
     const handleSaveUser = async (formData) => {
+        const useManualCredentials = Boolean(
+            isMasterAdminProfile(profile) && String(formData.password || '').trim().length > 0
+        );
         const result = await userService.register(
             formData.email,
-            null,
+            useManualCredentials ? formData.password : null,
             formData.full_name,
             formData.role,
             formData.department,
-            profile?.id
+            profile?.id,
+            {
+                sendPasswordSetupEmail: !useManualCredentials,
+                manualCredentials: useManualCredentials,
+            }
         );
 
         if (result.success) {
             await fetchUsers();
-            const emailNote = result.passwordSetupEmailSent
+            const emailNote = useManualCredentials
+                ? ' Usuario creado con contraseña manual por administrador.'
+                : result.passwordSetupEmailSent
                 ? ' También se envió correo para definir contraseña.'
                 : ' Si no llegó correo para contraseña, usa "Recuperar contraseña" en login.';
-            const detail = !result.passwordSetupEmailSent && result.passwordSetupEmailError
+            const detail = !useManualCredentials && !result.passwordSetupEmailSent && result.passwordSetupEmailError
                 ? ` Motivo reportado: ${result.passwordSetupEmailError}`
                 : '';
             alert("Usuario creado exitosamente. Revisa correo de confirmación/activación." + emailNote + detail);

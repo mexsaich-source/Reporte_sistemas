@@ -569,8 +569,9 @@ export const userService = {
         }
     },
 
-    async register(email, password, fullName, role = 'user', department = 'General', actorId = null) {
+    async register(email, password, fullName, role = 'user', department = 'General', actorId = null, options = {}) {
         try {
+            const sendPasswordSetupEmail = options?.sendPasswordSetupEmail !== false;
             let finalRole = role;
             let finalDepartment = department;
             const finalPassword = String(password || '').trim() || buildTemporaryPassword();
@@ -634,19 +635,21 @@ export const userService = {
 
             let passwordSetupEmailSent = false;
             let passwordSetupEmailError = null;
-            try {
-                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${authBase}/reset-password`
-                });
-                if (!resetError) {
-                    passwordSetupEmailSent = true;
-                } else {
-                    passwordSetupEmailError = resetError.message || 'No se pudo enviar correo de configuración de contraseña.';
-                    console.warn('No se pudo enviar correo para definir contraseña:', resetError.message);
+            if (sendPasswordSetupEmail) {
+                try {
+                    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+                        redirectTo: `${authBase}/reset-password`
+                    });
+                    if (!resetError) {
+                        passwordSetupEmailSent = true;
+                    } else {
+                        passwordSetupEmailError = resetError.message || 'No se pudo enviar correo de configuración de contraseña.';
+                        console.warn('No se pudo enviar correo para definir contraseña:', resetError.message);
+                    }
+                } catch (mailErr) {
+                    passwordSetupEmailError = mailErr?.message || 'Error inesperado enviando correo de recuperación.';
+                    console.warn('Error enviando correo de recuperación:', mailErr?.message || mailErr);
                 }
-            } catch (mailErr) {
-                passwordSetupEmailError = mailErr?.message || 'Error inesperado enviando correo de recuperación.';
-                console.warn('Error enviando correo de recuperación:', mailErr?.message || mailErr);
             }
 
             return { success: true, user: data.user, passwordSetupEmailSent, passwordSetupEmailError };
