@@ -27,6 +27,11 @@ const buildTemporaryPassword = () => {
 };
 
 const getAuthRedirectBase = () => {
+    const envBase = String(import.meta.env.VITE_AUTH_REDIRECT_BASE || '').trim();
+    if (envBase) {
+        return envBase.replace(/\/$/, '');
+    }
+
     if (typeof window !== 'undefined' && window.location?.origin) {
         return window.location.origin;
     }
@@ -628,6 +633,7 @@ export const userService = {
             }
 
             let passwordSetupEmailSent = false;
+            let passwordSetupEmailError = null;
             try {
                 const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
                     redirectTo: `${authBase}/reset-password`
@@ -635,13 +641,15 @@ export const userService = {
                 if (!resetError) {
                     passwordSetupEmailSent = true;
                 } else {
+                    passwordSetupEmailError = resetError.message || 'No se pudo enviar correo de configuración de contraseña.';
                     console.warn('No se pudo enviar correo para definir contraseña:', resetError.message);
                 }
             } catch (mailErr) {
+                passwordSetupEmailError = mailErr?.message || 'Error inesperado enviando correo de recuperación.';
                 console.warn('Error enviando correo de recuperación:', mailErr?.message || mailErr);
             }
 
-            return { success: true, user: data.user, passwordSetupEmailSent };
+            return { success: true, user: data.user, passwordSetupEmailSent, passwordSetupEmailError };
         } catch (error) {
             console.error("Error creating user:", error);
             return { success: false, error: error.message };

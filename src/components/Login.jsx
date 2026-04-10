@@ -23,6 +23,12 @@ const Login = () => {
     const [infoMessage, setInfoMessage] = useState('');
     const [isRecoveryFlow, setIsRecoveryFlow] = useState(false);
 
+    const getAuthRedirectBase = () => {
+        const envBase = String(import.meta.env.VITE_AUTH_REDIRECT_BASE || '').trim();
+        if (envBase) return envBase.replace(/\/$/, '');
+        return window.location.origin;
+    };
+
     const illustrationPath = "/image.png";
 
     useEffect(() => {
@@ -92,9 +98,10 @@ const Login = () => {
 
         setIsSubmitting(true);
         try {
-            await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-                redirectTo: `${window.location.origin}/reset-password`
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+                redirectTo: `${getAuthRedirectBase()}/reset-password`
             });
+            if (resetError) throw resetError;
             setInfoMessage('Si el correo existe, te enviamos un enlace para restablecer tu contraseña.');
         } catch (err) {
             setError(err.message || 'No se pudo iniciar la recuperación de contraseña.');
@@ -128,9 +135,10 @@ const Login = () => {
                 return;
             }
 
-            await supabase.auth.resetPasswordForEmail(normalizedNewEmail, {
-                redirectTo: `${window.location.origin}/reset-password`
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedNewEmail, {
+                redirectTo: `${getAuthRedirectBase()}/reset-password`
             });
+            if (resetError) throw resetError;
 
             setInfoMessage('Listo. Te enviamos un enlace para crear tu contraseña. Ábrelo desde tu correo para continuar.');
         } catch (err) {

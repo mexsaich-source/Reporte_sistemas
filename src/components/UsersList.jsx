@@ -549,7 +549,10 @@ const UsersView = ({ searchTerm = '' }) => {
             const emailNote = result.passwordSetupEmailSent
                 ? ' También se envió correo para definir contraseña.'
                 : ' Si no llegó correo para contraseña, usa "Recuperar contraseña" en login.';
-            alert("Usuario creado exitosamente. Revisa correo de confirmación/activación." + emailNote);
+            const detail = !result.passwordSetupEmailSent && result.passwordSetupEmailError
+                ? ` Motivo reportado: ${result.passwordSetupEmailError}`
+                : '';
+            alert("Usuario creado exitosamente. Revisa correo de confirmación/activación." + emailNote + detail);
         } else {
             alert("Error al crear usuario: " + result.error);
         }
