@@ -243,16 +243,106 @@ const ImportModule = () => {
         }
     };
 
-    const downloadTemplate = (type) => {
-        // NUEVO: Agregamos assigned_to_email a la plantilla de inventario
-        const headers = type === 'users'
-            ? [['employee_id', 'name', 'email', 'department', 'position', 'location', 'assigned_equipment', 'status', 'role']]
-            : [['asset_id', 'asset_type', 'brand', 'model', 'serial_number', 'inventory_tag', 'hostname', 'status', 'purchase_date', 'assigned_to_email']];
-
+    const downloadGeneratedTemplate = (type, outputName = null) => {
         const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(headers);
-        XLSX.utils.book_append_sheet(wb, ws, "Template");
-        XLSX.writeFile(wb, `template_${type}.xlsx`);
+
+        if (type === 'users') {
+            // Plantilla alineada a campos que realmente se persisten en profiles durante importacion.
+            const userHeaders = ['name', 'email', 'department', 'role', 'status', 'location', 'assigned_equipment'];
+            const userSample = ['Juan Perez', 'juan.perez@hotel.com', 'Sistemas', 'user', 'activo', 'Torre A - Piso 3', 'Laptop HP EliteBook'];
+            const userSheet = XLSX.utils.aoa_to_sheet([userHeaders, userSample]);
+            XLSX.utils.book_append_sheet(wb, userSheet, 'Usuarios');
+
+            const catalogSheet = XLSX.utils.aoa_to_sheet([
+                ['Campo', 'Valores sugeridos / formato'],
+                ['role', 'user | operativo | operador'],
+                ['status', 'activo | inactivo | true | false | 1 | 0'],
+                ['department', 'Sistemas, Mantenimiento, Finanzas, etc.'],
+                ['email', 'Correo valido (obligatorio recomendado)'],
+            ]);
+            XLSX.utils.book_append_sheet(wb, catalogSheet, 'Guia');
+        } else {
+            // Plantilla alineada a campos que realmente se usan para crear/actualizar assets + specs.
+            const inventoryHeaders = [
+                'asset_id',
+                'asset_type',
+                'brand',
+                'model',
+                'serial_number',
+                'inventory_tag',
+                'hostname',
+                'status',
+                'department',
+                'assigned_to_email',
+                'assigned_to_name',
+                'extension',
+            ];
+            const inventorySample = [
+                'AST-1001',
+                'Laptop',
+                'Dell',
+                'Latitude 7440',
+                'SN123456',
+                'INV-2026-001',
+                'HIL-LAP-001',
+                'active',
+                'Sistemas',
+                'juan.perez@hotel.com',
+                'Juan Perez',
+                '2101',
+            ];
+            const inventorySheet = XLSX.utils.aoa_to_sheet([inventoryHeaders, inventorySample]);
+            XLSX.utils.book_append_sheet(wb, inventorySheet, 'Inventario');
+
+            const catalogSheet = XLSX.utils.aoa_to_sheet([
+                ['Campo', 'Valores sugeridos / formato'],
+                ['status', 'available | active | loaned | request_pending | denied | decommissioned'],
+                ['serial_number', 'Obligatorio recomendado para evitar duplicados'],
+                ['assigned_to_email', 'Opcional. Si existe en profiles, asigna el activo'],
+                ['assigned_to_name', 'Opcional. Soporta nombre/area compartida'],
+                ['department', 'Se guarda en specs.department'],
+            ]);
+            XLSX.utils.book_append_sheet(wb, catalogSheet, 'Guia');
+        }
+
+        XLSX.writeFile(wb, outputName || `template_${type}_actual.xlsx`);
+    };
+
+    const downloadStaticTemplate = (blob, fileName) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const downloadDefaultTemplate = async (type) => {
+        const fileByType = {
+            users: 'Book3.xlsx',
+            inventory: 'dv.xlsx',
+        };
+        const defaultFile = fileByType[type];
+
+        try {
+            const res = await fetch(`${import.meta.env.BASE_URL}templates/${defaultFile}`);
+            if (!res.ok) throw new Error(`Template not found: ${defaultFile}`);
+            const blob = await res.blob();
+
+            // Verifica firma ZIP/XLSX: primeros bytes deben ser "PK".
+            const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+            const isZipXlsx = header.length >= 2 && header[0] === 0x50 && header[1] === 0x4b;
+            if (!isZipXlsx) {
+                throw new Error(`Invalid XLSX content for ${defaultFile}`);
+            }
+
+            downloadStaticTemplate(blob, defaultFile);
+        } catch (err) {
+            console.warn('No se encontro plantilla default, usando plantilla generada:', err);
+            downloadGeneratedTemplate(type, defaultFile);
+        }
     };
 
     return (
@@ -265,12 +355,12 @@ const ImportModule = () => {
             </div>
 
             <>
-                    <div className="flex justify-end gap-3 mb-2">
-                        <button onClick={() => downloadTemplate('users')} className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-600 border px-5 py-3 rounded-2xl text-sm font-bold shadow-sm group">
-                            <Download size={18} className="group-hover:translate-y-0.5 transition-transform" /> Plantilla Usuarios
+                    <div className="flex flex-wrap justify-end gap-3 mb-2">
+                        <button onClick={() => downloadDefaultTemplate('users')} className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-700 border px-5 py-3 rounded-2xl text-sm font-bold shadow-sm group">
+                            <Download size={18} className="group-hover:translate-y-0.5 transition-transform" /> Plantilla Usuarios (Default)
                         </button>
-                        <button onClick={() => downloadTemplate('inventory')} className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-600 border px-5 py-3 rounded-2xl text-sm font-bold shadow-sm group">
-                            <Download size={18} className="group-hover:translate-y-0.5 transition-transform" /> Plantilla Inventario
+                        <button onClick={() => downloadDefaultTemplate('inventory')} className="flex items-center gap-2 bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-700 border px-5 py-3 rounded-2xl text-sm font-bold shadow-sm group">
+                            <Download size={18} className="group-hover:translate-y-0.5 transition-transform" /> Plantilla Inventario (Default)
                         </button>
                     </div>
 
