@@ -370,13 +370,25 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                                         setConfirmPassword('');
                                                         alert('Contraseña actualizada correctamente.');
                                                     } else {
-                                                        const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-                                                            redirectTo: `${getAuthRedirectBase()}/reset-password`,
+                                                        const { data: sessionData } = await supabase.auth.getSession();
+                                                        const token = sessionData?.session?.access_token;
+                                                        // Usar función Edge personalizada para enviar email de reset con SMTP configurado
+                                                        const { data: funcResult, error: funcError } = await supabase.functions.invoke('send-password-email', {
+                                                            headers: token ? { Authorization: `Bearer ${token}` } : {},
+                                                            body: {
+                                                                email: user.email,
+                                                                user_id: user.id,
+                                                                email_type: 'password_reset',
+                                                                full_name: user.full_name
+                                                            }
                                                         });
-                                                        if (error) throw error;
+
+                                                        if (funcError || !funcResult?.success) {
+                                                            throw new Error(funcError?.message || funcResult?.error || 'No se pudo enviar el email de recuperación');
+                                                        }
                                                         setNewPassword('');
                                                         setConfirmPassword('');
-                                                        alert('Se envió enlace para que el usuario defina nueva contraseña.');
+                                                        alert('Se envió enlace de recuperación al correo del usuario (via SMTP configurado).');
                                                     }
                                                 } catch (err) {
                                                     alert(`No se pudo gestionar la contraseña: ${err?.message || 'Error desconocido.'}`);

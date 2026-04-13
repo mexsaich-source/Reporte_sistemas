@@ -38,6 +38,16 @@ const getAuthRedirectBase = () => {
     return 'https://it-helpdesk-mexsa.vercel.app';
 };
 
+const getEdgeAuthHeaders = async () => {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+        console.warn('No se pudo obtener sesión para invocar Edge Function:', error.message);
+        return {};
+    }
+    const token = data?.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 const getAssetMetaEmail = (specs = {}) =>
     String(specs?.assigned_to_email || specs?.assigned_user_email || '')
         .trim()
@@ -637,18 +647,28 @@ export const userService = {
             let passwordSetupEmailError = null;
             if (sendPasswordSetupEmail) {
                 try {
-                    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                        redirectTo: `${authBase}/reset-password`
+                    const edgeHeaders = await getEdgeAuthHeaders();
+                    // Invocar función Edge personalizada para enviar email con SMTP configurado del área
+                    // La función genera el reset link válido internamente
+                    const { data: funcResult, error: funcError } = await supabase.functions.invoke('send-password-email', {
+                        headers: edgeHeaders,
+                        body: {
+                            email,
+                            user_id: data.user?.id,
+                            email_type: 'password_setup',
+                            full_name: fullName
+                        }
                     });
-                    if (!resetError) {
+
+                    if (!funcError && funcResult?.success) {
                         passwordSetupEmailSent = true;
                     } else {
-                        passwordSetupEmailError = resetError.message || 'No se pudo enviar correo de configuración de contraseña.';
-                        console.warn('No se pudo enviar correo para definir contraseña:', resetError.message);
+                        passwordSetupEmailError = funcError?.message || funcResult?.error || 'No se pudo enviar correo de configuración.';
+                        console.warn('No se pudo enviar correo personalizado:', passwordSetupEmailError);
                     }
                 } catch (mailErr) {
-                    passwordSetupEmailError = mailErr?.message || 'Error inesperado enviando correo de recuperación.';
-                    console.warn('Error enviando correo de recuperación:', mailErr?.message || mailErr);
+                    passwordSetupEmailError = mailErr?.message || 'Error inesperado enviando correo de contraseña.';
+                    console.warn('Error en flujo de email:', mailErr?.message || mailErr);
                 }
             }
 

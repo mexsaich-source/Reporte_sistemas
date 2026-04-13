@@ -19,3 +19,8 @@ entrypoint = "./functions/chat-assistant/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/send-fcm-push/index.ts"
+
+[functions.send-password-email]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-password-email/index.ts"
