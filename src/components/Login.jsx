@@ -98,10 +98,17 @@ const Login = () => {
 
         setIsSubmitting(true);
         try {
-            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-                redirectTo: `${getAuthRedirectBase()}/reset-password`
+            const normalizedEmail = email.trim().toLowerCase();
+            const { data: funcResult, error: funcError } = await supabase.functions.invoke('send-password-email', {
+                body: {
+                    email: normalizedEmail,
+                    email_type: 'password_reset',
+                }
             });
-            if (resetError) throw resetError;
+
+            if (funcError || !funcResult?.success) {
+                throw new Error(funcError?.message || funcResult?.error || 'No se pudo iniciar la recuperación de contraseña.');
+            }
             setInfoMessage('Si el correo existe, te enviamos un enlace para restablecer tu contraseña.');
         } catch (err) {
             setError(err.message || 'No se pudo iniciar la recuperación de contraseña.');
@@ -135,10 +142,16 @@ const Login = () => {
                 return;
             }
 
-            const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedNewEmail, {
-                redirectTo: `${getAuthRedirectBase()}/reset-password`
+            const { data: funcResult, error: funcError } = await supabase.functions.invoke('send-password-email', {
+                body: {
+                    email: normalizedNewEmail,
+                    email_type: 'password_setup',
+                }
             });
-            if (resetError) throw resetError;
+
+            if (funcError || !funcResult?.success) {
+                throw new Error(funcError?.message || funcResult?.error || 'No se pudo iniciar el alta de nuevo miembro.');
+            }
 
             setInfoMessage('Listo. Te enviamos un enlace para crear tu contraseña. Ábrelo desde tu correo para continuar.');
         } catch (err) {

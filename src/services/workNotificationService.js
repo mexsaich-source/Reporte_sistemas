@@ -77,7 +77,8 @@ async function createNotification(userId, title, message, type = 'info', actionU
           user_id: userId,
           title,
           message,
-          type
+          type,
+          action_url: actionUrl,
         }
       })
       .then(({ error: omniErr }) => {

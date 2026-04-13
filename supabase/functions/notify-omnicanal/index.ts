@@ -43,6 +43,11 @@ type AreaSettings = {
   meta_phone_number_id: string | null;
 };
 
+type EmailAction = {
+  url: string;
+  label?: string;
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -52,6 +57,45 @@ function jsonResponse(body: unknown, status = 200) {
 
 function normalize(input: unknown) {
   return String(input || "").trim().toLowerCase();
+}
+
+function getAppBaseUrl() {
+  return String(
+    Deno.env.get("APP_BASE_URL") ||
+    Deno.env.get("VITE_AUTH_REDIRECT_BASE") ||
+    "https://it-helpdesk-mexsa.vercel.app"
+  ).trim().replace(/\/$/, "");
+}
+
+function buildAppLink(path: string, params?: Record<string, string | null | undefined>) {
+  const url = new URL(`${getAppBaseUrl()}${path}`);
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value) url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+function escapeHtml(value: string) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatBodyAsHtml(body: string) {
+  return escapeHtml(body).replace(/\n/g, "<br />");
+}
+
+function resolveAppPathForProfile(profile: ProfileRow | null, preferredView: string, itemId?: string | null) {
+  const role = normalize(profile?.role);
+  const isAdminLike = ["admin", "tech", "técnico", "tecnico", "jefe_mantenimiento", "ingeniero", "jefe_it", "jefe_area_it", "jefe area it"].includes(role);
+  const basePath = isAdminLike ? "/admin" : "/portal";
+  return buildAppLink(basePath, {
+    view: preferredView,
+    ticketId: itemId || null,
+  });
 }
 
 /**
@@ -200,7 +244,7 @@ async function sendTelegramMessageWithSettings(chatId: string, text: string, set
   }
 }
 
-async function sendEmail(to: string, subject: string, body: string) {
+async function sendEmail(to: string, subject: string, body: string, action?: EmailAction | null) {
   const smtpHost = Deno.env.get("SMTP_HOST");
   const smtpPort = Number(Deno.env.get("SMTP_PORT") || "465");
   const smtpUser = Deno.env.get("SMTP_USER");
@@ -223,7 +267,8 @@ async function sendEmail(to: string, subject: string, body: string) {
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px;">
         <h2 style="color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">IT Helpdesk</h2>
         <h3 style="color: #374151;">${subject}</h3>
-        <p style="padding: 15px; background-color: #f3f4f6; border-left: 4px solid #3b82f6; border-radius: 4px; line-height: 1.6;">${body}</p>
+        <div style="padding: 15px; background-color: #f3f4f6; border-left: 4px solid #3b82f6; border-radius: 4px; line-height: 1.6;">${formatBodyAsHtml(body)}</div>
+        ${action?.url ? `<div style="margin-top: 18px;"><a href="${escapeHtml(action.url)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700;">${escapeHtml(action.label || "Abrir plataforma")}</a></div>` : ""}
       </div>
     `;
 
@@ -241,7 +286,7 @@ async function sendEmail(to: string, subject: string, body: string) {
   }
 }
 
-async function sendEmailWithSettings(to: string, subject: string, body: string, settings: AreaSettings | null) {
+async function sendEmailWithSettings(to: string, subject: string, body: string, settings: AreaSettings | null, action?: EmailAction | null) {
   const smtpHost = String(settings?.smtp_host || Deno.env.get("SMTP_HOST") || "").trim();
   const smtpPort = Number(settings?.smtp_port || Deno.env.get("SMTP_PORT") || "465");
   const smtpUser = String(settings?.smtp_user || Deno.env.get("SMTP_USER") || "").trim();
@@ -265,7 +310,8 @@ async function sendEmailWithSettings(to: string, subject: string, body: string, 
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px;">
         <h2 style="color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">${fromName}</h2>
         <h3 style="color: #374151;">${subject}</h3>
-        <p style="padding: 15px; background-color: #f3f4f6; border-left: 4px solid #3b82f6; border-radius: 4px; line-height: 1.6;">${body}</p>
+        <div style="padding: 15px; background-color: #f3f4f6; border-left: 4px solid #3b82f6; border-radius: 4px; line-height: 1.6;">${formatBodyAsHtml(body)}</div>
+        ${action?.url ? `<div style="margin-top: 18px;"><a href="${escapeHtml(action.url)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700;">${escapeHtml(action.label || "Abrir plataforma")}</a></div>` : ""}
       </div>
     `;
 
@@ -273,7 +319,7 @@ async function sendEmailWithSettings(to: string, subject: string, body: string, 
       from: `"${fromName}" <${smtpUser}>`,
       to,
       subject,
-      text: body,
+      text: `${body}${action?.url ? `\n\n${action.label || "Abrir plataforma"}: ${action.url}` : ""}`,
       html,
     });
 
@@ -513,11 +559,17 @@ async function handleTicketResolved(supabase: any, payload: any) {
   };
 
   if (toEmail) {
+    const reporterProfile = ctx.reporterId ? await getProfileById(supabase, ctx.reporterId) : null;
+    const action = {
+      url: resolveAppPathForProfile(reporterProfile, "Tickets", ctx.ticketId),
+      label: "Abrir mis tickets",
+    };
     emailResult = await sendEmailWithSettings(
       toEmail,
       `Tu solicitud ha sido resuelta — Ticket #${ctx.ticketId}`,
       `Hola,\n\nTe informamos que tu solicitud "${ctx.title}" ha sido atendida y marcada como resuelta por el equipo de ${areaLabel}.\n\nSi el problema persiste o tienes alguna duda, crea un nuevo ticket desde la plataforma.\n\nGracias,\nEquipo de ${areaLabel}`,
-      emailSettings
+      emailSettings,
+      action
     );
   }
 
@@ -560,6 +612,7 @@ async function handleLegacyNotification(supabase: any, payload: any) {
 
   let email = profile.email;
   let chatId = getTelegramChatId(profile);
+  const actionUrl = String(payload.action_url || "").trim() || (ticket_id ? resolveAppPathForProfile(profile, "Tickets", String(ticket_id)) : "");
 
   if (type === "test") {
     if (payload.email) email = payload.email;
@@ -575,7 +628,13 @@ async function handleLegacyNotification(supabase: any, payload: any) {
   }
 
   if (email) {
-    jobs.push(sendEmailWithSettings(email, title || "Alerta de IT Helpdesk", message, emailSettings));
+    jobs.push(sendEmailWithSettings(
+      email,
+      title || "Alerta de IT Helpdesk",
+      message,
+      emailSettings,
+      actionUrl ? { url: actionUrl, label: "Abrir plataforma" } : null
+    ));
   }
 
   const results = await Promise.all(jobs);

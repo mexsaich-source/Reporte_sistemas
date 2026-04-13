@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/authStore';
 import { supabase } from '../lib/supabaseClient';
 
@@ -152,6 +153,7 @@ const TechPerformanceTable = ({ techStats }) => (
 // --- DASHBOARD PRINCIPAL ---
 const AdminDashboard = () => {
     const { profile } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const role = (profile?.role || '').toLowerCase().trim();
     const department = (profile?.department || '').toLowerCase().trim();
     const isMaint = department.includes('mantenimiento') || department.includes('ingenieria') || department.includes('ingeniería');
@@ -167,6 +169,22 @@ const AdminDashboard = () => {
     const [techStats, setTechStats] = useState([]);
     const [statsLoading, setStatsLoading] = useState(true);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    useEffect(() => {
+        const requestedView = searchParams.get('view');
+        if (!requestedView) return;
+        setCurrentView(requestedView);
+    }, [searchParams]);
+
+    const handleSelectView = (item) => {
+        setCurrentView(item);
+        setIsSidebarOpen(false);
+        setSearchTerm('');
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.set('view', item);
+        if (item !== 'Tickets') nextParams.delete('ticketId');
+        setSearchParams(nextParams, { replace: true });
+    };
 
     useEffect(() => {
         const loadDashboardData = async () => {
@@ -379,7 +397,7 @@ const AdminDashboard = () => {
             <div className={`fixed lg:static inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
                 <Sidebar
                     activeItem={currentView}
-                    onSelectItem={(item) => { setCurrentView(item); setIsSidebarOpen(false); setSearchTerm(''); }}
+                    onSelectItem={handleSelectView}
                     onSettingsClick={() => setIsSettingsOpen(true)}
                 />
             </div>

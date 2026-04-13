@@ -29,6 +29,20 @@ interface AreaSettings {
   smtp_from_name: string | null;
 }
 
+async function resolveUserIdByEmail(supabase: any, email: string): Promise<string | null> {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return null;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .ilike("email", normalized)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return data.id;
+}
+
 async function getAreaSettingsForUserArea(supabase: any, userId: string): Promise<AreaSettings | null> {
   try {
     // Obtener el área del usuario
@@ -266,8 +280,9 @@ serve(async (req) => {
 
     // Obtener settings del área del usuario
     let settings: AreaSettings | null = null;
-    if (user_id) {
-      settings = await getAreaSettingsForUserArea(supabaseAdmin, user_id);
+    const resolvedUserId = user_id || await resolveUserIdByEmail(supabaseAdmin, email);
+    if (resolvedUserId) {
+      settings = await getAreaSettingsForUserArea(supabaseAdmin, resolvedUserId);
     }
 
     // Enviar email

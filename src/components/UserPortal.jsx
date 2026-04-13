@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     FilePlus, History, Calendar as CalendarIcon, LogOut, Search, Bell, LayoutDashboard,
     Ticket as TicketIcon, CheckCircle, Clock, AlertCircle, ChevronRight, User,
@@ -1236,6 +1237,7 @@ const UserTicketList = ({ tickets, onTicketClick }) => {
 // --- COMPONENTE PRINCIPAL: Portal de Usuario ---
 const UserPortal = () => {
     const { user, profile } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [currentView, setCurrentView] = useState('Dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [myTickets, setMyTickets] = useState([]);
@@ -1246,6 +1248,21 @@ const UserPortal = () => {
     const [termsType, setTermsType] = useState('terms');
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    useEffect(() => {
+        const requestedView = searchParams.get('view');
+        if (!requestedView) return;
+        setCurrentView(requestedView);
+    }, [searchParams]);
+
+    const handleSelectView = (item) => {
+        setCurrentView(item);
+        setIsSidebarOpen(false);
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.set('view', item);
+        if (item !== 'Tickets') nextParams.delete('ticketId');
+        setSearchParams(nextParams, { replace: true });
+    };
 
     const toUIStatus = (status, assignedTech) => {
         const s = (status || '').toLowerCase();
@@ -1502,7 +1519,7 @@ const UserPortal = () => {
                         {menuItems.map((item) => (
                             <button
                                 key={item.id}
-                                onClick={() => { setCurrentView(item.id); setIsSidebarOpen(false); }}
+                                onClick={() => handleSelectView(item.id)}
                                 className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group ${currentView === item.id
                                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 font-bold'
                                     : 'text-slate-400 hover:bg-white/5 hover:text-white font-medium'

@@ -242,11 +242,16 @@ const Header = ({
                             notifications.map((n) => (
                                 <div
                                     key={n.id}
-                                    className={`mx-2 p-4 mb-1 rounded-2xl transition-colors cursor-default ${
+                                    onClick={() => {
+                                        if (n.action_url) {
+                                            window.location.href = n.action_url;
+                                        }
+                                    }}
+                                    className={`mx-2 p-4 mb-1 rounded-2xl transition-colors ${
                                         !n.is_read
                                             ? 'bg-blue-50 dark:bg-blue-500/10'
                                             : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                                    }`}
+                                    } ${n.action_url ? 'cursor-pointer' : 'cursor-default'}`}
                                 >
                                     <div className="flex gap-3">
                                         <div
@@ -277,6 +282,11 @@ const Header = ({
                                                     })}
                                                 </p>
                                             </div>
+                                            {n.action_url && (
+                                                <p className="text-[10px] mt-2 text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest">
+                                                    Abrir en plataforma
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
