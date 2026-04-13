@@ -58,6 +58,23 @@ export const botIncidentService = {
     return data;
   },
 
+  async updateIncident(incidentId, payload) {
+    const { data, error } = await supabase
+      .from('bot_incidents')
+      .update({
+        service: payload.service,
+        priority: payload.priority,
+        title: payload.title,
+        message: payload.message,
+      })
+      .eq('id', incidentId)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
   async logTriage({ userId, question, normalizedTopic, botResponse, incidentId = null, outcome = 'self_resolved' }) {
     const { error } = await supabase
       .from('bot_triage_logs')

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, CheckCircle2, AlertCircle, Wrench, Package, ArrowRightLeft, UploadCloud, Download, X, Laptop, Monitor, Smartphone, Server, FileDigit, Trash2, Edit, AlertTriangle, MonitorPlay, Settings, Filter, Clock } from 'lucide-react';
 import StatCard from './StatCard';
 import { inventoryService } from '../services/inventoryService';
+import { useAuth } from '../context/authStore';
 
 // --- HELPERS ---
 const STATUS_MAP = {
@@ -169,11 +170,13 @@ const ImportModal = ({ isOpen, onClose, onImportSuccess }) => {
 };
 
 // --- DEVICE SLIDER ---
-const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
+const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null, onAddNote }) => {
     const [formData, setFormData] = useState({ 
         id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', location: '',
         status: 'available', specsDetails: '', loanDate: '', returnDate: '', loanUser: '' 
     });
+    const [noteDraft, setNoteDraft] = useState('');
+    const [notes, setNotes] = useState([]);
     useEffect(() => {
         if (editingDevice) {
             setFormData({
@@ -196,12 +199,16 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                 receivedAt: editingDevice.receivedAt || '',
                 returnedAt: editingDevice.returnedAt || ''
             });
+            setNotes(Array.isArray(editingDevice.notesHistory) ? editingDevice.notesHistory : []);
+            setNoteDraft('');
         } else {
             setFormData({ 
                 id: '', type: 'Laptop', brand: '', model: '', serial: '', category: '', location: '',
                 status: 'available', specsDetails: '', loanDate: '', returnDate: '', loanUser: '',
                 rejectReason: '', requestReason: '', requestedById: '', deliveredAt: '', receivedAt: '', returnedAt: ''
             });
+            setNotes([]);
+            setNoteDraft('');
         }
     }, [editingDevice, isOpen]);
 
@@ -292,6 +299,55 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ubicación</label>
                             <input type="text" name="location" value={formData.location || ''} onChange={handleChange} placeholder="Ej. Site, Bodega TI, Piso 3" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-4 py-3 rounded-2xl text-sm font-bold text-slate-700 dark:text-white" />
                         </div>
+
+                        {editingDevice && (
+                            <div className="rounded-2xl border border-indigo-100 dark:border-indigo-500/20 bg-indigo-50/60 dark:bg-indigo-500/10 p-4 space-y-3">
+                                <label className="text-[10px] font-black text-indigo-600 dark:text-indigo-300 uppercase tracking-widest ml-1">Notas del equipo (bitácora)</label>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                        type="text"
+                                        value={noteDraft}
+                                        onChange={(e) => setNoteDraft(e.target.value)}
+                                        placeholder="Escribe una nota técnica para este equipo..."
+                                        className="flex-1 bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-700 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-white"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            const text = String(noteDraft || '').trim();
+                                            if (!text) return;
+                                            const ok = await onAddNote?.(editingDevice.id, text);
+                                            if (!ok) {
+                                                alert('No se pudo guardar la nota del equipo.');
+                                                return;
+                                            }
+                                            const fresh = await inventoryService.getAll();
+                                            const updated = fresh.find((d) => d.id === editingDevice.id);
+                                            setNotes(Array.isArray(updated?.notesHistory) ? updated.notesHistory : []);
+                                            setNoteDraft('');
+                                        }}
+                                        className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-indigo-600 text-white hover:bg-indigo-700"
+                                    >
+                                        Guardar nota
+                                    </button>
+                                </div>
+
+                                <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                                    {notes.length === 0 ? (
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Sin notas registradas.</p>
+                                    ) : (
+                                        [...notes].reverse().map((n, idx) => (
+                                            <div key={`${n?.at || 'note'}-${idx}`} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
+                                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{n?.text || ''}</p>
+                                                <p className="text-[10px] mt-1 text-slate-500 dark:text-slate-400 font-bold">
+                                                    {n?.by || 'Sistema'} · {n?.at ? new Date(n.at).toLocaleString() : 'Sin fecha'}
+                                                </p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="pt-8 flex gap-4">
                         <button type="button" onClick={onClose} className="flex-1 py-4 px-6 rounded-xl text-[10px] font-black uppercase text-slate-500 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100">Cancelar</button>
@@ -305,6 +361,7 @@ const DeviceSlider = ({ isOpen, onClose, onSave, editingDevice = null }) => {
 
 // --- MAIN VIEW ---
 const InventoryView = ({ searchTerm = '' }) => {
+    const { profile, user } = useAuth();
     const [activeTab, setActiveTab] = useState('inventory');
     const [inventoryList, setInventoryList] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -331,6 +388,13 @@ const InventoryView = ({ searchTerm = '' }) => {
         if (window.confirm("Borrando permanentemente... ¿Continuar?")) {
             if (await inventoryService.remove(id)) loadInventory();
         }
+    };
+
+    const handleAddAssetNote = async (assetId, noteText) => {
+        const actorName = profile?.full_name || user?.email || 'Administrador';
+        const ok = await inventoryService.appendNote(assetId, noteText, actorName);
+        if (ok) await loadInventory();
+        return ok;
     };
 
     useEffect(() => { loadInventory(); }, []);
@@ -485,7 +549,13 @@ const InventoryView = ({ searchTerm = '' }) => {
                 </div>
             </div>
             
-            <DeviceSlider isOpen={isAddModalOpen} onClose={()=>setIsAddModalOpen(false)} onSave={handleSaveDevice} editingDevice={editingDevice} />
+            <DeviceSlider
+                isOpen={isAddModalOpen}
+                onClose={()=>setIsAddModalOpen(false)}
+                onSave={handleSaveDevice}
+                editingDevice={editingDevice}
+                onAddNote={handleAddAssetNote}
+            />
             <ImportModal isOpen={isImportModalOpen} onClose={()=>setIsImportModalOpen(false)} onImportSuccess={()=>{setIsImportModalOpen(false); loadInventory();}} />
         </div>
     );

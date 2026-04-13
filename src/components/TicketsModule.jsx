@@ -184,6 +184,7 @@ const TicketsModule = ({ searchTerm = '' }) => {
                 // Pequeño parche visual para que no se cierre el modal, pero se refresque localmente
                 setSelectedTicket(prev => ({
                     ...prev,
+                    issue: updates.title !== undefined ? updates.title : prev.issue,
                     tech: updates.assigned_tech
                         ? techUsers.find(u => u.id === updates.assigned_tech)?.full_name
                         : prev.tech,

@@ -78,6 +78,13 @@ export const ticketService = {
                 dbData.status = toDBStatus(dbData.status);
             }
 
+            // Si no se agenda explícitamente, dejarlo programado hoy antes de medianoche.
+            if (!dbData.scheduled_for) {
+                const endOfDay = new Date();
+                endOfDay.setHours(23, 59, 0, 0);
+                dbData.scheduled_for = endOfDay.toISOString();
+            }
+
             const { data, error } = await supabase
                 .from('tickets')
                 .insert([dbData])
@@ -153,6 +160,8 @@ export const ticketService = {
     async update(id, updates, actorId) {
         try {
             const cleanUpdates = { ...updates };
+            const resolutionNote = String(cleanUpdates.resolution_note || '').trim();
+            delete cleanUpdates.resolution_note;
             if (cleanUpdates.assigned_tech === '') {
                 cleanUpdates.assigned_tech = null;
             }
@@ -252,6 +261,16 @@ export const ticketService = {
                         await supabase.from('ticket_messages').insert([
                             { ticket_id: id, sender_id: actorId, message: systemMsg }
                         ]);
+
+                        if (newStatus === 'resolved' && resolutionNote) {
+                            await supabase.from('ticket_messages').insert([
+                                {
+                                    ticket_id: id,
+                                    sender_id: actorId,
+                                    message: `[RESOLUTION_NOTE] ${resolutionNote}`
+                                }
+                            ]);
+                        }
                     } else if (assignedTechChanged) {
                         await supabase.from('ticket_messages').insert([
                             {

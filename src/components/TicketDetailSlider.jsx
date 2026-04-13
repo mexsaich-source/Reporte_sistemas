@@ -21,6 +21,8 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
     const [uploadingImage, setUploadingImage] = React.useState(false);
     const [deletingAttachmentId, setDeletingAttachmentId] = React.useState(null);
     const [notifyingSistemas, setNotifyingSistemas] = React.useState(false);
+    const [titleDraft, setTitleDraft] = React.useState('');
+    const [resolutionNoteDraft, setResolutionNoteDraft] = React.useState('');
     const messagesEndRef = React.useRef(null);
     const fileInputRef = React.useRef(null);
 
@@ -58,7 +60,16 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
 
     React.useEffect(() => {
         setScheduleDraft(toLocalDatetimeInput(ticket?.scheduled_for));
+        setTitleDraft(ticket?.issue || '');
     }, [ticket?.fullId, ticket?.scheduled_for, ticket?.id]);
+
+    React.useEffect(() => {
+        const latestResolution = [...messages]
+            .reverse()
+            .find((m) => String(m?.message || '').startsWith('[RESOLUTION_NOTE]'));
+        setResolutionNoteDraft(latestResolution ? renderMessageText(latestResolution.message) : '');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages]);
 
     const systemTimes = React.useMemo(() => {
         const assigned = messages.find(m => (m?.message || '').startsWith('[STATUS_ASSIGNED]'))?.created_at || null;
@@ -73,7 +84,8 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             .replace(/^\[STATUS_ASSIGNED\]\s*/u, '')
             .replace(/^\[STATUS_IN_PROGRESS\]\s*/u, '')
             .replace(/^\[STATUS_RESOLVED\]\s*/u, '')
-            .replace(/^\[STATUS_SCHEDULED\]\s*/u, '');
+            .replace(/^\[STATUS_SCHEDULED\]\s*/u, '')
+            .replace(/^\[RESOLUTION_NOTE\]\s*/u, '');
     };
 
     const isSystemMessage = (raw) => {
@@ -82,8 +94,23 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
             raw.startsWith('[STATUS_ASSIGNED]') ||
             raw.startsWith('[STATUS_IN_PROGRESS]') ||
             raw.startsWith('[STATUS_RESOLVED]') ||
-            raw.startsWith('[STATUS_SCHEDULED]')
+            raw.startsWith('[STATUS_SCHEDULED]') ||
+            raw.startsWith('[RESOLUTION_NOTE]')
         );
+    };
+
+    const latestResolutionNote = React.useMemo(() => {
+        const hit = [...messages].reverse().find((m) => String(m?.message || '').startsWith('[RESOLUTION_NOTE]'));
+        return hit ? renderMessageText(hit.message) : '';
+    }, [messages]);
+
+    const handleResolveWithNote = async () => {
+        const note = String(resolutionNoteDraft || '').trim();
+        if (!note) {
+            alert('Antes de cerrar el ticket debes capturar la nota de solución.');
+            return;
+        }
+        await onUpdateTicket(ticket.fullId, { status: 'resolved', resolution_note: note }, user.id);
     };
 
     const fetchMessages = React.useCallback(async () => {
@@ -556,6 +583,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
         const printDate = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
         const reporterName = ticket?.reportedBy || 'Desconocido';
         const techName = ticket?.tech || 'Técnico Asignado';
+        const printableResolutionNote = String(latestResolutionNote || resolutionNoteDraft || '').trim();
         const scheduledStr = ticket?.scheduled_for
             ? new Date(ticket.scheduled_for).toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' })
             : '—';
@@ -639,6 +667,13 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <div class="data-text">${ticket?.issue || 'Sin descripción'}</div>
                         </div>
 
+                        ${printableResolutionNote ? `
+                        <div class="content-box" style="margin-top: 12px;">
+                            <span class="label">Nota de Solución:</span>
+                            <div class="data-text">${printableResolutionNote}</div>
+                        </div>
+                        ` : ''}
+
                         <div class="divider"></div>
 
                         <div class="person-row">
@@ -695,6 +730,7 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
         const printDate = new Date().toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
         const reporterName = ticket?.reportedBy || "Desconocido";
         const techName = ticket?.tech || "Técnico Asignado";
+        const printableResolutionNote = String(latestResolutionNote || resolutionNoteDraft || '').trim();
 
         const receiptHTML = `
             <!DOCTYPE html>
@@ -769,6 +805,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             <div class="data-text">${ticket?.issue || 'Sin descripción'}</div>
                         </div>
 
+                        <div class="content-box" style="margin-top: 12px;">
+                            <span class="label">Nota de Solución:</span>
+                            <div class="data-text">${printableResolutionNote || 'Sin nota registrada'}</div>
+                        </div>
+
                         <div class="divider"></div>
 
                         <div class="person-row">
@@ -841,7 +882,28 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 text-sm">
                     <div className="space-y-4">
-                        <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{ticket?.issue}</h3>
+                        <div className="space-y-2">
+                            <label className="text-slate-400 dark:text-slate-500 font-bold uppercase text-[9px] tracking-widest ml-1">Título del ticket</label>
+                            {isTechOrAdmin && !isClosed ? (
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={titleDraft}
+                                        onChange={(e) => setTitleDraft(e.target.value)}
+                                        className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => onUpdateTicket(ticket.fullId, { title: titleDraft.trim() }, user.id)}
+                                        className="px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700"
+                                    >
+                                        Guardar
+                                    </button>
+                                </div>
+                            ) : (
+                                <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{ticket?.issue}</h3>
+                            )}
+                        </div>
                         <div className="flex items-center gap-3">
                             <TicketStatusBadge status={ticket?.status} size="lg" withIcon />
                             <span className="text-slate-400 dark:text-slate-500 font-medium flex items-center gap-1"><Clock size={14} /> {ticket?.date}</span>
@@ -857,6 +919,11 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                             {ticket?.scheduled_for && (
                                 <div className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-800 px-3 py-2 rounded-xl">
                                     Atención: {new Date(ticket.scheduled_for).toLocaleString()}
+                                </div>
+                            )}
+                            {latestResolutionNote && (
+                                <div className="w-full text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-800 px-3 py-2 rounded-xl">
+                                    Solución registrada: {latestResolutionNote}
                                 </div>
                             )}
                         </div>
@@ -938,13 +1005,40 @@ const TicketDetailSlider = ({ ticket, isOpen, onClose, techUsers = [], onUpdateT
                                     <select
                                         className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20"
                                         value={ticket?.status || 'pending_admin'}
-                                        onChange={(e) => onUpdateTicket(ticket.fullId, { status: e.target.value }, user.id)}
+                                        onChange={(e) => {
+                                            const nextStatus = e.target.value;
+                                            if (nextStatus === 'resolved') {
+                                                handleResolveWithNote();
+                                                return;
+                                            }
+                                            onUpdateTicket(ticket.fullId, { status: nextStatus }, user.id);
+                                        }}
                                     >
                                         <option value="pending_admin">Pendiente Admin</option>
                                         <option value="assigned">Asignado</option>
                                         <option value="in_progress">En Proceso</option>
                                         <option value="resolved">Resuelto</option>
                                     </select>
+                                </div>
+                            )}
+
+                            {isTechOrAdmin && !isClosed && (
+                                <div className="space-y-2 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-500/10">
+                                    <label className="text-emerald-700 dark:text-emerald-300 font-bold uppercase text-[9px] tracking-widest ml-1">Nota de solución (obligatoria para cerrar)</label>
+                                    <textarea
+                                        rows={3}
+                                        value={resolutionNoteDraft}
+                                        onChange={(e) => setResolutionNoteDraft(e.target.value)}
+                                        className="w-full bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                        placeholder="Describe claramente qué se corrigió y cómo se resolvió."
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleResolveWithNote}
+                                        className="w-full bg-emerald-600 text-white py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition-all"
+                                    >
+                                        Cerrar ticket con nota
+                                    </button>
                                 </div>
                             )}
 

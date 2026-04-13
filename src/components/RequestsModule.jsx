@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Check, X, AlertCircle, Package } from 'lucide-react';
+import { Check, X, AlertCircle, Package, CalendarClock } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 import { inventoryService } from '../services/inventoryService';
 import { ticketService } from '../services/ticketService';
@@ -26,6 +26,11 @@ const RequestsModule = ({ searchTerm = '' }) => {
 
     const [approveEquipModal, setApproveEquipModal] = useState({ open: false, row: null });
     const [equipForm, setEquipForm] = useState({ brand: '', model: '', serial: '' });
+    const [rescheduleEquipModal, setRescheduleEquipModal] = useState({ open: false, row: null });
+    const [rescheduleEquipForm, setRescheduleEquipForm] = useState({ loan_start_date: '', loan_end_date: '', reason: '' });
+    const [createEquipModal, setCreateEquipModal] = useState(false);
+    const [usersDirectory, setUsersDirectory] = useState([]);
+    const [newEquipRequest, setNewEquipRequest] = useState({ user_id: '', equipment_type: '', urgency: 'medium', reason: '', loan_start_date: '', loan_end_date: '' });
 
     const loadAll = async () => {
         setIsLoading(true);
@@ -72,6 +77,14 @@ const RequestsModule = ({ searchTerm = '' }) => {
             } else {
                 setProfileMap({});
             }
+
+            const { data: allProfiles } = await supabase
+                .from('profiles')
+                .select('id, full_name, email, status')
+                .eq('status', true)
+                .order('full_name', { ascending: true });
+
+            setUsersDirectory(allProfiles || []);
         } catch (error) {
             console.error('Error fetching requests:', error);
             setLoadError(error.message || 'Error fetching requests from Supabase');
@@ -401,6 +414,100 @@ const RequestsModule = ({ searchTerm = '' }) => {
         }
     };
 
+    const handleCreateEquipmentRequest = async () => {
+        const payload = {
+            user_id: newEquipRequest.user_id,
+            equipment_type: String(newEquipRequest.equipment_type || '').trim(),
+            urgency: String(newEquipRequest.urgency || 'medium').trim(),
+            reason: String(newEquipRequest.reason || '').trim(),
+            loan_start_date: newEquipRequest.loan_start_date || null,
+            loan_end_date: newEquipRequest.loan_end_date || null,
+            status: 'approved',
+        };
+
+        if (!payload.user_id || !payload.equipment_type || !payload.reason || !payload.loan_start_date || !payload.loan_end_date) {
+            alert('Usuario, tipo de equipo, motivo y fechas de salida/regreso son obligatorios.');
+            return;
+        }
+
+        if (new Date(payload.loan_end_date) < new Date(payload.loan_start_date)) {
+            alert('La fecha de regreso no puede ser menor que la fecha de salida.');
+            return;
+        }
+
+        try {
+            const { error } = await supabase.from('equipment_requests').insert([payload]);
+            if (error) throw error;
+
+            await notifyUser(
+                payload.user_id,
+                'Solicitud de equipo aceptada',
+                `${actorName} registró una solicitud de ${payload.equipment_type} a tu nombre. Salida: ${payload.loan_start_date}. Regreso: ${payload.loan_end_date}. Estado inicial: Aprobado.`
+            );
+
+            setCreateEquipModal(false);
+            setNewEquipRequest({ user_id: '', equipment_type: '', urgency: 'medium', reason: '', loan_start_date: '', loan_end_date: '' });
+            await loadAll();
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'No se pudo crear la solicitud de equipo.');
+        }
+    };
+
+    const openRescheduleEquipment = (row) => {
+        setRescheduleEquipForm({
+            loan_start_date: row?.loan_start_date || '',
+            loan_end_date: row?.loan_end_date || '',
+            reason: '',
+        });
+        setRescheduleEquipModal({ open: true, row });
+    };
+
+    const handleConfirmRescheduleEquipment = async () => {
+        const row = rescheduleEquipModal.row;
+        if (!row?.id) return;
+
+        const start = String(rescheduleEquipForm.loan_start_date || '').trim();
+        const end = String(rescheduleEquipForm.loan_end_date || '').trim();
+        const reason = String(rescheduleEquipForm.reason || '').trim();
+
+        if (!start || !end) {
+            alert('Debes indicar fecha de salida y de regreso.');
+            return;
+        }
+        if (new Date(end) < new Date(start)) {
+            alert('La fecha de regreso no puede ser menor que la fecha de salida.');
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('equipment_requests')
+                .update({
+                    loan_start_date: start,
+                    loan_end_date: end,
+                    reschedule_reason: reason || null,
+                    rescheduled_at: new Date().toISOString(),
+                })
+                .eq('id', row.id);
+
+            if (error) throw error;
+
+            await notifyUser(
+                row.user_id,
+                'Fechas de préstamo actualizadas',
+                `Tu solicitud de ${row.equipment_type || 'equipo'} fue reagendada. Nueva salida: ${start}. Nueva devolución: ${end}.${reason ? ` Motivo: ${reason}` : ''}`
+            );
+
+            setRescheduleEquipModal({ open: false, row: null });
+            setRescheduleEquipForm({ loan_start_date: '', loan_end_date: '', reason: '' });
+            await loadAll();
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'No se pudo reagendar la solicitud.');
+        }
+    };
+
     const openRejectEquipment = (row) => {
         setRejectModal({ open: true, type: 'equipment', row });
         setRejectReason('');
@@ -500,6 +607,19 @@ const RequestsModule = ({ searchTerm = '' }) => {
                 </button>
             </div>
 
+            <div className="flex justify-end">
+                <button
+                    type="button"
+                    onClick={() => {
+                        setTab('equipment');
+                        setCreateEquipModal(true);
+                    }}
+                    className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700"
+                >
+                    Nueva solicitud de equipo (admin)
+                </button>
+            </div>
+
             {tab === 'general' && (
                 <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden">
                     <div className="p-8 border-b border-slate-50 dark:border-slate-800">
@@ -582,7 +702,7 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                             </td>
                                             <td className="p-6">
                                                 <div className="flex justify-end gap-2 flex-wrap">
-                                                    {req.status === 'pending' && (
+                                                    {(req.status === 'pending' || req.status === 'approved') && (
                                                         <>
                                                             <button
                                                                 type="button"
@@ -648,6 +768,7 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                     <th className="p-6 pb-4">Usuario</th>
                                     <th className="p-6 pb-4">Equipo</th>
                                     <th className="p-6 pb-4">Motivo</th>
+                                    <th className="p-6 pb-4">Fechas</th>
                                     <th className="p-6 pb-4">Estado</th>
                                     <th className="p-6 pb-4 text-right">Acciones</th>
                                 </tr>
@@ -655,13 +776,13 @@ const RequestsModule = ({ searchTerm = '' }) => {
                             <tbody className="text-sm">
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan="5" className="p-20 text-center">
+                                        <td colSpan="6" className="p-20 text-center">
                                             <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
                                         </td>
                                     </tr>
                                 ) : filteredEquipment.length === 0 ? (
                                     <tr>
-                                        <td colSpan="5" className="p-16 text-center text-slate-400 font-bold uppercase text-xs">
+                                        <td colSpan="6" className="p-16 text-center text-slate-400 font-bold uppercase text-xs">
                                             No hay solicitudes de equipo (tabla equipment_requests)
                                         </td>
                                     </tr>
@@ -691,6 +812,13 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                                     <p className="text-[10px] text-rose-600 mt-1">Rechazo: {req.reject_reason}</p>
                                                 )}
                                             </td>
+                                            <td className="p-6 text-xs text-slate-600 dark:text-slate-300">
+                                                <p className="font-bold">Salida: {req.loan_start_date ? new Date(`${req.loan_start_date}T12:00:00`).toLocaleDateString() : '—'}</p>
+                                                <p className="mt-1 font-bold">Regreso: {req.loan_end_date ? new Date(`${req.loan_end_date}T12:00:00`).toLocaleDateString() : '—'}</p>
+                                                {req.rescheduled_at && (
+                                                    <p className="text-[10px] mt-1 text-indigo-600">Reagendado: {new Date(req.rescheduled_at).toLocaleString()}</p>
+                                                )}
+                                            </td>
                                             <td className="p-6">
                                                 <span
                                                     className={`px-3 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest ${getStatusStyle(req.status)}`}
@@ -713,19 +841,31 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                                                     setApproveEquipModal({ open: true, row: req });
                                                                 }}
                                                                 className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl"
-                                                                title="Aprobar y entregar"
+                                                                title={req.status === 'approved' ? 'Entregar y registrar activo' : 'Aprobar y entregar'}
                                                             >
                                                                 <Check size={18} />
                                                             </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => openRejectEquipment(req)}
-                                                                className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl"
-                                                                title="Rechazar"
-                                                            >
-                                                                <X size={18} />
-                                                            </button>
+                                                            {req.status === 'pending' && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openRejectEquipment(req)}
+                                                                    className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl"
+                                                                    title="Rechazar"
+                                                                >
+                                                                    <X size={18} />
+                                                                </button>
+                                                            )}
                                                         </>
+                                                    )}
+                                                    {(req.status === 'approved' || req.status === 'delivered') && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openRescheduleEquipment(req)}
+                                                            className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-xl"
+                                                            title="Reagendar fechas"
+                                                        >
+                                                            <CalendarClock size={18} />
+                                                        </button>
                                                     )}
                                                 </div>
                                             </td>
@@ -874,6 +1014,162 @@ const RequestsModule = ({ searchTerm = '' }) => {
                                 className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-emerald-600 text-white"
                             >
                                 Crear activo y entregar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {rescheduleEquipModal.open && rescheduleEquipModal.row && (
+                <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-4">
+                        <h4 className="font-black text-lg text-slate-900 dark:text-white">Reagendar préstamo de equipo</h4>
+                        <p className="text-xs text-slate-500">Ajusta fechas cuando el usuario necesita más tiempo.</p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Nueva salida</label>
+                                <input
+                                    type="date"
+                                    value={rescheduleEquipForm.loan_start_date}
+                                    onChange={(e) => setRescheduleEquipForm((prev) => ({ ...prev, loan_start_date: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Nueva devolución</label>
+                                <input
+                                    type="date"
+                                    value={rescheduleEquipForm.loan_end_date}
+                                    onChange={(e) => setRescheduleEquipForm((prev) => ({ ...prev, loan_end_date: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400">Motivo (opcional)</label>
+                            <textarea
+                                rows={3}
+                                value={rescheduleEquipForm.reason}
+                                onChange={(e) => setRescheduleEquipForm((prev) => ({ ...prev, reason: e.target.value }))}
+                                className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-semibold"
+                                placeholder="Ej. Usuario requiere 3 días adicionales por cierre mensual"
+                            />
+                        </div>
+
+                        <div className="flex gap-2 justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setRescheduleEquipModal({ open: false, row: null })}
+                                className="px-4 py-2 rounded-xl text-xs font-black uppercase text-slate-500"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmRescheduleEquipment}
+                                className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-indigo-600 text-white"
+                            >
+                                Guardar fechas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {createEquipModal && (
+                <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-6 space-y-4">
+                        <h4 className="font-black text-lg text-slate-900 dark:text-white">Nueva solicitud de equipo (admin)</h4>
+                        <p className="text-xs text-slate-500">Se crea como aprobada por default porque la genera un administrador.</p>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Usuario solicitante</label>
+                                <select
+                                    value={newEquipRequest.user_id}
+                                    onChange={(e) => setNewEquipRequest((prev) => ({ ...prev, user_id: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                >
+                                    <option value="">Selecciona usuario</option>
+                                    {usersDirectory.map((u) => (
+                                        <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.email})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400">Tipo de equipo</label>
+                                    <input
+                                        value={newEquipRequest.equipment_type}
+                                        onChange={(e) => setNewEquipRequest((prev) => ({ ...prev, equipment_type: e.target.value }))}
+                                        className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                        placeholder="Laptop, Monitor, Impresora..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400">Urgencia</label>
+                                    <select
+                                        value={newEquipRequest.urgency}
+                                        onChange={(e) => setNewEquipRequest((prev) => ({ ...prev, urgency: e.target.value }))}
+                                        className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                    >
+                                        <option value="low">Baja</option>
+                                        <option value="medium">Media</option>
+                                        <option value="high">Alta</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400">Fecha de salida</label>
+                                    <input
+                                        type="date"
+                                        value={newEquipRequest.loan_start_date}
+                                        onChange={(e) => setNewEquipRequest((prev) => ({ ...prev, loan_start_date: e.target.value }))}
+                                        className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400">Fecha de regreso</label>
+                                    <input
+                                        type="date"
+                                        value={newEquipRequest.loan_end_date}
+                                        onChange={(e) => setNewEquipRequest((prev) => ({ ...prev, loan_end_date: e.target.value }))}
+                                        className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-bold"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-slate-400">Motivo / contexto</label>
+                                <textarea
+                                    rows={3}
+                                    value={newEquipRequest.reason}
+                                    onChange={(e) => setNewEquipRequest((prev) => ({ ...prev, reason: e.target.value }))}
+                                    className="w-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-sm font-semibold"
+                                    placeholder="Ej. Reemplazo por falla, ingreso de colaborador, préstamo temporal..."
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setCreateEquipModal(false)}
+                                className="px-4 py-2 rounded-xl text-xs font-black uppercase text-slate-500"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCreateEquipmentRequest}
+                                className="px-5 py-2 rounded-xl text-xs font-black uppercase bg-blue-600 text-white"
+                            >
+                                Crear solicitud
                             </button>
                         </div>
                     </div>

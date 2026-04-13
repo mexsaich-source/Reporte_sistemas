@@ -139,7 +139,7 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                             <div className="bg-white dark:bg-slate-700 p-2 rounded-xl shadow-sm"><Mail size={16} className="text-slate-400" /></div>
                             <div>
                                 <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Correo</span>
-                                <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block max-w-[150px]">{user?.email}</span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-200 break-all block">{user?.email}</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-inner">
@@ -199,6 +199,27 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
 
                             {/* Formulario de Edición Admin */}
                             <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700 space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nombre completo</label>
+                                        <input
+                                            type="text"
+                                            id={`name_${user?.id}`}
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
+                                            defaultValue={user?.full_name || ''}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Correo</label>
+                                        <input
+                                            type="email"
+                                            id={`email_${user?.id}`}
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
+                                            defaultValue={user?.email || ''}
+                                        />
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 text-blue-500">Telegram Chat ID</label>
@@ -233,19 +254,9 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
 
                                 {canManageAssets && (
                                 <>
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Máquinas / Equipos Asignados</label>
-                                    <textarea 
-                                        id={`equip_${user?.id}`}
-                                        rows="2"
-                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-white outline-none focus:border-blue-500"
-                                        defaultValue={user?.assigned_equipment || ''}
-                                    />
-                                </div>
-
                                 <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50/50 dark:bg-blue-500/10 p-4 space-y-3">
                                     <label className="text-[9px] font-bold text-blue-500 uppercase tracking-widest ml-1">Asignar equipo real desde inventario</label>
-                                    <div className="flex flex-col sm:flex-row gap-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-stretch">
                                         <select
                                             value={selectedAssetId}
                                             onChange={(e) => setSelectedAssetId(e.target.value)}
@@ -272,7 +283,7 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                                 await loadAssignableAssets();
                                                 await onAssetsChanged?.();
                                             }}
-                                            className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white disabled:opacity-50"
+                                            className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white disabled:opacity-50 min-w-[92px]"
                                         >
                                             Asignar
                                         </button>
@@ -281,8 +292,8 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
                                     {currentAssignedAssets.length > 0 && (
                                         <div className="space-y-2">
                                             {currentAssignedAssets.map((asset) => (
-                                                <div key={`editable-${asset.id}`} className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
-                                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">{asset.label}</span>
+                                                <div key={`editable-${asset.id}`} className="grid grid-cols-[1fr_auto] items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
+                                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate pr-2">{asset.label}</span>
                                                     <button
                                                         type="button"
                                                         onClick={async () => {
@@ -409,12 +420,13 @@ const UserDetailSlider = ({ user, isOpen, onClose, onDeleteUser, onToggleStatus,
 
                                 <button 
                                     onClick={async () => {
-                                        const equipEl = document.getElementById(`equip_${user?.id}`);
                                         const profileData = {
+                                            full_name: document.getElementById(`name_${user?.id}`).value,
+                                            email: document.getElementById(`email_${user?.id}`).value,
                                             telegram_chat_id: document.getElementById(`telegram_${user?.id}`).value,
                                             department: document.getElementById(`dept_${user?.id}`).value,
                                             location: document.getElementById(`loc_${user?.id}`).value,
-                                            assigned_equipment: equipEl ? equipEl.value : (user?.assigned_equipment || ''),
+                                            assigned_equipment: user?.assigned_equipment || '',
                                             role: document.getElementById(`role_${user?.id}`).value
                                         };
                                         const success = await userService.updateAdminUserInfo(user.id, profileData, profile.id);

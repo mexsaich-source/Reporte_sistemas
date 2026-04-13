@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Megaphone, Plus, RefreshCcw, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Megaphone, Pencil, Plus, RefreshCcw, ShieldAlert, X } from 'lucide-react';
 import { useAuth } from '../context/authStore';
 import { botIncidentService } from '../services/botIncidentService';
 
@@ -38,6 +38,13 @@ const BotIncidentsAdmin = () => {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingIncidentId, setEditingIncidentId] = useState(null);
+  const [editingForm, setEditingForm] = useState({
+    service: 'internet',
+    priority: 'medium',
+    title: '',
+    message: '',
+  });
   const [statusFilter, setStatusFilter] = useState('active');
   const [form, setForm] = useState({
     service: 'internet',
@@ -103,6 +110,47 @@ const BotIncidentsAdmin = () => {
       await loadIncidents();
     } catch (error) {
       console.error('Error resolving incident:', error.message || error);
+    }
+  };
+
+  const handleStartEdit = (incident) => {
+    setEditingIncidentId(incident.id);
+    setEditingForm({
+      service: incident.service || 'internet',
+      priority: incident.priority || 'medium',
+      title: incident.title || '',
+      message: incident.message || '',
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIncidentId(null);
+    setEditingForm({
+      service: 'internet',
+      priority: 'medium',
+      title: '',
+      message: '',
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingIncidentId) return;
+    if (!editingForm.title.trim() || !editingForm.message.trim()) return;
+
+    setSaving(true);
+    try {
+      await botIncidentService.updateIncident(editingIncidentId, {
+        service: editingForm.service,
+        priority: editingForm.priority,
+        title: editingForm.title.trim(),
+        message: editingForm.message.trim(),
+      });
+      handleCancelEdit();
+      await loadIncidents();
+    } catch (error) {
+      console.error('Error updating TI incident:', error.message || error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -243,16 +291,98 @@ const BotIncidentsAdmin = () => {
                       <p className="text-[11px] text-slate-500">Cierre: {formatDate(incident.resolved_at)}</p>
                     )}
                   </div>
-                  {incident.status === 'active' && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleResolve(incident.id)}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                      onClick={() => handleStartEdit(incident)}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800"
                     >
-                      <CheckCircle2 size={14} />
-                      Marcar resuelto
+                      <Pencil size={14} />
+                      Editar
                     </button>
-                  )}
+                    {incident.status === 'active' && (
+                      <button
+                        onClick={() => handleResolve(incident.id)}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                      >
+                        <CheckCircle2 size={14} />
+                        Marcar resuelto
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {editingIncidentId === incident.id && (
+                  <div className="mt-4 p-4 rounded-xl border border-blue-200 dark:border-blue-700 bg-blue-50/70 dark:bg-blue-900/10 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                      Servicio
+                      <select
+                        value={editingForm.service}
+                        onChange={(event) => setEditingForm((prev) => ({ ...prev, service: event.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2"
+                      >
+                        {SERVICE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                      Prioridad
+                      <select
+                        value={editingForm.priority}
+                        onChange={(event) => setEditingForm((prev) => ({ ...prev, priority: event.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2"
+                      >
+                        {PRIORITY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="md:col-span-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+                      Titulo corto
+                      <input
+                        value={editingForm.title}
+                        onChange={(event) => setEditingForm((prev) => ({ ...prev, title: event.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2"
+                      />
+                    </label>
+
+                    <label className="md:col-span-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+                      Mensaje para usuarios
+                      <textarea
+                        rows={3}
+                        value={editingForm.message}
+                        onChange={(event) => setEditingForm((prev) => ({ ...prev, message: event.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2"
+                      />
+                    </label>
+
+                    <div className="md:col-span-2 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-xs font-bold"
+                      >
+                        <X size={14} />
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveEdit}
+                        disabled={saving || !editingForm.title.trim() || !editingForm.message.trim()}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <Pencil size={14} />
+                        Guardar cambios
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}

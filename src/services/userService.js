@@ -326,7 +326,7 @@ export const userService = {
 
     async updateAdminUserInfo(id, profileData, actorId = null) {
         try {
-            const { telegram_chat_id, role, department, location, assigned_equipment } = profileData;
+            const { telegram_chat_id, role, department, location, assigned_equipment, full_name, email } = profileData;
             
             // 1. Obtener rol previo
             const { data: prev } = await supabase.from('profiles').select('role, email').eq('id', id).single();
@@ -342,6 +342,8 @@ export const userService = {
             const { error } = await supabase
                 .from('profiles')
                 .update({ 
+                    full_name: full_name,
+                    email: email,
                     whatsapp_phone: telegram_chat_id, 
                     role: role,
                     department: finalDept,

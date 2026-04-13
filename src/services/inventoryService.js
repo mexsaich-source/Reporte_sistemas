@@ -128,6 +128,7 @@ export const inventoryService = {
                     returnedAt: specs.returned_at || '',
                     hostname: specs.hostname || '',
                     extension: specs.extension || ''
+                    ,notesHistory: Array.isArray(specs.notes_history) ? specs.notes_history : []
                 };
             });
         } catch (error) {
@@ -223,6 +224,43 @@ export const inventoryService = {
             return true;
         } catch (error) {
             console.error("Inventory Update Error:", error);
+            return false;
+        }
+    },
+
+    async appendNote(id, noteText, actorName = 'Sistema') {
+        try {
+            const text = String(noteText || '').trim();
+            if (!text) return false;
+
+            const { data: current, error: readErr } = await supabase
+                .from('assets')
+                .select('specs')
+                .eq('id', id)
+                .single();
+
+            if (readErr) throw readErr;
+
+            const specs = current?.specs || {};
+            const notes = Array.isArray(specs.notes_history) ? specs.notes_history : [];
+            const nextNotes = [
+                ...notes,
+                {
+                    at: new Date().toISOString(),
+                    by: String(actorName || 'Sistema').trim(),
+                    text,
+                },
+            ].slice(-50);
+
+            const { error } = await supabase
+                .from('assets')
+                .update({ specs: { ...specs, notes_history: nextNotes } })
+                .eq('id', id);
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('Inventory appendNote error:', error);
             return false;
         }
     },
